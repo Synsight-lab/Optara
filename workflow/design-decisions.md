@@ -37,7 +37,7 @@ Early exercise creates additional state transitions, partial close behavior, ora
 
 ### Decision
 
-Underlying asset, quote asset, option type, strike, expiry, oracle adapter, contract size, and collateral model cannot change after deployment.
+Underlying asset, quote asset, option type, strike, expiry, oracle configuration, contract size, collateral model, derived scales, and fee rates cannot change after deployment.
 
 ### Rationale
 
@@ -85,11 +85,11 @@ The Kuru market price can be thin, manipulated, stale, or unavailable. It is use
 
 ### Decision
 
-The final settlement price comes from an approved oracle adapter for the underlying/quote pair.
+The final settlement price comes from `OracleRouter`, using the approved oracle configuration frozen into the series at creation.
 
 ### Rationale
 
-Option payoff must be based on an external settlement source, not the price of the option token itself. The oracle adapter can enforce freshness, pair identity, decimals, and validity rules.
+Option payoff must be based on an external settlement source, not the price of the option token itself. The router enforces freshness, deviation, and quorum rules; pair identity is bound when the oracle config is approved at creation.
 
 ### Consequences
 
@@ -274,7 +274,7 @@ Kuru markets can be thin, spoofed, wash-traded, or temporarily distorted. This s
 
 ### Consequences
 
-- One-click buying requires buyer-side limits such as `maxPremiumPerOption`, `maxTotalPremium`, `minOptionAmountOut`, and `deadline`.
+- One-click buying requires buyer-side limits: `buyerMaxTotalPremium`, `minOptionAmountOut`, and `deadline`. The cost limit binds on the fee-inclusive all-in total, never on a per-option figure.
 - Automatic routes should reject stale quotes, wide spreads, low depth, excessive price impact, non-canonical markets, and mismatched base or quote assets.
 - Automatic routes should reject writer asks outside the acceptable premium range.
 - Last-traded price must not be used as fair value.

@@ -11,10 +11,11 @@ V1 series vaults should be non-upgradeable. Storage layout still matters for aud
 ```solidity
 contract SeriesRegistry {
     address public factory;
+    bool public kuruLinkPaused;
 
+    // The vault IS the option token. One address per series, not two.
     mapping(bytes32 => address) private _vaultBySeriesId;
-    mapping(bytes32 => address) private _optionTokenBySeriesId;
-    mapping(address => bytes32) private _seriesIdByOptionToken;
+    mapping(address => bytes32) private _seriesIdByVault;
     mapping(bytes32 => SeriesParams) private _seriesParams;
     mapping(bytes32 => KuruMarketConfig) private _kuruMarketBySeriesId;
     mapping(bytes32 => bool) private _seriesExists;
@@ -24,6 +25,8 @@ contract SeriesRegistry {
 Rules:
 
 - `_seriesParams[seriesId]` is write-once.
+- `_vaultBySeriesId` and `_seriesIdByVault` are inverse views of the same address. There is no separate option-token mapping, because `OptionSeriesVault` is itself the ERC-20.
+- `isOptionToken(token)` resolves through `_seriesIdByVault`.
 - `_kuruMarketBySeriesId[seriesId]` may be unset at creation and linked later.
 - Kuru market updates must be append-only unless an explicitly reviewed migration process exists.
 
@@ -90,6 +93,7 @@ uint256 public totalWriterResidualClaimed;
 SettlementResult public settlementResult;
 
 mapping(address => uint256) public writerShortBalance;
+mapping(VaultPause => bool) private _paused;
 ```
 
 ERC-20 fields are inherited from OpenZeppelin ERC20 or equivalent.
@@ -108,6 +112,7 @@ Rules:
 
 ```solidity
 contract OracleRouter {
+    SeriesRegistry public registry;
     ProtocolConfig public config;
     IOracleAdapter public chainlinkAdapter;
     IOracleAdapter public pythAdapter;
@@ -117,8 +122,9 @@ contract OracleRouter {
 
 Rules:
 
-- Adapter addresses may be updateable for future series through governance.
-- Deployed series store their oracle config. Governance updates must not silently change old series requirements unless the series config explicitly points to a router-level approved adapter.
+- The router reads each series' `OracleConfig` from `registry`, never from a call argument.
+- Adapters hold no per-pair state and no thresholds. They receive the feed identifier as an argument and return a normalized price. All policy lives in the router.
+- Adapter addresses may be updated through governance, but because adapters are stateless fetchers, a replacement cannot repoint which feed a live series uses. The feed identifiers are frozen in the series config.
 - If an adapter is upgraded, the upgrade must be timelocked and evented.
 
 ## `ProtocolConfig`
@@ -134,9 +140,16 @@ contract ProtocolConfig {
     uint32 public defaultPythStaleAfter;
     uint32 public defaultDexTwapStaleAfter;
 
-    uint32 public defaultMaxPremiumSpreadBps;
-    uint32 public defaultMaxPriceImpactBps;
-    uint256 public defaultMinKuruDepth;
+    uint32 public maxPremiumSpreadBps;
+    uint32 public maxPriceImpactBps;
+    uint32 public maxQuoteAge;
+    uint16 public sellerDiscountToleranceBps;
+    uint16 public buyerOverpayToleranceBps;
+    mapping(address => uint256) public minKuruDepth;   // per quote asset
+
+    // Maximum venue fees a Kuru market may charge and still be linkable.
+    uint16 public maxLinkableMakerFeeBps;
+    uint16 public maxLinkableTakerFeeBps;
 
     // Snapshotted into each new series at creation; changes never reach live series.
     uint16 public defaultMintFeeBps;

@@ -23,37 +23,54 @@ kuruMakerFee            venue fee paid by the maker
 optaraRouteFee          protocol route fee, 0 in V1
 allInCost               grossPremium + kuruTakerFee + optaraRouteFee
 netProceeds             grossPremium - kuruMakerFee
-acceptableMinPremium    lower safety bound
-acceptableMaxPremium    upper safety bound
+hardMaxGross            theoretical max payout, before Optara fees
+hardMaxPremium          hardMaxGross net of the Optara exercise fee
+acceptableMinPremium    lower safety bound, a total for optionAmount
+acceptableMaxPremium    upper safety bound, a total for optionAmount
 marketReferencePremium  depth-aware executable premium estimate
 ```
 
+All premium quantities are totals in quote raw units for the whole `optionAmount`, never per-option figures.
+
 ## Fees Are Part of the Price
 
-Kuru charges maker and taker fees. Optara receives none of them, but every bound in this file compares against **fee-inclusive** figures:
+Kuru charges maker and taker fees. Optara receives none of them, but every bound in this file compares against **fee-inclusive totals**:
 
 ```text
-buyer side:  effectivePremiumPerOption  = allInCost / optionAmountReceived
-seller side: effectiveProceedsPerOption = netProceeds / optionAmountSold
+buyer side:  allInCost   = grossPremium + kuruTakerFee + optaraRouteFee
+seller side: netProceeds = grossPremium - kuruMakerFee
 ```
 
 Comparing a bound against `grossPremium` instead is a defect: on a market with a high taker fee, a quote can pass every range check while the buyer's actual cost lands above the acceptable maximum they were shown. Fee formulas and the unverified-convention handling are in [fee-spec.md](./fee-spec.md).
+
+Per-option figures may be derived for display:
+
+```text
+effectivePremiumPerOption  = allInCost / optionAmountReceived
+effectiveProceedsPerOption = netProceeds / optionAmountSold
+```
+
+These are for showing a user a comparable unit price. They are never compared against the acceptable-range bounds, which are totals.
 
 ## Writer Ask Rule
 
 Writers may specify ask premiums.
 
-Official helpers must not treat writer asks as automatically fair. They must classify the ask against effective, fee-inclusive figures:
+Official helpers must not treat writer asks as automatically fair. They must classify the ask against effective, fee-inclusive figures.
+
+Every bound and every figure compared against it is a **total** for `optionAmount`, in quote raw units:
 
 ```text
-if effectiveProceedsPerOption < acceptableMinPremium:
+if netProceeds < acceptableMinPremium(optionAmount):
     warn or block protocol-controlled listing helper
 
-if effectivePremiumPerOption > acceptableMaxPremium:
+if allInCost > acceptableMaxPremium(optionAmount):
     block simplified buyer routing
 ```
 
 The seller-side check uses proceeds net of the Kuru maker fee, because a seller giving away value cares about what they actually receive, not the headline ask.
+
+Per-option figures are for display only. Comparing one against a total bound is wrong by a factor of the option amount and fails open, since a per-option cost sits below a total bound for any size above one whole option.
 
 Direct manual Kuru limit orders may still exist outside official helper UX. The protocol should not claim those are safe routed trades.
 
@@ -75,7 +92,8 @@ These bind because Kuru itself enforces limit price and minimum output on the or
 
 ```text
 market == registry canonical Kuru market
-effectivePremiumPerOption within acceptable range
+allInCost   <= acceptableMaxPremium(optionAmount)
+netProceeds >= acceptableMinPremium(optionAmount)
 spread, depth, quote age, price impact within configured bounds
 ```
 
@@ -85,38 +103,50 @@ If any Layer 1 condition cannot be satisfied, the transaction must not be submit
 
 ## Hard Economic Bounds
 
-Using oracle reference price `R`, strike `K`, and underlying exposure `E(a)`:
+Using oracle reference price `R`, strike `K`, and underlying exposure `E(a)`. All are totals in quote raw units for the whole amount `a`, and all use the same `UQ_SCALE` conversion the collateral math uses. Normative definitions are in [math-of-core-invariants.md](./math-of-core-invariants.md):
 
 ```text
-callIntrinsicQuote(a) = max(R - K, 0) * E(a)
-putIntrinsicQuote(a) = max(K - R, 0) * E(a)
+callIntrinsicQuote(a) = mulDivUp(E_up(a),     max(R - K, 0), UQ_SCALE)
+putIntrinsicQuote(a)  = mulDivUp(E_up(a),     max(K - R, 0), UQ_SCALE)
 
-callHardMaxPremium(a) = R * E(a)
-putHardMaxPremium(a) = K * E(a)
+callHardMaxGross(a)   = mulDivDown(E_down(a), R,             UQ_SCALE)
+putHardMaxGross(a)    = mulDivDown(E_down(a), K,             UQ_SCALE)
+
+hardMaxPremium(a)     = mulDivDown(hardMaxGross(a), BPS_SCALE - exerciseFeeBps, BPS_SCALE)
 ```
+
+Two things to note in those formulas.
+
+**Rounding direction is chosen to tighten each rail.** Minimum bounds round up, maximum bounds round down. Both move toward rejection, so the repeated division in these expressions can only make a rail marginally stricter, never looser. Use `Math.mulDiv` with an explicit rounding mode at every step, and do not share one rounded `E(a)` between the two bounds, since they need it rounded in opposite directions.
+
+**The buyer ceiling is net of the Optara exercise fee.** A holder receives the gross payout minus the exercise fee from [fee-spec.md](./fee-spec.md), so the most a buyer can realize is the net figure. A rail set at the gross figure would pass asks that are provably unprofitable even in the best outcome.
+
+The seller floor takes no such adjustment. The exercise fee is paid by the holder at redemption, never by the writer, so it has no bearing on whether a writer is underpricing.
 
 Interpretation:
 
-- Call premium above current underlying value is economically suspicious for a fully collateralized covered call.
-- Put premium above max strike payout is economically suspicious.
+- Call premium above the net realizable value of the underlying is economically suspicious for a fully collateralized covered call.
+- Put premium above the net max strike payout is economically suspicious.
 - Premium below intrinsic value may harm the seller.
 
 These are safety rails, not a full option-pricing model.
 
 ## Acceptable Range Formula
 
-Recommended:
+Recommended. Both are totals for `optionAmount`:
 
 ```text
-acceptableMinPremium =
-    intrinsicQuote * (BPS_SCALE - sellerDiscountToleranceBps) / BPS_SCALE
+acceptableMinPremium(a) =
+    mulDivUp(intrinsicQuote(a), BPS_SCALE - sellerDiscountToleranceBps, BPS_SCALE)
 
-acceptableMaxPremium =
+acceptableMaxPremium(a) =
     min(
-        hardMaxPremium,
-        marketReferencePremium * (BPS_SCALE + buyerOverpayToleranceBps) / BPS_SCALE
+        hardMaxPremium(a),
+        mulDivDown(marketReferencePremium(a), BPS_SCALE + buyerOverpayToleranceBps, BPS_SCALE)
     )
 ```
+
+`hardMaxPremium(a)` is already net of the exercise fee. `marketReferencePremium(a)` is an observed market figure rather than a theoretical bound, so it takes no fee adjustment.
 
 If `marketReferencePremium` is unavailable or unsafe:
 

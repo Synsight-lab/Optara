@@ -45,7 +45,9 @@ Needs final approval per asset volatility.
 
 Question:
 
-How old can Chainlink and Pyth prices be?
+How old can Chainlink and Pyth prices be **for reference reads**?
+
+These thresholds bound premium-safety reads before expiry. They do not apply to settlement, which is anchored to expiry instead; see FD-21.
 
 Recommended starting values:
 
@@ -67,6 +69,30 @@ Safe default:
 ```text
 Optional tertiary check.
 ```
+
+### FD-21: Maximum Settlement Lag
+
+Question:
+
+How far past expiry may the anchoring oracle observation sit?
+
+Recommended starting value:
+
+```text
+maxSettlementLag = 1 hours
+```
+
+Context: settlement is pinned to the first oracle observation at or after expiry, which is what stops a caller from choosing the settlement price by choosing when to call. `maxSettlementLag` bounds how stale that anchor may be when a feed updates slowly or stops across expiry.
+
+The tradeoff runs in both directions:
+
+```text
+too short  a brief feed outage across expiry permanently blocks settlement (FD-20 territory)
+too long   the "expiry price" may be an observation hours after expiry, which is
+           economically wrong and partly reopens the timing problem
+```
+
+Set it per feed, based on that feed's actual heartbeat: a feed with a 1 hour heartbeat needs a lag comfortably above 1 hour, while a fast feed can use minutes. Pair the decision with FD-20, since a lag that expires is exactly the case FD-20's recovery path must handle.
 
 ## Product Decisions
 

@@ -51,6 +51,10 @@ Untrusted:
 | Early exercise | Buyer claims before expiry. | Redemption only after `SETTLED`. |
 | Oracle manipulation | Attacker manipulates settlement source. | Chainlink/Pyth quorum, deviation checks, freshness checks, fail closed. |
 | Oracle outage | Required oracle unavailable. | Settlement reverts, no Kuru fallback, recovery process required. |
+| Settlement timing choice | Settlement is permissionless and undated, so a caller waits for a favorable post-expiry move and settles then, converting a worthless option into a claim on writer collateral. | Settlement price is anchored to the first oracle observation at or after expiry and proven onchain; freshness checks apply only to reference reads. |
+| Forged settlement anchor | Caller names a later, more favorable round. | Adapter verifies the preceding round predates expiry, so only the first qualifying observation is accepted. |
+| Transfer pause escalation | A low-trust TRANSFER pause blocks redemption burns via the shared ERC-20 `_update` hook, achieving a redemption pause without the higher-trust role. | Pause hook gates holder-to-holder transfers only; mint and burn are never gated by it. |
+| Redemption minimum lockout | A minimum size applied to redemption traps holders who acquired less than it through a partial fill or transfer. | `minOptionAmount` is mint-only; redeem and claim require only a nonzero amount. |
 | Kuru manipulation | Wash trades distort option premium. | Kuru never settlement, route safety checks, buyer limits. |
 | Unrealistic writer ask | Writer posts harmful premium. | Acceptable premium range, warnings, route rejection. |
 | Fake series | Token mimics official option. | Canonical factory/registry checks. |

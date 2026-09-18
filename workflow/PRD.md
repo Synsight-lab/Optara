@@ -66,12 +66,15 @@ Required inputs:
 - `optionType`: call or put.
 - `underlyingAsset`: ERC-20 asset used as the underlying.
 - `quoteAsset`: ERC-20 asset used to denominate strike and Kuru trading.
-- `strikePrice`: quote asset units per underlying unit.
+- `strikePrice`: human price of one whole underlying in whole quote, times `PRICE_SCALE`.
 - `expiry`: timestamp when the option stops trading as an unsettled claim and becomes eligible for settlement.
-- `oracleAdapter`: approved oracle adapter for the underlying/quote pair.
-- `contractSize`: amount of underlying exposure represented by one whole option token.
-- `optionTokenName` and `optionTokenSymbol`.
+- `oracleConfig`: approved oracle configuration for the underlying/quote pair, covering feeds, thresholds, and which sources are required.
+- `contractSize`: underlying raw units represented by one whole option token.
+- `optionDecimals` and `minOptionAmount`.
+- `name` and `symbol` for the option token.
 - Optional Kuru market parameters if the creator also wants to deploy the market.
+
+The caller supplies exactly this set and nothing else. Series identity, collateral asset, derived scales, and fee rates are computed or snapshotted by the factory. A caller must never be able to choose them; see [implementation-spec.md](./implementation-spec.md).
 
 Acceptance criteria:
 
@@ -80,7 +83,9 @@ Acceptance criteria:
 - Duplicate series are either rejected or deterministically resolved to the same canonical series.
 - Expiry must be in the future at creation.
 - Strike, contract size, and precision values must be nonzero.
-- Assets and oracle adapters must pass protocol validation.
+- Assets and oracle configs must pass protocol validation.
+- Snapshotted fee rates must be within the hard caps.
+- Derived values must match their formulas for the series' decimal pair.
 
 ### Option Token
 
@@ -166,7 +171,7 @@ Acceptance criteria:
 - The protocol must not store a writer-controlled `maxPremium` as a series parameter that bypasses range checks.
 - The protocol must not require buyers to pay a premium chosen by the collateral owner without buyer-side limits and range validation.
 - Writers can specify an ask premium, but official listing helpers and simplified routes must reject, disable, or clearly flag asks outside the acceptable range.
-- Any one-click buy, routed buy, auction, or primary-sale helper must require buyer-provided price protection, such as `maxPremiumPerOption`, `maxTotalPremium`, `minOptionAmountOut`, and `deadline`.
+- Any one-click buy, routed buy, auction, or primary-sale helper must require buyer-provided price protection: `buyerMaxTotalPremium`, `minOptionAmountOut`, and `deadline`. The cost limit binds on the fee-inclusive all-in total, never on a per-option figure.
 - If an execution route cannot satisfy the buyer's limits, the transaction must fail safely instead of filling at a manipulated or unexpected price.
 - If an execution route cannot validate that the ask is inside the acceptable premium range, the transaction must fail safely or require manual limit-order execution.
 - Premium quotes shown by frontends must be labeled as market quotes, not guaranteed fair value.
@@ -246,7 +251,9 @@ V1 oracle model:
 Acceptance criteria:
 
 - Settlement can only occur at or after expiry.
-- The settlement price must come from the approved oracle adapter.
+- The settlement price must come from `OracleRouter`, using the series' frozen oracle configuration.
+- The settlement price must be the first oracle observation at or after expiry, proven onchain, so that it does not depend on when settlement is called.
+- Settlement must produce the same price whether it is called minutes or months after expiry.
 - The oracle price must be positive, fresh for the settlement window, and valid for the underlying/quote pair.
 - Once settlement succeeds, the settlement price and payout ratios are final.
 - Settlement must be idempotent. Calling settlement again must not change the result.
@@ -336,7 +343,7 @@ Security requirements:
 |---|---|---|
 | Undercollateralization | Writer mints more options than collateral can cover. | Require full collateral before minting. Use formulas in [math-of-core-invariants.md](./math-of-core-invariants.md). |
 | Double redemption | Holder claims payout multiple times. | Burn or mark redeemed amount before transfer. |
-| Oracle manipulation | Expiry price is manipulated. | Use approved oracle adapters, freshness checks, TWAP or robust oracle design, and dispute/recovery rules. |
+| Oracle manipulation | Expiry price is manipulated. | Chainlink/Pyth quorum, deviation and freshness checks, optional TWAP corroboration, fail-closed settlement, and the FD-20 recovery decision. |
 | Kuru price manipulation | Wash trades create fake option prices. | Never use Kuru prices for settlement or collateral. |
 | Premium price manipulation | Thin liquidity, spoofing, wash trades, or unrealistic writer asks make the option premium look fair or force a bad execution route. | Use buyer-specified max premium, acceptable premium ranges, hard economic bounds, slippage limits, deadlines, depth checks, spread checks, stale-quote checks, and fail-closed routing. |
 | Fake series | Malicious token mimics official option symbol. | Canonical factory and registry checks. |

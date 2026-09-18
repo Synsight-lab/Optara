@@ -56,8 +56,14 @@ Math: OpenZeppelin Math.mulDiv with explicit rounding
 Token safety: SafeERC20
 Access control: AccessControl
 Reentrancy: ReentrancyGuard
-Pause: Pausable, but scoped carefully
+Pause: custom per-action flags, NOT OpenZeppelin Pausable
 ```
+
+OpenZeppelin `Pausable` is deliberately not used. It provides a single global flag, while this protocol needs independent per-action flags so that pausing minting does not also block redemption. Using it would force either an all-or-nothing pause or a second parallel mechanism alongside it.
+
+Because `Pausable` is unused, its `EnforcedPause` error is unavailable; the custom `PausedAction(VaultPause flag)` error in [contract-interfaces.md](./contract-interfaces.md) is used instead. Do not mix the two.
+
+Access control uses OpenZeppelin `AccessControl` and its `AccessControlUnauthorizedAccount` error. Do not add custom per-role errors, which would produce two error shapes for one condition.
 
 If a later implementation chooses a different compiler, library version, or test framework, update this file and [deployment-runbook.md](./deployment-runbook.md) before coding.
 
@@ -96,10 +102,12 @@ Must:
 
 - Accept new series only from `OptionSeriesFactory`.
 - Store immutable series metadata.
-- Map `seriesId` to `OptionSeriesVault`.
-- Map `optionToken` to `seriesId`.
+- Map `seriesId` to the vault address, and the vault address back to `seriesId`.
 - Store optional Kuru market metadata.
+- Own the `kuruLinkPaused` flag, since it owns `linkKuruMarket`.
 - Expose canonical verification functions for frontends and contracts.
+
+The vault **is** the option token: `OptionSeriesVault` is itself the series' ERC-20. The registry therefore stores one address per series, not two. `getVault` and `getSeriesByToken` are inverse lookups over that single address, and `isOptionToken` is the canonical-identity check from Invariant 12.
 
 Must not:
 
@@ -113,7 +121,10 @@ Creates official series.
 
 Must:
 
+- Accept `CreateSeriesParams`, never `SeriesParams`.
 - Validate assets, decimals, expiry, strike, contract size, oracle configuration, and minimum size.
+- Derive `collateralAsset`, `optionScale`, `uqScale`, and `collateralPerOption`.
+- Snapshot `feeConfig` from `ProtocolConfig` and validate it against the hard caps.
 - Compute deterministic `seriesId`.
 - Reject duplicate series or return the existing canonical series.
 - Deploy `OptionSeriesVault`.
@@ -122,6 +133,7 @@ Must:
 
 Must not:
 
+- Accept any derived or snapshotted value as a caller argument.
 - Mint options directly.
 - Custody collateral after series deployment.
 - Mutate series after deployment.
@@ -160,18 +172,40 @@ Aggregates oracle adapters for settlement and reference prices.
 
 Must:
 
+- Read the series' `OracleConfig` from `SeriesRegistry` using `seriesId`.
 - Read Chainlink primary when configured.
 - Read Pyth secondary/corroborator when configured.
 - Optionally read DEX TWAP tertiary check when configured.
-- Normalize all prices to `PRICE_SCALE = 1e18`.
-- Reject stale, zero, negative, wrong-pair, or invalid oracle data.
-- Enforce max deviation between Chainlink and Pyth when both are configured.
-- Return a final reference price only when the configured quorum rules pass.
+- Pass feed identifiers from that config into adapters as call arguments.
+- Apply all policy itself: staleness, deviation, and quorum.
+- Reject stale, zero, negative, or invalid oracle data.
+- Return a final price only when the configured quorum rules pass.
+- Forward only the required pull-oracle fee and refund the remainder to its caller.
 
 Must not:
 
+- Accept a caller-supplied `OracleConfig`. A caller could pass weakened requirements, and nothing would bind the config to the series it claims to describe.
 - Read Kuru option-market prices for settlement.
 - Silently fall back to a single oracle when the series requires two-oracle quorum.
+- Retain native token.
+
+### `ChainlinkOracleAdapter`, `PythOracleAdapter`, `DexTwapOracleAdapter`
+
+Each adapter fetches exactly one source and reports what it found.
+
+Must:
+
+- Accept the feed address or feed id as a call argument.
+- Normalize the price to `PRICE_SCALE = 1e18` regardless of source decimals.
+- Report `updatedAt` as the source reports it.
+- Report `valid = false` for structurally unusable data such as a zero or negative answer.
+- Refund unused native token.
+
+Must not:
+
+- Hold an internal `(base, quote) -> feed` mapping. That would be a second, governable source of truth able to change a live series' settlement oracle.
+- Apply staleness, deviation, or quorum policy. Those belong to the router.
+- Return a price that is not `PRICE_SCALE`-normalized.
 
 ### `PremiumExecutionGuard`
 
@@ -323,7 +357,35 @@ struct CreateSeriesParams {
 }
 ```
 
-Fee rates are **not** a caller-supplied input. The factory snapshots them from `ProtocolConfig` at creation time and writes them into the series immutably, so a series creator cannot choose favorable fees and governance cannot alter them afterward. See [fee-spec.md](./fee-spec.md).
+This is the complete caller-supplied input set. It is a different struct from `SeriesParams`, which is the assembled, immutable series definition the factory produces.
+
+Five fields appear in `SeriesParams` but deliberately **not** here, because a caller must never be able to choose them:
+
+```text
+seriesId             derived   keccak256 over the canonical field set
+collateralAsset      derived   underlying for CALL, quote for PUT
+optionScale          derived   10 ** optionDecimals
+uqScale              derived   PRICE_SCALE * 10**underlyingDec / 10**quoteDec
+collateralPerOption  derived   C for CALL, ceilDiv(C * K, uqScale) for PUT
+feeConfig            snapshot  copied from ProtocolConfig.defaultFeeConfig()
+```
+
+A caller-supplied `feeConfig` would let anyone create a zero-fee series, defeating protocol fees entirely. A caller-supplied `collateralPerOption` would break solvency outright, since every collateral and payout figure derives from it. Accepting `SeriesParams` as the creation input is therefore a security bug, not a convenience.
+
+### Derivation
+
+The factory computes, in order:
+
+1. `collateralAsset` from `optionType`.
+2. `optionScale = 10 ** optionDecimals`.
+3. `uqScale` from the two assets' decimals, read via `IERC20Metadata.decimals()`.
+4. `collateralPerOption` per [math-of-core-invariants.md](./math-of-core-invariants.md), rounding up for puts.
+5. `feeConfig = protocolConfig.defaultFeeConfig()`, then validated against the hard caps.
+6. `seriesId`.
+
+It then assembles `SeriesParams`, deploys the vault, and calls `registry.registerSeries(params, vault)`.
+
+See [fee-spec.md](./fee-spec.md) for why fee rates are frozen per series.
 
 ### Validation
 
@@ -427,10 +489,14 @@ The allowlist check must therefore be treated as a security-critical control rat
 ### Function
 
 ```solidity
-function settle(bytes calldata pythUpdateData) external payable returns (uint256 settlementPrice);
+function settle(SettlementProof calldata proof) external payable returns (uint256 settlementPrice);
 ```
 
-`pythUpdateData` may be empty if the series does not use Pyth or if Pyth price is already available through an approved pathway.
+`proof` identifies the oracle observation at expiry. Its `pythUpdateData` may be empty if the series does not use Pyth; its `chainlinkRoundId` is ignored if the series does not use Chainlink.
+
+Settlement is anchored to that observation rather than to a live read. This is not a detail: settlement is permissionless and has no deadline, so if the price came from a live read the first caller would choose the settlement price by choosing when to call, and could wait for a move that turns a worthless option into a claim on the writer's collateral. See [oracle-spec.md](./oracle-spec.md).
+
+`msg.value` funds the Pyth update fee. The vault forwards only the amount the router reports as required and refunds the remainder to `msg.sender` before returning. No contract in the settlement path may retain native token: the vault has no native withdrawal path, since `sweepFees` moves the collateral asset only. See [oracle-spec.md](./oracle-spec.md).
 
 ### Rules
 
@@ -438,19 +504,27 @@ Must revert if:
 
 - `block.timestamp < expiry`.
 - Already settled.
+- `VaultPause.SETTLEMENT` is set.
 - Oracle quorum fails.
-- Any required oracle price is stale, zero, invalid, or wrong-pair.
+- The anchor proof does not identify the first observation at or after expiry, with `SettlementAnchorInvalid`.
+- No qualifying observation exists within `expiry + maxSettlementLag`, with `SettlementAnchorTooLate`.
+- Any required oracle price is zero or invalid.
 - Chainlink/Pyth deviation exceeds allowed threshold.
 - Optional TWAP check is configured and fails.
 
+Note what is **not** a revert condition: how long after expiry `settle()` is called. The call may happen at any later time, because the proof pins the price to expiry regardless. Only the anchoring observation must fall inside the window.
+
 Execution order:
 
-1. Read final oracle price from `OracleRouter`.
+1. Read final oracle price from `OracleRouter.getSettlementPrice(seriesId, proof)`, forwarding the required fee.
 2. Compute `buyerPayoutRate` using the call or put formula in [math-of-core-invariants.md](./math-of-core-invariants.md), rounding down.
 3. Compute `writerResidualRate = collateralPerOption - buyerPayoutRate`, by subtraction only.
 4. Store settlement result.
 5. Set state to `SETTLED`.
 6. Emit `SeriesSettled`.
+7. Refund any unused native token to `msg.sender`.
+
+The router is called with `seriesId` only; it reads the series' oracle config from the registry itself. The vault must not pass its stored config as an argument, because a signature that accepts a config is one any caller can pass a weakened config to.
 
 Step 3 must be a subtraction. Deriving the residual rate from its own formula and rounding it independently breaks the exact identity `buyerPayoutRate + writerResidualRate == collateralPerOption` that the solvency proof depends on, and does so in a way ordinary unit tests will not catch.
 
@@ -552,63 +626,75 @@ The function is `nonReentrant`.
 ### Functions
 
 ```solidity
-function sweepFees(address receiver) external returns (uint256 amount);
-function sweepDust(address receiver) external returns (uint256 amount);
+function sweepFees() external returns (uint256 amount);
+function sweepDust() external returns (uint256 amount);
 ```
+
+Neither takes a receiver. Both send to `ProtocolConfig.feeRecipient()`, read live at call time.
+
+A caller-supplied receiver would defeat the reason the recipient is a live lookup rather than a snapshot: if the fee admin can direct funds anywhere, rotating a compromised treasury address protects nothing, and the role's blast radius grows from "when fees move" to "where fees go."
 
 ### `sweepFees`
 
 Must revert if:
 
 - Caller lacks `FEE_ADMIN_ROLE`.
-- `receiver == address(0)`.
-- `accruedFees == 0`.
+- `accruedFees == 0`, with `NoFeesAccrued`.
+- `ProtocolConfig.feeRecipient() == address(0)`, with `ZeroAddress`.
 
 Execution order:
 
-1. `amount = accruedFees`.
-2. `accruedFees = 0`.
-3. Emit `FeesSwept`.
-4. `SafeERC20.safeTransfer(collateralAsset, receiver, amount)`.
+1. `receiver = protocolConfig.feeRecipient()`.
+2. `amount = accruedFees`.
+3. `accruedFees = 0`.
+4. Emit `FeesSwept`.
+5. `SafeERC20.safeTransfer(collateralAsset, receiver, amount)`.
 
-`sweepFees` must never read or reduce `collateralLocked`. The transferable amount is exactly `accruedFees` and nothing else.
+`sweepFees` must never read or reduce `collateralLocked`. The transferable amount is exactly `accruedFees` and nothing else. It is callable in any state, including `ACTIVE`, and no pause flag blocks it, because it moves no collateral.
 
 ### `sweepDust`
 
 Must revert if:
 
 - Caller lacks `DEFAULT_ADMIN_ROLE`.
-- `state != SETTLED`.
-- `totalSupply() != 0`.
-- `totalUnclaimedShortAmount != 0`.
+- `state != SETTLED`, with `NotSettled`.
+- `totalSupply() != 0`, with `SeriesNotWoundDown`.
+- `totalUnclaimedShortAmount != 0`, with `SeriesNotWoundDown`.
 
 Under those preconditions no claim can ever be made against the series again, so the entire remaining balance is provably unclaimable dust. Any weaker precondition requires proving remaining claimants stay covered and must not be implemented without redoing that proof.
 
 Execution order:
 
-1. `amount = collateralAsset.balanceOf(address(this)) - accruedFees`.
-2. `collateralLocked = 0`.
-3. Emit `DustSwept`.
-4. `SafeERC20.safeTransfer(collateralAsset, receiver, amount)`.
+1. `receiver = protocolConfig.feeRecipient()`.
+2. `amount = collateralAsset.balanceOf(address(this)) - accruedFees`.
+3. `collateralLocked = 0`.
+4. Emit `DustSwept`.
+5. `SafeERC20.safeTransfer(collateralAsset, receiver, amount)`.
+
+Whether this function is ever called is FD-18. If that decision selects pro-rata return instead of protocol revenue, a single-receiver sweep cannot express it and the function must be redesigned before use.
 
 ## Pause and Emergency Specification
 
-Pause modes:
+Pause flags are owned by the contract that performs the action, not centralized. A vault cannot pause Kuru linking because it does not perform Kuru linking.
 
 ```text
-pauseMinting
-pauseKuruLinking
-pausePremiumRouting
-pauseSettlement
-pauseRedemption
+OptionSeriesVault        VaultPause.MINT
+                         VaultPause.SETTLEMENT
+                         VaultPause.REDEMPTION
+                         VaultPause.TRANSFER
+SeriesRegistry           kuruLinkPaused
+PremiumExecutionGuard    routingPaused
 ```
 
 Rules:
 
-- `pauseMinting`, `pauseKuruLinking`, and `pausePremiumRouting` are acceptable first-line controls.
-- `pauseSettlement` should be used only when oracle settlement is actively unsafe.
-- `pauseRedemption` should be avoided and used only if redemption itself is actively exploitable.
-- Pauses must be evented with reason codes.
+- `MINT`, `kuruLinkPaused`, and `routingPaused` are acceptable first-line controls, held by `PAUSER_ROLE`.
+- `SETTLEMENT` should be used only when oracle settlement is actively unsafe, and requires a higher-trust role or timelock.
+- `REDEMPTION` should be avoided and used only if redemption itself is actively exploitable. It is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
+- `TRANSFER` is discouraged. It breaks ERC-20 composability and would strand option tokens resting in Kuru orders. Use only for an active exploit or a compliance requirement.
+- **`TRANSFER` must gate holder-to-holder transfers only. It must never block `_mint` or `_burn`.** In OpenZeppelin 5.x both mint and burn route through `_update`, which is the natural place to put a pause hook and exactly where `ERC20Pausable` puts one. A hook placed there would make a `TRANSFER` pause also block redemption burns — so a `PAUSER_ROLE` holder could stop users claiming collateral they are owed using the flag documented as lowest-trust, bypassing the higher-trust `REDEMPTION` flag entirely. Gate on `from != address(0) && to != address(0)` inside `_update`, or check in `transfer`/`transferFrom` rather than in `_update`.
+- Every pause change must emit its event with a reason code.
+- No pause flag may prevent `sweepFees`, which moves no collateral.
 
 ## Needs Founder Decision
 

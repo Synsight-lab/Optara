@@ -60,7 +60,9 @@ Responsibilities:
 
 Security requirements:
 
-- Reject invalid strikes, expiries, contract sizes, oracle adapters, or assets.
+- Reject invalid strikes, expiries, contract sizes, oracle configs, or assets.
+- Reject fee rates above the hard caps.
+- Accept only `CreateSeriesParams`; derive or snapshot everything else.
 - Enforce deterministic identity for a series.
 - Prevent duplicate canonical series unless the duplicate resolves to the existing series.
 
@@ -70,9 +72,10 @@ Canonical source of truth for official series.
 
 Responsibilities:
 
-- Map `seriesId` to series vault address.
+- Map `seriesId` to the vault address, and back again. The vault is itself the option token, so this is one address per series, not two.
 - Expose immutable series parameters.
 - Store optional Kuru market metadata.
+- Own the `kuruLinkPaused` flag, since it owns `linkKuruMarket`.
 - Let frontends and integrations verify whether an option token is official.
 
 Security requirements:
@@ -92,7 +95,7 @@ Responsibilities:
 - Mint ERC-20 option tokens.
 - Track writer short obligations.
 - Stop minting at expiry.
-- Settle using the approved oracle adapter.
+- Settle using `OracleRouter`.
 - Burn option tokens during redemption.
 - Pay option holders.
 - Release residual collateral to writers.
@@ -106,25 +109,42 @@ Security requirements:
 - Redemption and writer withdrawals are idempotent at the user-accounting level.
 - External token transfers happen after internal state updates.
 
-### `OracleAdapter`
+### `OracleRouter`
 
-Reads the independent settlement price for a series.
+Produces the independent settlement and reference prices for a series. It is the only component that applies oracle policy.
 
 Responsibilities:
 
-- Return the underlying/quote price at the required settlement point or settlement window.
+- Read the series' immutable `OracleConfig` from `SeriesRegistry` using `seriesId`.
 - Use Chainlink as primary when configured and available for the pair.
 - Use Pyth as secondary/corroborator when configured and available for the pair.
 - Optionally use independent DEX TWAP as a tertiary sanity check.
-- Enforce freshness, validity, decimals, and pair identity.
+- Apply all freshness, deviation, and quorum policy.
 - Reject zero, negative, stale, or incomplete prices.
+- Forward only the required pull-oracle fee and refund the remainder.
 
 Security requirements:
 
 - Kuru prices must never be used as settlement oracle prices.
-- Oracle adapter must be approved for the underlying/quote pair.
+- The router must never accept a caller-supplied `OracleConfig`. A config passed as an argument is a config any caller can weaken, and nothing would bind it to the series it claims to describe.
 - Chainlink/Pyth deviation must be checked when both are configured.
 - Settlement must fail safely if the oracle cannot provide a valid price.
+
+### `ChainlinkOracleAdapter`, `PythOracleAdapter`, `DexTwapOracleAdapter`
+
+Single-source fetchers. Deliberately dumb.
+
+Responsibilities:
+
+- Fetch one source, using the feed identifier passed in from the series' immutable config.
+- Normalize the price to `PRICE_SCALE` regardless of source decimals.
+- Report the source's `updatedAt` and whether the data is structurally usable.
+
+Security requirements:
+
+- An adapter must not hold its own `(base, quote) -> feed` mapping. That would be a second, governable source of truth, and repointing it would change the settlement oracle of an already-live series.
+- An adapter must not apply staleness, deviation, or quorum policy. Policy in one place can be audited once; policy spread across three adapters can drift.
+- Pair identity is bound at series creation through the approved oracle config, not re-checked at settlement. See [oracle-spec.md](./oracle-spec.md).
 
 ### `KuruMarketAdapter`
 
@@ -152,7 +172,7 @@ See Invariant 13 in [math-of-core-invariants.md](./math-of-core-invariants.md) f
 
 Responsibilities:
 
-- Require buyer-provided limits such as maximum premium per option, maximum total premium, minimum option amount out, and deadline.
+- Require buyer-provided limits: maximum total all-in cost, minimum option amount out, and deadline. Limits bind on totals, never on per-option figures.
 - Check that the Kuru market is linked to the canonical series in the registry.
 - Classify writer asks against an acceptable premium range before routing buyers into them.
 - Reject automatic execution when spread, quote age, depth, price impact, or market status is outside configured safety bounds.
@@ -239,8 +259,10 @@ Long token holders burn option tokens to receive payout. Writers claim residual 
 User or keeper
     calls settle()
         OptionSeriesVault checks expiry
-        OptionSeriesVault asks OracleAdapter for valid price
-        OracleAdapter returns settlement price
+        OptionSeriesVault asks OracleRouter for valid price
+        OracleRouter reads series oracle config from SeriesRegistry
+        OracleRouter queries adapters and applies quorum policy
+        OracleRouter returns settlement price
         OptionSeriesVault computes payout and residual rates
         OptionSeriesVault stores final settlement result
         OptionSeriesVault emits SeriesSettled
@@ -303,7 +325,7 @@ For any one-click or routed buy flow:
 ```text
 required inputs:
     option amount desired
-    max premium per option or max total premium
+    max total all-in cost, being premium plus venue fee
     minimum option amount out
     deadline
     recipient
@@ -347,7 +369,7 @@ Collateral stays inside the option vault. Kuru contracts may hold option tokens 
 
 ### Oracle Isolation
 
-Settlement uses only the approved oracle adapter. Option-token market prices are useful for trading, but not for determining payout.
+Settlement uses only `OracleRouter`, reading the oracle configuration frozen into the series at creation. Option-token market prices are useful for trading, but not for determining payout.
 
 ### Premium Isolation
 
@@ -393,8 +415,9 @@ OptionsRedeemed(seriesId, holder, receiver, optionAmount, payoutAmount, feeAmoun
 WriterResidualClaimed(seriesId, writer, receiver, shortAmount, residualAmount, feeAmount)
 FeesSwept(seriesId, receiver, amount)
 DustSwept(seriesId, receiver, amount)
-SeriesPaused(seriesId, reason)
-SeriesUnpaused(seriesId)
+PauseSet(seriesId, flag, paused, reason)
+KuruLinkPauseSet(paused, reason)
+RoutingPauseSet(paused, reason)
 ```
 
 Every fee-bearing action emits the fee as a separate field rather than folding it into the net amount, so indexers and auditors can reconcile protocol revenue without re-deriving it.

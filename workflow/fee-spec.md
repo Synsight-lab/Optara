@@ -30,9 +30,11 @@ Any implementation where a fee reduces the collateral backing a live series is i
 Optara uses **accrue-and-pull**, not push-on-collection.
 
 ```text
-fee collected  -> accruedFees[asset] += feeAmount
-governance     -> sweepFees(asset, recipient) transfers out
+fee collected  -> accruedFees += feeAmount        (in the vault, in the collateral asset)
+governance     -> sweepFees() transfers out       (to ProtocolConfig.feeRecipient())
 ```
+
+`sweepFees` takes no receiver argument. The recipient is read live from `ProtocolConfig` at call time, so a fee admin can move fees but cannot choose where they go.
 
 Rationale:
 
@@ -81,6 +83,8 @@ transfer netPayout(a) to receiver
 Rounding: **down**, toward the user. Total outflow from `collateralLocked` equals `grossPayout(a)` either way, so solvency is untouched by this rounding direction.
 
 Out-of-the-money redemptions produce `grossPayout == 0` and therefore charge no fee. Only profitable exercises pay.
+
+Because this fee reduces what a holder can ever realize, it also tightens the buyer-side premium ceiling: `hardMaxPremium` is computed net of `exerciseFeeBps`, so a rail is never set above a price that is provably unprofitable. See [premium-pricing-spec.md](./premium-pricing-spec.md). The seller-side floor is unaffected, since the writer never pays this fee.
 
 ### 3. Residual Fee
 
@@ -210,16 +214,25 @@ kuruMakerFee  = floor(grossPremium * makerFeeBps / BPS_SCALE)
 netProceeds   = grossPremium - kuruMakerFee
 ```
 
-### Effective Premium Per Option
+### Range Checks Use Fee-Inclusive Totals
 
-All acceptable-range checks must use the fee-inclusive effective premium, not the raw quoted premium:
+All acceptable-range checks compare fee-inclusive **totals** for the whole order, never the raw quoted premium and never a per-option figure:
 
 ```text
-buyer side:  effectivePremiumPerOption = allInCost / optionAmountReceived
-seller side: effectiveProceedsPerOption = netProceeds / optionAmountSold
+buyer side:  allInCost   <= acceptableMaxPremium(optionAmount)
+seller side: netProceeds >= acceptableMinPremium(optionAmount)
 ```
 
-Using the raw premium instead lets a market with high taker fees pass a range check while the buyer's real cost sits above the acceptable maximum. See [premium-pricing-spec.md](./premium-pricing-spec.md) for how these feed the bounds.
+Using the raw premium instead lets a market with high taker fees pass a range check while the buyer's real cost sits above the acceptable maximum.
+
+Per-option figures may be derived for display, so a user can compare unit prices across sizes:
+
+```text
+effectivePremiumPerOption  = allInCost / optionAmountReceived
+effectiveProceedsPerOption = netProceeds / optionAmountSold
+```
+
+These are never compared against the bounds, which are totals. See [premium-pricing-spec.md](./premium-pricing-spec.md).
 
 ### Fee Convention Must Be Verified Before Launch
 

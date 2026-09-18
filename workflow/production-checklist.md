@@ -56,7 +56,8 @@ This checklist must be complete before mainnet launch.
 - [ ] Payout rounded down.
 - [ ] `writerResidualRate` computed by subtraction, never independently rounded.
 - [ ] Worked test vectors from the math spec asserted exactly.
-- [ ] Minimum sizes enforced.
+- [ ] Minimum sizes enforced at mint only, never on redeem or residual claim.
+- [ ] Transfer pause verified not to block mint or burn.
 - [ ] Kuru never used for settlement.
 - [ ] Chainlink/Pyth deviation checks implemented.
 - [ ] Oracle stale checks implemented.
@@ -95,6 +96,10 @@ This checklist must be complete before mainnet launch.
 - [ ] Deviation threshold configured.
 - [ ] Single-oracle policy decided.
 - [ ] DEX TWAP policy decided.
+- [ ] Settlement price anchored to expiry, never a live read.
+- [ ] Anchor proof verified against the preceding observation so a later round cannot be substituted.
+- [ ] `maxSettlementLag` configured per feed heartbeat, FD-21.
+- [ ] Staleness thresholds confirmed to apply to reference reads only.
 - [ ] Prolonged-outage recovery path decided, FD-20, or permanent-lock risk explicitly accepted and disclosed.
 - [ ] Oracle outage procedure documented.
 

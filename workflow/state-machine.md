@@ -76,7 +76,7 @@ Postconditions:
 
 ```text
 totalSupply == totalShortAmount
-collateralLocked >= maximumLiability(totalShortAmount)
+collateralLocked >= requiredCollateral(totalShortAmount)
 vaultBalance >= collateralLocked + accruedFees
 ```
 
@@ -87,8 +87,13 @@ Preconditions:
 ```text
 state == ACTIVE
 block.timestamp >= expiry
-oracle quorum passes
+VaultPause.SETTLEMENT not set
+anchor proof identifies the first observation at or after expiry
+that observation is within expiry + maxSettlementLag
+oracle quorum passes on the anchored observation
 ```
+
+There is no upper bound on *when* `settle()` may be called. The anchor pins the price to expiry, so a late call produces the same result as an early one.
 
 Effects:
 
@@ -193,7 +198,7 @@ Effects:
 ```text
 amount = accruedFees
 accruedFees = 0
-transfer amount to receiver
+transfer amount to ProtocolConfig.feeRecipient()
 ```
 
 ### `sweepDust`
@@ -223,27 +228,33 @@ writer residual claim remains unavailable
 
 Frontend status may show `Awaiting valid oracle settlement`.
 
-Emergency recovery for prolonged oracle failure is a governance process and must be explicitly decided before launch.
+A series can also reach this state permanently if no oracle observation exists inside `expiry + maxSettlementLag` — for example if the feed stopped updating across expiry. The anchor cannot then be proven and no later observation qualifies, so `settle` reverts forever.
+
+Emergency recovery for prolonged oracle failure is a governance process and must be explicitly decided before launch. See FD-20 and FD-21 in [founder-decisions.md](./founder-decisions.md).
 
 ## Pause Model
 
-Pause flags:
+Pause flags live on the contract that performs the action. A vault does not hold a Kuru-linking flag, because it does not perform Kuru linking.
 
 ```text
-mintPaused
-kuruLinkPaused
-premiumRoutingPaused
-settlementPaused
-redemptionPaused
-transferPaused
+OptionSeriesVault        VaultPause.MINT
+                         VaultPause.SETTLEMENT
+                         VaultPause.REDEMPTION
+                         VaultPause.TRANSFER
+SeriesRegistry           kuruLinkPaused
+PremiumExecutionGuard    routingPaused
 ```
+
+Pause flags are not economic state. A paused series is still `ACTIVE` or `SETTLED`; the flag only gates entry points.
 
 Recommended V1 defaults:
 
-- Pauser can pause minting and premium routing quickly.
-- Settlement pause requires higher-trust role or timelock unless active exploit.
-- Redemption pause requires highest-trust emergency action.
-- Transfer pause is discouraged for ERC-20 composability and should be avoided unless needed for compliance or active exploit.
+- `PAUSER_ROLE` can pause minting, Kuru linking, and premium routing quickly.
+- Settlement pause requires a higher-trust role or timelock unless there is an active exploit.
+- Redemption pause is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
+- Transfer pause is discouraged for ERC-20 composability. It would also strand option tokens resting in Kuru orders. Avoid unless needed for compliance or an active exploit.
+- Transfer pause gates holder-to-holder transfers only. It must never block mint or burn, or it would silently become a redemption pause held by a lower-trust role. See [implementation-spec.md](./implementation-spec.md).
+- `sweepFees` is never gated by a pause flag, since it moves no collateral.
 
 ## Prohibited Transitions
 
