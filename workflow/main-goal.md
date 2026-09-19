@@ -23,7 +23,7 @@ V1 supports:
 - European put options.
 - One ERC-20 option token per immutable option series.
 - Fully collateralized minting.
-- Oracle-based settlement at or after expiry.
+- Oracle-based settlement, priced at expiry and callable at any time after it.
 - Secondary trading through Kuru Router and Kuru OrderBook markets.
 - Canonical series discovery through a factory and registry.
 - Protocol fees at mint and exercise, structurally isolated from collateral.
@@ -91,7 +91,7 @@ The protocol must therefore protect itself with structural guarantees:
 - [contract-interfaces.md](./contract-interfaces.md) defines Solidity-facing interfaces and required errors.
 - [storage-layout.md](./storage-layout.md) defines required storage and accounting relationships.
 - [state-machine.md](./state-machine.md) defines legal state transitions.
-- [oracle-spec.md](./oracle-spec.md) defines the Chainlink/Pyth/TWAP oracle model.
+- [oracle-spec.md](./oracle-spec.md) defines the Chainlink/Pyth oracle model and expiry anchoring.
 - [premium-pricing-spec.md](./premium-pricing-spec.md) defines premium range and execution safety.
 - [fee-spec.md](./fee-spec.md) defines Optara protocol fees and Kuru venue fee accounting.
 - [kuru-integration-spec.md](./kuru-integration-spec.md) defines Kuru integration boundaries.

@@ -284,7 +284,7 @@ Kuru markets can be thin, spoofed, wash-traded, or temporarily distorted. This s
 
 ### Decision
 
-V1 settlement uses Chainlink as the primary oracle when a feed exists for the pair, Pyth as the secondary/corroborating oracle when a feed exists, and optionally an independent DEX TWAP as a tertiary sanity check. Kuru is never used for settlement.
+V1 settlement uses Chainlink as the primary oracle when a feed exists for the pair and Pyth as the secondary corroborating oracle when a feed exists. There is no third oracle source. Kuru is never used for settlement.
 
 ### Rationale
 
@@ -297,6 +297,7 @@ External oracle networks are designed for settlement-grade price data. Kuru orde
 - Premium safety may inspect Kuru depth, but settlement never depends on it.
 - Single-oracle series require explicit founder/governance approval.
 - Fail-closed settlement implies collateral stays locked during a prolonged outage. See FD-20.
+- A DEX TWAP was considered and dropped entirely: it cannot be anchored to expiry, and a source that can never be required can never be read. See DD-22.
 
 ## DD-19: V1 Charges Protocol Fees, Structurally Isolated From Collateral
 
@@ -356,3 +357,24 @@ The cost of this decision is honesty: the range checks cannot bind a user who tr
 - Acceptable-range enforcement is a property of the official frontend, not of the protocol.
 - User-facing copy must not claim Optara guarantees a fair premium.
 - A future router must call `checkPremium` atomically and revert on failure, at which point the range checks become real onchain guarantees for its users.
+
+## DD-22: The Settlement Price Is Anchored to Expiry, Not Read Live
+
+### Decision
+
+Settlement uses the first oracle observation at or after expiry, identified by a caller-supplied proof that the contracts verify against the source. It does not read the current price. `settle()` may be called at any time after expiry and returns the same result.
+
+### Rationale
+
+Settlement is permissionless and has no deadline of its own. If it read the live price, then whoever calls `settle()` would choose the settlement price by choosing when to call. An option that expired worthless could be turned into a claim on the writer's collateral simply by waiting for a favorable move. Freshness checks do not help: a price from an hour ago is perfectly fresh and still not the expiry price.
+
+A settlement window was the obvious cheaper alternative — require settlement within some period after expiry and read live. It was rejected for two reasons. It caps the manipulation rather than removing it, and near the money is exactly where an hour of movement flips the payout. And it converts an economic problem into a liveness problem: every series expiry would need a keeper to fire inside the window, and a single miss would strand user funds pending governance.
+
+### Consequences
+
+- Settlement is a deterministic function of the series and the feed's history. Who settles, and when, cannot change the outcome.
+- No keeper liveness requirement. A series settled months late produces the same price as one settled immediately.
+- `settle` takes a `SettlementProof`, and an offchain helper must find the first round or publish time after expiry. This is a binary search over round ids, not novel work.
+- Adapters need an anchored read path alongside the live one used for reference prices.
+- `maxSettlementLag` bounds how far past expiry the anchor may sit, which introduces a new way to reach permanent lock if a feed goes dark across expiry. That case is FD-20's, and the lag value is FD-21.
+- A DEX TWAP cannot participate, because an average over a window has no single observation to anchor. Since the reference path selects sources by the same flags settlement uses, a source excluded from settlement is unreachable everywhere, so V1 drops it rather than shipping an adapter nothing calls. See DD-18.

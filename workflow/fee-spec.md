@@ -6,7 +6,7 @@ This file defines every fee in the Optara protocol: what is charged, who pays it
 
 Two independent fee systems exist:
 
-- **Optara protocol fees**, charged by this protocol at mint, redemption, and optionally at writer residual claim.
+- **Optara protocol fees**, charged by this protocol at mint and at redemption.
 - **Kuru venue fees**, charged by Kuru on secondary-market trades. Optara never receives these, but every premium calculation must account for them.
 
 See [math-of-core-invariants.md](./math-of-core-invariants.md) for the collateral math these fees must never violate, and [premium-pricing-spec.md](./premium-pricing-spec.md) for fee-inclusive premium bounds.
@@ -86,31 +86,13 @@ Out-of-the-money redemptions produce `grossPayout == 0` and therefore charge no 
 
 Because this fee reduces what a holder can ever realize, it also tightens the buyer-side premium ceiling: `hardMaxPremium` is computed net of `exerciseFeeBps`, so a rail is never set above a price that is provably unprofitable. See [premium-pricing-spec.md](./premium-pricing-spec.md). The seller-side floor is unaffected, since the writer never pays this fee.
 
-### 3. Residual Fee
+### Writer Residual Is Not Fee-Bearing
 
-Charged when a writer claims residual collateral after settlement.
+No fee is charged when a writer claims residual collateral. The writer already paid at mint, and charging again would be charging twice for the same position.
 
-```text
-grossResidual(a) = floor(a * writerResidualRate / OPTION_SCALE)
-residualFee(a)   = floor(grossResidual(a) * residualFeeBps / BPS_SCALE)
-netResidual(a)   = grossResidual(a) - residualFee(a)
+V1 therefore has exactly two fees, mint and exercise. A residual fee and a routing fee were both specified in an earlier draft and removed: the residual fee was permanently zero, and the routing fee applied only to a protocol-owned trade router that V1 does not have. Parameters that are always zero still have to be threaded through the struct, storage, events, and math, and still have to be read and reasoned about by anyone auditing the fee paths.
 
-collateralLocked -= grossResidual(a)
-accruedFees      += residualFee(a)
-transfer netResidual(a) to receiver
-```
-
-**V1 default: `residualFeeBps = 0`.** Writers already pay the mint fee. Charging both is double-charging the same position. The mechanism exists so the parameter can be enabled later without a contract change, but the launch value should be zero unless the founder decides otherwise. See [founder-decisions.md](./founder-decisions.md) FD-06.
-
-### 4. Route Fee
-
-Charged only if a protocol-owned router executes Kuru trades on a buyer's behalf.
-
-```text
-routeFee = floor(grossPremium * routeFeeBps / BPS_SCALE)
-```
-
-**V1 default: not applicable.** The preferred V1 design has no protocol-owned trade router; buyers transact with Kuru directly. If a router is added later, the route fee must be included in the buyer's all-in cost check defined in [premium-pricing-spec.md](./premium-pricing-spec.md).
+If a later version wants either, it adds the parameter then, with a reason.
 
 ## Fee Immutability
 
@@ -138,8 +120,6 @@ Caps are compile-time constants, not governable values. Governance cannot exceed
 ```text
 MAX_MINT_FEE_BPS     = 100    // 1.00%
 MAX_EXERCISE_FEE_BPS = 100    // 1.00%
-MAX_RESIDUAL_FEE_BPS = 100    // 1.00%
-MAX_ROUTE_FEE_BPS    = 50     // 0.50%
 ```
 
 `createSeries` must revert with `FeeExceedsCap` if any configured rate exceeds its cap. This bounds worst-case governance capture: even a fully compromised admin key cannot set a confiscatory fee on future series, and cannot touch existing ones at all.
@@ -174,7 +154,6 @@ series.feeConfig at block N == series.feeConfig at block N+k, for all k
 ```text
 series.mintFeeBps     <= MAX_MINT_FEE_BPS
 series.exerciseFeeBps <= MAX_EXERCISE_FEE_BPS
-series.residualFeeBps <= MAX_RESIDUAL_FEE_BPS
 ```
 
 ### Invariant F5: Zero-Fee Series Behave Identically
@@ -198,10 +177,9 @@ Kuru charges its own maker and taker fees. Optara receives none of this, but eve
 A buyer taking liquidity pays the premium plus Kuru's taker fee:
 
 ```text
-grossPremium  = sum(fillSize_i * fillPrice_i)
-kuruTakerFee  = floor(grossPremium * takerFeeBps / BPS_SCALE)
-optaraRouteFee = 0 in V1
-allInCost     = grossPremium + kuruTakerFee + optaraRouteFee
+grossPremium = sum(fillSize_i * fillPrice_i)
+kuruTakerFee = floor(grossPremium * takerFeeBps / BPS_SCALE)
+allInCost    = grossPremium + kuruTakerFee
 ```
 
 ### Seller Proceeds
@@ -273,7 +251,7 @@ A single blended number is not acceptable. Users must be able to see which part 
 
 See [founder-decisions.md](./founder-decisions.md):
 
-- FD-06: launch values for mint, exercise, and residual fee rates.
+- FD-06: launch values for the mint and exercise fee rates.
 - FD-06a: fee recipient address.
 - FD-06b: whether fee accrual is per-vault or swept to a central collector.
 - FD-17: Kuru fee convention verification and maximum acceptable venue fee for a linkable market.

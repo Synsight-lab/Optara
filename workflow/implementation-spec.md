@@ -32,7 +32,7 @@ V1 must implement:
 - Oracle-based settlement only.
 - Chainlink primary oracle if feed exists.
 - Pyth corroborator if feed exists.
-- Optional independent DEX TWAP as a tertiary sanity check.
+- No DEX TWAP oracle. A window average cannot be anchored to expiry, and a source that can never be required can never be read.
 - Kuru only for secondary trading, premium execution, and depth sanity.
 - No Kuru price usage for settlement.
 - No early exercise.
@@ -86,7 +86,6 @@ ProtocolConfig
 ### Optional V1 Contracts
 
 ```text
-DexTwapOracleAdapter
 EmergencyRecoveryModule
 ```
 
@@ -176,7 +175,7 @@ Must:
 - Read the series' `OracleConfig` from `SeriesRegistry` using `seriesId`.
 - Read Chainlink primary when configured.
 - Read Pyth secondary/corroborator when configured.
-- Optionally read DEX TWAP tertiary check when configured.
+
 - Pass feed identifiers from that config into adapters as call arguments.
 - Apply all policy itself: staleness, deviation, and quorum.
 - Reject stale, zero, negative, or invalid oracle data.
@@ -190,7 +189,7 @@ Must not:
 - Silently fall back to a single oracle when the series requires two-oracle quorum.
 - Retain native token.
 
-### `ChainlinkOracleAdapter`, `PythOracleAdapter`, `DexTwapOracleAdapter`
+### `ChainlinkOracleAdapter` and `PythOracleAdapter`
 
 Each adapter fetches exactly one source and reports what it found.
 
@@ -317,8 +316,6 @@ Compile-time constants. Not governable. Enforced at series creation.
 ```text
 MAX_MINT_FEE_BPS     = 100
 MAX_EXERCISE_FEE_BPS = 100
-MAX_RESIDUAL_FEE_BPS = 100
-MAX_ROUTE_FEE_BPS    = 50
 ```
 
 ### Risk Parameter Defaults
@@ -326,6 +323,8 @@ MAX_ROUTE_FEE_BPS    = 50
 ```text
 MIN_EXPIRY_DELAY = 1 hours          safe default, needs founder approval (FD-19)
 MAX_EXPIRY_DELAY = 365 days         safe default, needs founder approval (FD-19)
+MIN_ORACLE_DEVIATION_BPS = 10       floor; below this a series can never settle
+MAX_ORACLE_DEVIATION_BPS = 1000     ceiling; above this corroboration is meaningless
 DEFAULT_MAX_ORACLE_DEVIATION_BPS = 100
 DEFAULT_CHAINLINK_STALE_AFTER = 1 hours
 DEFAULT_PYTH_STALE_AFTER = 2 minutes
@@ -334,7 +333,6 @@ DEFAULT_MAX_PRICE_IMPACT_BPS = 300
 DEFAULT_MIN_KURU_DEPTH = Needs Founder Decision per asset
 DEFAULT_MINT_FEE_BPS = Needs Founder Decision (FD-06)
 DEFAULT_EXERCISE_FEE_BPS = Needs Founder Decision (FD-06)
-DEFAULT_RESIDUAL_FEE_BPS = 0
 ```
 
 Defaults are safety starting points. Production values must be finalized in [founder-decisions.md](./founder-decisions.md).
@@ -409,6 +407,11 @@ Creation must revert if:
 - Oracle config is not approved **for this exact pair**, checked as `isApprovedOracleConfig(underlying, quote, keccak256(abi.encode(oracleConfig)))`. Approving on the config hash alone would let one approval bind the same feeds to every pair.
 - Chainlink feed is missing when a Chainlink feed exists for the pair and policy requires it.
 - Pyth feed is missing when a Pyth feed exists for the pair and policy requires it.
+- **No settlement source is required**, meaning both `requireChainlink` and `requirePyth` are false. Such a config passes quorum vacuously and would settle with no oracle at all. At least one must be true, with `InvalidOracleConfig`.
+- A required source has no identifier: `requireChainlink` with `chainlinkFeed == address(0)`, or `requirePyth` with `pythFeedId == bytes32(0)`.
+- Both Chainlink and Pyth are required and `maxOracleDeviationBps < MIN_ORACLE_DEVIATION_BPS`. A near-zero tolerance means only exactly-equal prices ever settle, which makes the series permanently unsettleable — a lock that looks like a working config until expiry.
+- `maxOracleDeviationBps > MAX_ORACLE_DEVIATION_BPS`, which would make the corroboration check meaningless.
+- `maxSettlementLag == 0`, which admits only an observation whose timestamp equals expiry exactly.
 - Computed required collateral for `minOptionAmount` is zero.
 - `seriesId` already exists with different params.
 - Any snapshotted fee rate exceeds its hard cap, with `FeeExceedsCap`.
@@ -504,7 +507,7 @@ function settle(SettlementProof calldata proof) external payable returns (uint25
 
 `proof` identifies the oracle observation at expiry. Its `pythUpdateData` may be empty if the series does not use Pyth; its `chainlinkRoundId` is ignored if the series does not use Chainlink.
 
-Settlement is anchored to that observation rather than to a live read. This is not a detail: settlement is permissionless and has no deadline, so if the price came from a live read the first caller would choose the settlement price by choosing when to call, and could wait for a move that turns a worthless option into a claim on the writer's collateral. See [oracle-spec.md](./oracle-spec.md).
+Settlement is anchored to that observation rather than to a live read, so the price does not depend on when `settle()` is called. [oracle-spec.md](./oracle-spec.md) explains why a live read is unsafe here; DD-22 records the decision and the rejected alternative.
 
 `msg.value` funds the Pyth update fee. The vault forwards only the amount the router reports as required and refunds the remainder to `msg.sender` before returning. No contract in the settlement path may retain native token: the vault has no native withdrawal path, since `sweepFees` moves the collateral asset only. See [oracle-spec.md](./oracle-spec.md).
 
@@ -520,7 +523,6 @@ Must revert if:
 - No qualifying observation exists within `expiry + maxSettlementLag`, with `SettlementAnchorTooLate`.
 - Any required oracle price is zero or invalid.
 - Chainlink/Pyth deviation exceeds allowed threshold.
-- Optional TWAP check is configured and fails.
 
 Note what is **not** a revert condition: how long after expiry `settle()` is called. The call may happen at any later time, because the proof pins the price to expiry regardless. Only the anchoring observation must fall inside the window.
 
@@ -594,7 +596,7 @@ If payout is zero, the burn must still succeed so holders can clear worthless ba
 ```solidity
 function claimWriterResidual(uint256 shortAmount, address receiver)
     external
-    returns (uint256 residualAmount, uint256 feeAmount);
+    returns (uint256 residualAmount);
 ```
 
 ### Rules
@@ -610,37 +612,33 @@ Must revert if:
 Amounts:
 
 ```text
-grossResidual  = floor(shortAmount * writerResidualRate / OPTION_SCALE)
-feeAmount      = floor(grossResidual * residualFeeBps / BPS_SCALE)
-residualAmount = grossResidual - feeAmount
+residualAmount = floor(shortAmount * writerResidualRate / OPTION_SCALE)
 ```
 
-With the V1 default `residualFeeBps = 0`, `feeAmount` is zero and `residualAmount == grossResidual`.
+No fee is charged here. The writer paid at mint.
 
 Execution order, normative:
 
 1. Validate all inputs and state.
-2. Compute `grossResidual`, `feeAmount`, `residualAmount`.
+2. Compute `residualAmount`.
 3. `writerShortBalance[msg.sender] -= shortAmount`.
 4. `totalUnclaimedShortAmount -= shortAmount`.
-5. `collateralLocked -= grossResidual`.
-6. `accruedFees += feeAmount`.
-7. `totalWriterResidualClaimed += grossResidual`.
-8. Emit `WriterResidualClaimed`.
-9. `SafeERC20.safeTransfer(collateralAsset, receiver, residualAmount)` if `residualAmount > 0`.
+5. `collateralLocked -= residualAmount`.
+6. `totalWriterResidualClaimed += residualAmount`.
+7. Emit `WriterResidualClaimed`.
+8. `SafeERC20.safeTransfer(collateralAsset, receiver, residualAmount)` if `residualAmount > 0`.
 
 The function is `nonReentrant`.
 
-## Fee and Dust Sweep Specification
+## Fee Sweep Specification
 
 ### Functions
 
 ```solidity
 function sweepFees() external returns (uint256 amount);
-function sweepDust() external returns (uint256 amount);
 ```
 
-Neither takes a receiver. Both send to `ProtocolConfig.feeRecipient()`, read live at call time.
+It takes no receiver. It sends to `ProtocolConfig.feeRecipient()`, read live at call time.
 
 A caller-supplied receiver would defeat the reason the recipient is a live lookup rather than a snapshot: if the fee admin can direct funds anywhere, rotating a compromised treasury address protects nothing, and the role's blast radius grows from "when fees move" to "where fees go."
 
@@ -662,27 +660,6 @@ Execution order:
 
 `sweepFees` must never read or reduce `collateralLocked`. The transferable amount is exactly `accruedFees` and nothing else. It is callable in any state, including `ACTIVE`, and no pause flag blocks it, because it moves no collateral.
 
-### `sweepDust`
-
-Must revert if:
-
-- Caller lacks `DEFAULT_ADMIN_ROLE`.
-- `state != SETTLED`, with `NotSettled`.
-- `totalSupply() != 0`, with `SeriesNotWoundDown`.
-- `totalUnclaimedShortAmount != 0`, with `SeriesNotWoundDown`.
-
-Under those preconditions no claim can ever be made against the series again, so the entire remaining balance is provably unclaimable dust. Any weaker precondition requires proving remaining claimants stay covered and must not be implemented without redoing that proof.
-
-Execution order:
-
-1. `receiver = protocolConfig.feeRecipient()`.
-2. `amount = collateralAsset.balanceOf(address(this)) - accruedFees`.
-3. `collateralLocked = 0`.
-4. Emit `DustSwept`.
-5. `SafeERC20.safeTransfer(collateralAsset, receiver, amount)`.
-
-Whether this function is ever called is FD-18. If that decision selects pro-rata return instead of protocol revenue, a single-receiver sweep cannot express it and the function must be redesigned before use.
-
 ## Pause and Emergency Specification
 
 Pause flags are owned by the contract that performs the action, not centralized. A vault cannot pause Kuru linking because it does not perform Kuru linking.
@@ -691,7 +668,6 @@ Pause flags are owned by the contract that performs the action, not centralized.
 OptionSeriesVault        VaultPause.MINT
                          VaultPause.SETTLEMENT
                          VaultPause.REDEMPTION
-                         VaultPause.TRANSFER
 SeriesRegistry           kuruLinkPaused
 PremiumExecutionGuard    routingPaused
 ```
@@ -701,8 +677,9 @@ Rules:
 - `MINT`, `kuruLinkPaused`, and `routingPaused` are acceptable first-line controls, held by `PAUSER_ROLE`.
 - `SETTLEMENT` should be used only when oracle settlement is actively unsafe, and requires a higher-trust role or timelock.
 - `REDEMPTION` should be avoided and used only if redemption itself is actively exploitable. It is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
-- `TRANSFER` is discouraged. It breaks ERC-20 composability and would strand option tokens resting in Kuru orders. Use only for an active exploit or a compliance requirement.
-- **`TRANSFER` must gate holder-to-holder transfers only. It must never block `_mint` or `_burn`.** In OpenZeppelin 5.x both mint and burn route through `_update`, which is the natural place to put a pause hook and exactly where `ERC20Pausable` puts one. A hook placed there would make a `TRANSFER` pause also block redemption burns — so a `PAUSER_ROLE` holder could stop users claiming collateral they are owed using the flag documented as lowest-trust, bypassing the higher-trust `REDEMPTION` flag entirely. Gate on `from != address(0) && to != address(0)` inside `_update`, or check in `transfer`/`transferFrom` rather than in `_update`.
+- **There is no transfer pause.** The option token is freely transferable for the life of the series, and no role can stop it.
+
+  A transfer pause was specified in an earlier draft and removed. It breaks ERC-20 composability, it would strand option tokens resting in Kuru orders with no way for holders to retrieve them, and it was documented as discouraged everywhere it appeared. It also carried a trap: in OpenZeppelin 5.x, `_mint` and `_burn` both route through `_update`, which is where a pause hook naturally goes and exactly where `ERC20Pausable` puts one. A hook there would have blocked redemption burns, letting a low-trust `PAUSER_ROLE` stop users claiming collateral they were owed and bypassing the higher-trust `REDEMPTION` flag entirely. Removing the flag removes the trap.
 - Every pause change must emit its event with a reason code.
 - No pause flag may prevent `sweepFees`, which moves no collateral.
 

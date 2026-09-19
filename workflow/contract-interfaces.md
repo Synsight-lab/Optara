@@ -42,8 +42,6 @@ uint256 constant BPS_SCALE = 10_000;
 // Hard fee caps. Compile-time constants; governance cannot exceed them.
 uint16 constant MAX_MINT_FEE_BPS = 100;
 uint16 constant MAX_EXERCISE_FEE_BPS = 100;
-uint16 constant MAX_RESIDUAL_FEE_BPS = 100;
-uint16 constant MAX_ROUTE_FEE_BPS = 50;
 
 enum OptionType {
     CALL,
@@ -68,21 +66,17 @@ enum OracleStatus {
 enum VaultPause {
     MINT,
     SETTLEMENT,
-    REDEMPTION,
-    TRANSFER
+    REDEMPTION
 }
 
 struct OracleConfig {
     address chainlinkFeed;          // aggregator address, address(0) if unused
     bytes32 pythFeedId;             // Pyth price id, bytes32(0) if unused
-    address dexTwapAdapter;         // TWAP source address, address(0) if unused
     bool requireChainlink;
     bool requirePyth;
-    bool requireDexTwap;
     uint32 maxOracleDeviationBps;   // bps
     uint32 chainlinkStaleAfter;     // seconds; REFERENCE reads only, never settlement
     uint32 pythStaleAfter;          // seconds; REFERENCE reads only, never settlement
-    uint32 dexTwapStaleAfter;       // seconds; REFERENCE reads only, never settlement
     uint32 maxSettlementLag;        // seconds past expiry the settlement anchor may sit
 }
 
@@ -96,7 +90,6 @@ struct SettlementProof {
 struct FeeConfig {
     uint16 mintFeeBps;      // bps, <= MAX_MINT_FEE_BPS
     uint16 exerciseFeeBps;  // bps, <= MAX_EXERCISE_FEE_BPS
-    uint16 residualFeeBps;  // bps, <= MAX_RESIDUAL_FEE_BPS, V1 default 0
 }
 
 /// @notice Caller-supplied inputs to series creation.
@@ -298,11 +291,9 @@ interface IOptionSeriesVault is IERC20 {
         address indexed writer,
         address indexed receiver,
         uint256 shortAmount,
-        uint256 grossResidual,
-        uint256 feeAmount
+        uint256 residualAmount
     );
     event FeesSwept(bytes32 indexed seriesId, address indexed receiver, uint256 amount);
-    event DustSwept(bytes32 indexed seriesId, address indexed receiver, uint256 amount);
     event PauseSet(bytes32 indexed seriesId, VaultPause indexed flag, bool paused, bytes32 reason);
 
     // --- series definition ---
@@ -322,10 +313,9 @@ interface IOptionSeriesVault is IERC20 {
 
     /// @notice Settles the series at the oracle observation anchored to expiry.
     /// @dev `proof` identifies that observation and is verified against the source, so the
-    ///      resulting price is the same regardless of who calls or when. Passing a live
-    ///      "latest price" read here would let the caller pick the settlement price by
-    ///      picking the moment. Payable to fund the Pyth update fee; any unused native
-    ///      balance is refunded to msg.sender. The vault must not retain native token.
+    ///      resulting price is the same regardless of who calls or when. See oracle-spec.md.
+    ///      Payable to fund the Pyth update fee; any unused native balance is refunded to
+    ///      msg.sender. The vault must not retain native token.
     function settle(SettlementProof calldata proof)
         external
         payable
@@ -337,22 +327,17 @@ interface IOptionSeriesVault is IERC20 {
         external
         returns (uint256 payoutAmount, uint256 feeAmount);
 
-    /// @return residualAmount NET collateral raw units transferred to receiver
-    /// @return feeAmount      collateral raw units accrued as protocol fee, carved from gross
+    /// @return residualAmount collateral raw units transferred to receiver. No fee is
+    ///         charged here: the writer already paid at mint.
     function claimWriterResidual(uint256 shortAmount, address receiver)
         external
-        returns (uint256 residualAmount, uint256 feeAmount);
+        returns (uint256 residualAmount);
 
     // --- fee and dust ---
 
     /// @dev FEE_ADMIN_ROLE only. Sends to ProtocolConfig.feeRecipient(), read live.
-    ///      No receiver argument: a caller-chosen destination would defeat the
-    ///      rotation property that makes a live recipient lookup worthwhile.
+    ///      Deliberately takes no receiver; see implementation-spec.md.
     function sweepFees() external returns (uint256 amount);
-
-    /// @dev DEFAULT_ADMIN_ROLE only, and only once the series is fully wound down.
-    ///      Sends to ProtocolConfig.feeRecipient(). Gated on FD-18.
-    function sweepDust() external returns (uint256 amount);
 
     // --- pause ---
 
@@ -372,7 +357,7 @@ interface IOptionSeriesVault is IERC20 {
     function previewWriterResidual(uint256 shortAmount)
         external
         view
-        returns (uint256 residualAmount, uint256 feeAmount);
+        returns (uint256 residualAmount);
 
     // --- accounting ---
 
@@ -404,8 +389,7 @@ interface IOracleRouter {
         bytes32 indexed seriesId,
         uint256 price,
         uint256 chainlinkPrice,
-        uint256 pythPrice,
-        uint256 dexTwapPrice
+        uint256 pythPrice
     );
     event OraclePriceRejected(bytes32 indexed seriesId, OracleStatus status, string reason);
 
@@ -455,7 +439,7 @@ interface IOracleAdapter {
     }
 
     /// @notice Live read, for REFERENCE prices only. Never used for settlement.
-    /// @param feed   source contract address; used by Chainlink and DEX TWAP adapters
+    /// @param feed   source contract address; used by the Chainlink adapter
     /// @param feedId source feed identifier; used by the Pyth adapter
     /// @param updateData pull-oracle update payload; empty for push oracles
     /// @dev Each adapter uses the identifier that applies to it and ignores the other.
@@ -495,9 +479,9 @@ factory requires ProtocolConfig.isApprovedOracleConfig(underlying, quote, config
 the config is then frozen into the series and can never change
 ```
 
-**The pair must be part of the approval key.** An `OracleConfig` names feed addresses and ids; it does not say which assets those feeds price. Keying approval on the config hash alone would mean that approving a MON/USD feed set for the MON/USDC pair simultaneously approves those same feeds for every other pair — so anyone could create a WBTC/USDC series carrying the MON feeds and have it settle at MON's price. Including `underlying` and `quote` in the key is what actually binds identity.
+**The pair must be part of the approval key.** An `OracleConfig` names feeds but not which assets they price, so a config-only key would bind one approval to every pair. [oracle-spec.md](./oracle-spec.md) works through what that allows.
 
-This is stronger than a runtime string comparison against a feed description, which is fragile and not uniformly supported. It does mean approving an oracle config is a security-critical action: an approval that binds the wrong feed to a pair cannot be corrected on any series already created against it.
+Approving an oracle config is therefore security-critical: an approval that binds the wrong feed to a pair cannot be corrected on any series already created against it.
 
 ## `IProtocolConfig`
 
@@ -510,16 +494,14 @@ interface IProtocolConfig {
         bytes32 indexed configHash,
         bool approved
     );
-    event DefaultFeesUpdated(uint16 mintFeeBps, uint16 exerciseFeeBps, uint16 residualFeeBps);
+    event DefaultFeesUpdated(uint16 mintFeeBps, uint16 exerciseFeeBps);
     event FeeRecipientUpdated(address indexed recipient);
     event RiskParamsUpdated();
 
     function isAllowedAsset(address asset) external view returns (bool);
 
     /// @notice Is this oracle configuration approved FOR THIS PAIR?
-    /// @dev The pair is part of the key, not incidental to it. An OracleConfig names feeds
-    ///      but says nothing about which assets those feeds price, so approving a config
-    ///      globally would let the same feeds be bound to any pair. See the note below.
+    /// @dev The pair is part of the key, not incidental to it. See the note below.
     function isApprovedOracleConfig(address underlying, address quote, bytes32 configHash)
         external
         view

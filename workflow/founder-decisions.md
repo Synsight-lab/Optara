@@ -60,15 +60,11 @@ Needs final approval per feed update behavior.
 
 ### FD-04: DEX TWAP Requirement
 
-Question:
+**Closed. No decision needed.** V1 has no DEX TWAP oracle at all.
 
-Is independent DEX TWAP required for launch pairs or optional?
+A TWAP cannot be anchored to expiry, so it cannot be a settlement source. Keeping it as a reference-only signal was also rejected, because the reference path selects sources by the same flags settlement uses — a source that can never be required can never be read. Rather than ship an adapter nothing calls, V1 drops the component. See [oracle-spec.md](./oracle-spec.md) and DD-18.
 
-Safe default:
-
-```text
-Optional tertiary check.
-```
+Reopening this is a V2 question and needs three things together: a historical-window read, a separate flag that actually selects the source on the reference path, and a policy for insufficient observation cardinality that reconciles with FD-20.
 
 ### FD-21: Maximum Settlement Lag
 
@@ -114,14 +110,13 @@ Only assets with strong oracle support and standard ERC-20 behavior.
 
 Question:
 
-What are the launch values for each fee rate?
+What are the launch values for the two fee rates? V1 charges a mint fee and an exercise fee, and nothing else. No fee is charged on writer residual claims.
 
 Recommended starting values:
 
 ```text
 mintFeeBps     = 10     (0.10% of required collateral, charged on top)
 exerciseFeeBps = 25     (0.25% of gross payout, in-the-money redemptions only)
-residualFeeBps = 0      (writers already paid at mint; charging both double-charges)
 ```
 
 Hard caps are compile-time constants at 100 bps each and cannot be raised by governance.
@@ -341,20 +336,6 @@ Enforcing both is correct under either convention.
 This is a launch blocker: a wrong assumption here silently breaks the buyer's all-in cost limit. See [kuru-integration-spec.md](./kuru-integration-spec.md).
 
 ## Accounting Decisions
-
-### FD-18: Dust Disposition
-
-Question:
-
-Once a series is fully wound down, is leftover dust protocol revenue or returned pro-rata?
-
-Safe default:
-
-```text
-Dust stays in the vault. sweepDust exists but is not called.
-```
-
-The sweep precondition already guarantees no claimant can be harmed, since it requires `totalSupply == 0` and `totalUnclaimedShortAmount == 0`. This decision is therefore about revenue policy, not safety. See Invariant 5A in [math-of-core-invariants.md](./math-of-core-invariants.md).
 
 ### FD-19: Expiry Bounds
 

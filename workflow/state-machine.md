@@ -40,13 +40,12 @@ CREATED
 | Function | Before Expiry | At/After Expiry Before Settlement | After Settlement |
 |---|---:|---:|---:|
 | `mint` | allowed | revert | revert |
-| ERC-20 transfer | allowed | allowed unless paused | allowed unless paused |
+| ERC-20 transfer | allowed | allowed | allowed |
 | `settle` | revert | allowed | revert or return stored result |
 | `redeem` | revert | revert | allowed |
 | `claimWriterResidual` | revert | revert | allowed |
 | `linkKuruMarket` | allowed if not linked | allowed with warning | allowed metadata only |
 | `sweepFees` | allowed, fee admin | allowed, fee admin | allowed, fee admin |
-| `sweepDust` | revert | revert | allowed once fully wound down |
 
 Recommended behavior for repeated `settle`: revert with `AlreadySettled`.
 
@@ -162,17 +161,16 @@ writerShortBalance[writer] >= shortAmount
 Effects:
 
 ```text
-grossResidual = floor(shortAmount * writerResidualRate / OPTION_SCALE)
-residualFee   = floor(grossResidual * residualFeeBps / BPS_SCALE)   // 0 by V1 default
-netResidual   = grossResidual - residualFee
+residualAmount = floor(shortAmount * writerResidualRate / OPTION_SCALE)
 
 writerShortBalance[writer] -= shortAmount
 totalUnclaimedShortAmount -= shortAmount
-collateralLocked -= grossResidual
-accruedFees += residualFee
-totalWriterResidualClaimed += grossResidual
-transfer netResidual to receiver
+collateralLocked -= residualAmount
+totalWriterResidualClaimed += residualAmount
+transfer residualAmount to receiver
 ```
+
+No fee is charged on residual claims. The writer paid at mint.
 
 Postconditions:
 
@@ -182,7 +180,7 @@ buyer claims remain solvent
 vaultBalance >= collateralLocked + accruedFees
 ```
 
-## Fee and Dust Sweep Transitions
+## Fee Sweep Transition
 
 ### `sweepFees`
 
@@ -202,19 +200,6 @@ amount = accruedFees
 accruedFees = 0
 transfer amount to ProtocolConfig.feeRecipient()
 ```
-
-### `sweepDust`
-
-Preconditions:
-
-```text
-caller has DEFAULT_ADMIN_ROLE
-state == SETTLED
-totalSupply() == 0
-totalUnclaimedShortAmount == 0
-```
-
-Only reachable once every claim against the series is exhausted, at which point the remaining balance is provably unclaimable. See Invariant 5A in [math-of-core-invariants.md](./math-of-core-invariants.md).
 
 ## Oracle Failure State
 
@@ -242,7 +227,6 @@ Pause flags live on the contract that performs the action. A vault does not hold
 OptionSeriesVault        VaultPause.MINT
                          VaultPause.SETTLEMENT
                          VaultPause.REDEMPTION
-                         VaultPause.TRANSFER
 SeriesRegistry           kuruLinkPaused
 PremiumExecutionGuard    routingPaused
 ```
@@ -254,8 +238,7 @@ Recommended V1 defaults:
 - `PAUSER_ROLE` can pause minting, Kuru linking, and premium routing quickly.
 - Settlement pause requires a higher-trust role or timelock unless there is an active exploit.
 - Redemption pause is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
-- Transfer pause is discouraged for ERC-20 composability. It would also strand option tokens resting in Kuru orders. Avoid unless needed for compliance or an active exploit.
-- Transfer pause gates holder-to-holder transfers only. It must never block mint or burn, or it would silently become a redemption pause held by a lower-trust role. See [implementation-spec.md](./implementation-spec.md).
+- There is no transfer pause. Option tokens are freely transferable for the life of the series and no role can stop it. See [implementation-spec.md](./implementation-spec.md) for why that flag was removed.
 - `sweepFees` is never gated by a pause flag, since it moves no collateral.
 
 ## Prohibited Transitions

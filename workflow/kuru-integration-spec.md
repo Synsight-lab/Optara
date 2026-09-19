@@ -110,10 +110,10 @@ These must be read from the deployed market at link time rather than assumed, an
 ```text
 grossPremium = sum(fillSize_i * fillPrice_i)
 kuruTakerFee = floor(grossPremium * takerFeeBps / BPS_SCALE)
-allInCost    = grossPremium + kuruTakerFee + optaraRouteFee
+allInCost    = grossPremium + kuruTakerFee
 ```
 
-`optaraRouteFee` is zero in V1 because there is no protocol-owned router.
+There is no Optara routing fee, because V1 has no protocol-owned router.
 
 ### Seller Proceeds
 
@@ -191,7 +191,7 @@ Official one-click buy flows must:
 - Verify registry canonical series.
 - Verify linked Kuru market.
 - Estimate executable output from depth.
-- Enforce `buyerMaxPremium`.
+- Enforce `buyerMaxTotalPremium` on the fee-inclusive all-in cost.
 - Enforce `minOptionAmountOut`.
 - Enforce deadline.
 - Check spread, depth, quote age, and price impact.

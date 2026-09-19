@@ -83,7 +83,6 @@ uint256 public collateralPerOption;  // C for CALL, ceilDiv(C*K, uqScale) for PU
 // Snapshotted from ProtocolConfig at creation. Immutable for the series' life.
 uint16 public mintFeeBps;
 uint16 public exerciseFeeBps;
-uint16 public residualFeeBps;
 ```
 
 Mutable fields:
@@ -123,7 +122,6 @@ contract OracleRouter {
     ProtocolConfig public config;
     IOracleAdapter public chainlinkAdapter;
     IOracleAdapter public pythAdapter;
-    IOracleAdapter public dexTwapAdapter;
 }
 ```
 
@@ -147,7 +145,6 @@ contract ProtocolConfig {
     uint32 public defaultMaxOracleDeviationBps;
     uint32 public defaultChainlinkStaleAfter;
     uint32 public defaultPythStaleAfter;
-    uint32 public defaultDexTwapStaleAfter;
 
     uint32 public maxPremiumSpreadBps;
     uint32 public maxPriceImpactBps;
@@ -163,7 +160,6 @@ contract ProtocolConfig {
     // Snapshotted into each new series at creation; changes never reach live series.
     uint16 public defaultMintFeeBps;
     uint16 public defaultExerciseFeeBps;
-    uint16 public defaultResidualFeeBps;
 
     // Read live at sweep time, deliberately not snapshotted, so it can be rotated.
     address public feeRecipient;

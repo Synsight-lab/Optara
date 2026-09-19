@@ -20,8 +20,7 @@ buyerMaxTotalPremium    maximum all-in quote cost the buyer allows
 grossPremium            quote amount paid to the seller across fills
 kuruTakerFee            venue fee paid by the taker
 kuruMakerFee            venue fee paid by the maker
-optaraRouteFee          protocol route fee, 0 in V1
-allInCost               grossPremium + kuruTakerFee + optaraRouteFee
+allInCost               grossPremium + kuruTakerFee
 netProceeds             grossPremium - kuruMakerFee
 hardMaxGross            theoretical max payout, before Optara fees
 hardMaxPremium          hardMaxGross net of the Optara exercise fee
@@ -37,7 +36,7 @@ All premium quantities are totals in quote raw units for the whole `optionAmount
 Kuru charges maker and taker fees. Optara receives none of them, but every bound in this file compares against **fee-inclusive totals**:
 
 ```text
-buyer side:  allInCost   = grossPremium + kuruTakerFee + optaraRouteFee
+buyer side:  allInCost   = grossPremium + kuruTakerFee
 seller side: netProceeds = grossPremium - kuruMakerFee
 ```
 

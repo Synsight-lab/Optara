@@ -27,7 +27,6 @@ This checklist must be complete before mainnet launch.
 - [ ] No protocol-owned trade router deployed, per the resolved V1 scope.
 - [ ] `KuruMarketAdapter` implemented.
 - [ ] `ProtocolConfig` implemented, including fee defaults and fee recipient.
-- [ ] Optional DEX TWAP adapter decision made.
 
 ## Fees
 
@@ -37,7 +36,6 @@ This checklist must be complete before mainnet launch.
 - [ ] Fee rates snapshotted per series at creation and immutable thereafter.
 - [ ] Hard fee caps enforced as compile-time constants.
 - [ ] `sweepFees` restricted to `FEE_ADMIN_ROLE` and cannot reach collateral.
-- [ ] `sweepDust` gated on full wind-down.
 - [ ] Zero-fee equivalence fuzz test passing.
 - [ ] Fee line items shown separately in all user-facing flows.
 - [ ] Kuru maker and taker fees included in every premium quote and bound.
@@ -60,7 +58,7 @@ This checklist must be complete before mainnet launch.
 - [ ] Oracle config approval keyed on `(underlying, quote, configHash)`, verified by cross-pair rejection test.
 - [ ] `createSeries` gated by `SERIES_CREATOR_ROLE`, FD-22.
 - [ ] Open-interest caps set per launch series, FD-09.
-- [ ] Transfer pause verified not to block mint or burn.
+- [ ] No transfer pause exists; option tokens are freely transferable.
 - [ ] Kuru never used for settlement.
 - [ ] Chainlink/Pyth deviation checks implemented.
 - [ ] Oracle stale checks implemented.
@@ -98,7 +96,9 @@ This checklist must be complete before mainnet launch.
 - [ ] Stale thresholds configured.
 - [ ] Deviation threshold configured.
 - [ ] Single-oracle policy decided.
-- [ ] DEX TWAP policy decided.
+- [ ] At least one settlement source required on every approved config.
+- [ ] No DEX TWAP adapter deployed or referenced.
+- [ ] Deviation bounds within floor and ceiling on every approved config.
 - [ ] Settlement price anchored to expiry, never a live read.
 - [ ] Anchor proof verified against the preceding observation so a later round cannot be substituted.
 - [ ] `maxSettlementLag` configured per feed heartbeat, FD-21.

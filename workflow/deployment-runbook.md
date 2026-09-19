@@ -17,7 +17,6 @@ Before deployment:
 - Pyth feed IDs confirmed, likewise pair-checked.
 - `maxSettlementLag` chosen per feed heartbeat, FD-21.
 - Open-interest caps chosen per launch series, FD-09.
-- Optional DEX TWAP source confirmed.
 - Kuru Router address confirmed.
 - Kuru market parameter recommendations confirmed.
 - Emergency multisig created and tested.
@@ -29,7 +28,6 @@ Before deployment:
 2. Deploy oracle adapters:
    - `ChainlinkOracleAdapter`
    - `PythOracleAdapter`
-   - optional `DexTwapOracleAdapter`
 3. Deploy `OracleRouter`.
 4. Deploy `SeriesRegistry`.
 5. Deploy `KuruMarketAdapter`.

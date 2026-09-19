@@ -25,7 +25,7 @@ Builds a frontend, indexer, wallet view, market maker, or analytics tool using t
 ## Flow 1: Create a Series
 
 1. Series creator selects option type, underlying, quote, strike, expiry, oracle, and contract size.
-2. Frontend validates that the assets and oracle adapter are supported.
+2. Frontend validates that the assets are allowlisted and that the oracle config is approved **for this exact pair**.
 3. Creator submits the series creation transaction to `OptionSeriesFactory`.
 4. Factory validates parameters.
 5. Factory deploys `OptionSeriesVault`.
@@ -42,7 +42,7 @@ Security checks:
 
 - Expiry is in the future.
 - Strike and contract size are nonzero.
-- Oracle adapter is approved for the pair.
+- The oracle config is approved for this exact underlying/quote pair.
 - The series is canonical and discoverable.
 
 ## Flow 2: Link or Deploy a Kuru Market
@@ -69,8 +69,8 @@ Security checks:
 
 1. Writer opens the official series page.
 2. Frontend shows collateral asset, required collateral, strike, expiry, and risks.
-3. Writer approves the required collateral asset.
-4. Writer calls `mint(amount)`.
+3. Writer approves the collateral asset for the required collateral plus the mint fee.
+4. Writer calls `mint(amount, receiver)`.
 5. Vault transfers collateral plus mint fee from writer, accruing the fee separately from collateral.
 6. Vault records writer short obligation.
 7. Vault mints ERC-20 option tokens to writer.
@@ -86,6 +86,7 @@ Security checks:
 - Minting occurs before expiry.
 - Required collateral is rounded up.
 - Mint amount is above minimum size.
+- Mint does not push open interest past the series cap, where one is set.
 - State updates and token minting are atomic.
 
 ## Flow 4: Writer Sells on Kuru
@@ -110,7 +111,7 @@ Security checks:
 - Kuru trade does not release collateral.
 - Writer ask price is not treated as fair value or a protocol maximum premium.
 - Writer ask price must be inside the acceptable premium range for official routed execution.
-- Buyer cannot be routed into paying above their submitted maximum premium.
+- Buyer cannot be routed into paying above their submitted maximum total cost, which includes Kuru's taker fee.
 
 ## Flow 4A: Premium Safety for One-Click Buying
 
@@ -118,16 +119,17 @@ Security checks:
 2. Frontend verifies the series and Kuru market through the registry.
 3. Frontend computes or fetches the acceptable premium range from hard economic bounds and market-health data.
 4. Frontend shows current executable premium, acceptable range, spread, liquidity depth, price impact, and quote age.
-5. Buyer submits maximum premium, minimum option amount, and deadline.
+5. Buyer submits a maximum total all-in cost, a minimum option amount out, and a deadline.
 6. Route checks canonical market, acceptable range, buyer limits, quote age, spread, depth, and price impact.
 7. If every check passes, the route executes the Kuru trade.
 8. If any check fails, the route reverts and no purchase occurs.
 
 User-facing result:
 
-- Buyer decides the maximum premium they are willing to pay.
+- Buyer decides the maximum total cost they are willing to pay, fees included.
 - Collateral owner can specify an ask, but cannot force an out-of-range premium through official routes.
 - Unsafe market conditions fail closed.
+- The hard price bound comes from Kuru's own limit-order parameters. Optara's range checks are enforced by the official frontend and do not bind a user trading directly against Kuru.
 
 Security checks:
 
@@ -173,13 +175,14 @@ Security checks:
 
 ## Flow 7: Settlement
 
-1. Keeper or any user calls `settle()`.
-2. Vault checks that expiry has passed.
-3. Vault asks `OracleAdapter` for a valid settlement price.
-4. Oracle adapter validates pair, freshness, price, and decimals.
-5. Vault computes payout and residual rates.
-6. Vault stores settlement result permanently.
-7. Vault emits `SeriesSettled`.
+1. Keeper or any user assembles a `SettlementProof` identifying the first oracle observation at or after expiry.
+2. They call `settle(proof)`, sending enough native token to cover any Pyth update fee.
+3. Vault checks that expiry has passed and that settlement is not paused.
+4. Vault asks `OracleRouter` for the settlement price, passing only `seriesId` and the proof.
+5. Router reads the series' frozen oracle config from the registry and queries the adapters.
+6. Adapters verify the proof against the source and return normalized prices; the router applies quorum and deviation policy.
+7. Vault computes payout and residual rates and stores the result permanently.
+8. Vault refunds unused native token and emits `SeriesSettled`.
 
 User-facing result:
 
@@ -192,10 +195,12 @@ Security checks:
 - Settlement cannot use Kuru prices.
 - Settlement cannot be called twice with different prices.
 - Invalid oracle data does not finalize the series.
+- The settlement price is the expiry price, not the price when settle happened to be called. Settling minutes after expiry and settling months after produce the same result, so no one gains by waiting for a favorable move.
+- A proof naming a later, more favorable observation is rejected.
 
 ## Flow 8: Buyer Redeems
 
-1. Buyer calls `redeem(amount)` after settlement.
+1. Buyer calls `redeem(amount, receiver)` after settlement. Any nonzero amount is accepted; the series minimum applies to minting only.
 2. Vault calculates gross payout using the stored payout rate, then the exercise fee and net payout.
 3. Vault burns the buyer's option tokens or records the redeemed amount.
 4. Vault transfers payout collateral to buyer.
@@ -215,7 +220,7 @@ Security checks:
 
 ## Flow 9: Writer Claims Residual Collateral
 
-1. Writer calls `claimResidual(shortAmount)` after settlement.
+1. Writer calls `claimWriterResidual(shortAmount, receiver)` after settlement.
 2. Vault calculates gross residual from the stored residual rate, then any residual fee, which is zero by V1 default.
 3. Vault reduces writer claimable short balance.
 4. Vault transfers residual collateral to writer.

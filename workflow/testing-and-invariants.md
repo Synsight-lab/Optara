@@ -46,6 +46,11 @@ Test:
 - `isOptionToken` is false for a lookalike ERC-20 with an identical name and symbol.
 - **An oracle config approved for one pair is rejected on a different pair.** Approve a config for (MON, USDC), then attempt to create (WBTC, USDC) with the same config; creation must revert. Without the pair in the approval key this succeeds and the WBTC series settles at MON's price, so this is the regression test for that binding.
 - `configHash` is computed as `keccak256(abi.encode(oracleConfig))` and a single differing field produces a different, unapproved hash.
+- A config with both `requireChainlink` and `requirePyth` false is rejected. Without this check the series would settle with no oracle, since a quorum over zero required sources passes vacuously.
+- A config marking a source required but leaving its identifier zero is rejected.
+- `maxOracleDeviationBps` below the floor is rejected, since a near-zero tolerance makes the series permanently unsettleable while looking valid until expiry.
+- `maxOracleDeviationBps` above the ceiling is rejected.
+- `maxSettlementLag == 0` is rejected.
 - `createSeries` reverts for a caller without `SERIES_CREATOR_ROLE`.
 - Minting beyond `maxTotalShortAmount` reverts with `OpenInterestCapExceeded`; a series with the cap set to 0 is uncapped.
 - `maxTotalShortAmount` has no setter and cannot be raised after creation.
@@ -77,8 +82,7 @@ Test:
 - Pyth stale reverts.
 - Chainlink/Pyth deviation too high reverts.
 - Chainlink/Pyth within threshold succeeds.
-- DEX TWAP required and valid succeeds.
-- DEX TWAP required and invalid reverts.
+- Settlement depends only on the anchored Chainlink and Pyth observations. No other price source exists to influence it.
 - Kuru price cannot affect settlement.
 - The router reads config from the registry: there is no signature by which a caller supplies an `OracleConfig`, and a series cannot be settled under weakened requirements.
 - Replacing an adapter address cannot change which feed a live series resolves to, since feed identifiers are frozen in the series config.
@@ -158,14 +162,13 @@ Test:
 - Mint fee is charged on top of collateral, never deducted from it.
 - `collateralLocked` after mint equals required collateral exactly, excluding the fee.
 - Exercise fee is deducted from gross payout and `collateralLocked` still decreases by the gross amount.
-- Residual fee at the V1 default of zero leaves residual claims unchanged.
+- Writer residual claims are never fee-bearing; the claimed amount equals the gross residual exactly.
 - Out-of-the-money redemption charges no fee and still burns.
 - `sweepFees` transfers exactly `accruedFees` and cannot reduce `collateralLocked`.
 - `sweepFees` reverts with `NoFeesAccrued` when nothing has accrued.
 - `sweepFees` sends to `ProtocolConfig.feeRecipient()` and has no receiver argument, so a fee admin cannot redirect fees.
 - Rotating `feeRecipient` changes the destination of the next sweep and nothing else.
 - `sweepFees` succeeds while the series is `ACTIVE` and while every pause flag is set.
-- `sweepDust` reverts unless settled with zero supply and zero unclaimed short.
 - Fee rates cannot be changed on a deployed series by any role.
 - `createSeries` reverts with `FeeExceedsCap` above any cap.
 - Changing `ProtocolConfig` defaults does not affect an existing series.
@@ -245,8 +248,7 @@ Scenarios:
 9. Emergency pause minting only, settlement still works.
 10. Redemption pause active only under simulated exploit.
 11. Each vault pause flag gates only its own action and leaves the other three working.
-11a. **`VaultPause.TRANSFER` does not block redemption.** With TRANSFER paused, a holder must still be able to `redeem`, which burns. If the pause hook sits in `_update` it will wrongly catch burns, turning a low-trust flag into a redemption pause.
-11b. With TRANSFER paused, `mint` still succeeds for the same reason.
+11a. No pause flag can block an ERC-20 transfer. There is no transfer pause, and no combination of the remaining flags prevents a holder moving tokens.
 12. Registry `kuruLinkPaused` blocks linking without affecting mint, settle, or redeem.
 13. Guard `routingPaused` blocks route validation without affecting the vault at all.
 

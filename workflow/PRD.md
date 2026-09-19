@@ -200,7 +200,8 @@ Fee types:
 
 - **Mint fee**, charged on the required collateral at mint, paid by the writer on top of collateral.
 - **Exercise fee**, charged on gross payout at redemption, paid by the holder, and only on in-the-money redemptions.
-- **Residual fee**, mechanism present but defaulting to zero in V1 to avoid double-charging writers.
+
+No fee is charged on writer residual claims: the writer already paid at mint.
 
 Acceptance criteria:
 
@@ -247,7 +248,6 @@ V1 oracle model:
 
 - Primary: Chainlink if a feed exists for the pair.
 - Secondary/corroborator: Pyth if a feed exists for the pair.
-- Optional tertiary check: independent DEX TWAP.
 - Kuru: never settlement; only premium execution and depth sanity.
 
 Acceptance criteria:
@@ -345,7 +345,8 @@ Security requirements:
 |---|---|---|
 | Undercollateralization | Writer mints more options than collateral can cover. | Require full collateral before minting. Use formulas in [math-of-core-invariants.md](./math-of-core-invariants.md). |
 | Double redemption | Holder claims payout multiple times. | Burn or mark redeemed amount before transfer. |
-| Oracle manipulation | Expiry price is manipulated. | Chainlink/Pyth quorum, deviation and freshness checks, optional TWAP corroboration, fail-closed settlement, and the FD-20 recovery decision. |
+| Oracle manipulation | Expiry price is manipulated. | Chainlink/Pyth quorum, deviation checks, expiry-anchored observation, fail-closed settlement, and the FD-20 recovery decision. |
+| Settlement timing | Caller picks a favorable post-expiry moment to settle. | Price anchored to the first observation at or after expiry and proven onchain, so the result is identical whenever settlement is called. |
 | Kuru price manipulation | Wash trades create fake option prices. | Never use Kuru prices for settlement or collateral. |
 | Premium price manipulation | Thin liquidity, spoofing, wash trades, or unrealistic writer asks make the option premium look fair or force a bad execution route. | Use buyer-specified max premium, acceptable premium ranges, hard economic bounds, slippage limits, deadlines, depth checks, spread checks, stale-quote checks, and fail-closed routing. |
 | Fake series | Malicious token mimics official option symbol. | Canonical factory and registry checks. |

@@ -142,7 +142,7 @@ realizedPremiumPerOption = premiumPaid / sum(fillOptionAmount_i)
 Premium alone is not what the buyer actually pays. Kuru charges a venue fee on top, so every bound and every user-facing quote must use the fee-inclusive cost:
 
 ```text
-allInCost = premiumPaid + kuruTakerFee + optaraRouteFee
+allInCost = premiumPaid + kuruTakerFee
 ```
 
 and symmetrically for the seller:
@@ -265,7 +265,7 @@ S is not sourced from the Kuru option market
 S passes Chainlink/Pyth quorum when both are configured
 ```
 
-The anchoring requirement is what makes `S` the expiry price rather than the price at the moment someone chose to call `settle()`. Without it, settlement is permissionless and undated, so a caller could wait for a favorable move and take the writer's collateral by timing alone. Pair identity is bound when the oracle config is approved at creation, not rechecked here. See [oracle-spec.md](./oracle-spec.md).
+Anchoring is what makes `S` the expiry price rather than the price when `settle()` happened to be called. Pair identity is bound when the oracle config is approved at creation, not rechecked here. See [oracle-spec.md](./oracle-spec.md).
 
 ## Settlement Rates
 
@@ -460,8 +460,8 @@ PUT  with S >= K:  buyerPayoutRate = 0, writerResidualRate = collateralPerOption
 holder redeeming any amount receives 0 and pays no exercise fee
 holder must still be able to burn, so redeem() must succeed; skip the transfer
   entirely rather than transferring zero, since some tokens revert on zero transfers
-writer reclaims collateralPerOption per option, less any residual fee, and less
-  up to 1 unit of dust because claims floor while collateral was collected by ceiling
+writer reclaims collateralPerOption per option, less up to 1 unit of dust,
+  because claims floor while collateral was collected by ceiling
 ```
 
 ### Vector 5: Fee interaction
@@ -591,20 +591,9 @@ dust = originalCollateralLocked
 dust >= 0 always
 ```
 
-**V1 dust policy: dust remains in the vault and is sweepable only after the series is fully wound down.**
+**V1 dust policy: dust stays in the vault permanently.** There is no sweep function.
 
-```text
-sweepDust(series) requires:
-    state == SETTLED
-    optionToken.totalSupply() == 0
-    totalUnclaimedShortAmount == 0
-```
-
-Rationale: under those three conditions no claim can ever be made against the series again, so sweeping provably cannot reduce anyone's payout. Any policy that pays dust out earlier requires proving that the remaining claimants are still fully covered, which is strictly harder and buys almost nothing — dust is bounded by a few wei per claim.
-
-In practice this state is rarely reached. A holder of worthless out-of-the-money tokens has no incentive to spend gas burning them, so `totalSupply()` often never returns to zero and the dust simply stays in the vault forever. That is the intended safe default, not a failure: `sweepDust` is an opportunistic cleanup path, and no part of the protocol depends on it succeeding.
-
-Sweeping dust is a governance action, not a permissionless one, and it is separate from `sweepFees`. Whether swept dust is treated as protocol revenue or returned pro-rata is FD-18 in [founder-decisions.md](./founder-decisions.md); until that is resolved, dust simply stays in the vault, which is always safe.
+Dust is bounded by roughly one unit of the collateral asset per claim, so the amount at stake is negligible. A sweep would need `totalSupply() == 0` to be provably safe, and holders of worthless out-of-the-money tokens have no reason to spend gas burning them — so that condition is rarely reached and the function would almost never be callable. An entry point that cannot run in practice is surface an implementer must build and an auditor must review for no benefit, so V1 omits it.
 
 ### Invariant 6: No Double Redemption
 
@@ -671,7 +660,6 @@ grossBuyerPayout            floor
 grossWriterResidual         floor
 mintFee                     ceil   (toward protocol; additive, cannot affect solvency)
 exerciseFee                 floor  (toward user; outflow unchanged, cannot affect solvency)
-residualFee                 floor  (toward user; outflow unchanged, cannot affect solvency)
 ```
 
 The critical one is `writerResidualRate`. It is defined as `collateralPerOption - buyerPayoutRate` and must be computed that way. Deriving it from its own formula and rounding it independently breaks the exact identity the solvency proof depends on, and does so silently — the code will look correct and pass ordinary unit tests while over-allocating by one unit per option under specific prices.
@@ -745,7 +733,7 @@ a Kuru order with minAmountOut cannot deliver less than that amount
 These are real guarantees, but they are Kuru's guarantees, not Optara's. Optara's obligation is to make sure every official buy path sets them, and sets them on the **fee-inclusive** cost:
 
 ```text
-allInCost = grossPremium + kuruTakerFee + optaraRouteFee
+allInCost = grossPremium + kuruTakerFee
 allInCost <= buyerMaxTotalPremium
 optionAmountReceived >= buyerMinOptionAmount
 block.timestamp <= buyerDeadline

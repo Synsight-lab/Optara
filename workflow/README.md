@@ -33,7 +33,10 @@ Read in this order:
 - One immutable ERC-20 option token per series.
 - Kuru is secondary trading only.
 - Kuru is never settlement.
-- Settlement uses Chainlink primary, Pyth corroborator, and optional independent DEX TWAP.
+- Settlement uses Chainlink primary and Pyth corroborator. There is no third oracle source.
+- The settlement price is the first oracle observation at or after expiry, proven onchain, never a live read.
+- Oracle config approval is keyed on the asset pair, never on the config alone.
+- Series creation is gated by `SERIES_CREATOR_ROLE` in V1, not permissionless.
 - Premium execution uses Kuru depth only for route safety.
 - Writer asks must pass acceptable premium range checks for official routed execution.
 - Buyer routes must enforce max premium, min output, and deadline, all on fee-inclusive cost.

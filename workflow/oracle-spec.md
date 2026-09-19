@@ -7,10 +7,13 @@ This file defines V1 oracle behavior for settlement and premium safety.
 Founder-approved V1 oracle model:
 
 ```text
-Primary: Chainlink if feed exists for pair.
-Secondary/corroborator: Pyth if feed exists for pair.
-Optional tertiary check: independent DEX TWAP.
-Kuru: never settlement; only premium execution/depth sanity.
+Settlement sources
+  Primary:                Chainlink if feed exists for pair.
+  Secondary/corroborator: Pyth if feed exists for pair.
+  Priced at:              the first observation at or after expiry, proven onchain.
+
+Not oracle sources
+  Kuru:                   premium execution and depth sanity only, never a price input.
 ```
 
 ## Security Principle
@@ -78,8 +81,8 @@ For each series:
 
 1. Chainlink feed is primary if available for the pair.
 2. Pyth feed is secondary and corroborates Chainlink if available.
-3. Independent DEX TWAP may be configured as a tertiary check.
-4. Kuru may be checked for premium execution sanity only.
+
+Kuru is not an oracle source at any level. It may be inspected for premium execution sanity, which is a market-health check, not a price input.
 
 ## Series Oracle Configuration
 
@@ -89,14 +92,11 @@ Each series stores:
 struct OracleConfig {
     address chainlinkFeed;
     bytes32 pythFeedId;
-    address dexTwapAdapter;
     bool requireChainlink;
     bool requirePyth;
-    bool requireDexTwap;
     uint32 maxOracleDeviationBps;
     uint32 chainlinkStaleAfter;   // reference reads only, never settlement
     uint32 pythStaleAfter;        // reference reads only, never settlement
-    uint32 dexTwapStaleAfter;     // reference reads only, never settlement
     uint32 maxSettlementLag;      // how far past expiry the anchor may sit
 }
 ```
@@ -107,7 +107,7 @@ Recommended production policy:
 - If Pyth feed exists for the pair, `requirePyth = true`.
 - If both exist, both must anchor to the same expiry window and pass the deviation check.
 - If only one exists, listing the series requires explicit founder/governance approval.
-- If independent DEX TWAP is configured, it is a sanity check, not the main settlement source.
+- There is no DEX TWAP source in V1. See the note under Settlement Quorum Rules.
 
 ## The Settlement Price Is Anchored to Expiry
 
@@ -230,25 +230,15 @@ Rationale:
 - If Pyth disagrees beyond the threshold, settlement fails closed.
 - The protocol does not invent a new settlement price from Kuru or market data.
 
-### Chainlink + Pyth + DEX TWAP
+### No DEX TWAP Source in V1
 
-Pass conditions:
+V1 has no DEX TWAP oracle. There is no `dexTwapAdapter`, no `requireDexTwap`, and no `DexTwapOracleAdapter` contract.
 
-```text
-chainlink valid
-pyth valid
-dexTwap valid
-Chainlink/Pyth deviation <= maxOracleDeviationBps
-DEX TWAP deviation from Chainlink settlement price <= maxTwapDeviationBps
-```
+A TWAP cannot be anchored the way the other sources can. Anchoring names a single observation — a Chainlink round, a Pyth publish time — and proves it is the first at or after expiry. A TWAP is an average over a window, so there is no observation to name. Making it settlement-grade would require reading the average over a window *ending* at expiry, and those observation buffers have finite cardinality and get overwritten, so a series settled long after expiry would find them gone and become unsettleable. That would silently remove the settle-at-any-time property anchoring exists to provide.
 
-Result:
+Keeping it as a reference-only signal was considered and rejected too, because nothing would ever read it: the reference path selects sources by the same `require*` flags settlement uses, so a source that can never be required is a source that can never be consulted. An adapter that cannot be reached is not a safety feature, it is unreachable code that an implementer would build and an auditor would have to review.
 
-```text
-settlementPrice = normalizedChainlinkPrice
-```
-
-DEX TWAP only confirms that the Chainlink/Pyth-approved result is not wildly disconnected from independent onchain liquidity.
+If a later version wants TWAP corroboration, it needs the historical-window read above, a separate flag that actually selects it on the reference path, and a policy for insufficient cardinality that reconciles with FD-20.
 
 ## Failure Behavior
 
@@ -256,7 +246,7 @@ Settlement must fail closed if:
 
 - Required Chainlink source is stale or invalid.
 - Required Pyth source is stale or invalid.
-- Required DEX TWAP source is stale or invalid.
+
 - Chainlink and Pyth deviation exceeds threshold.
 - Oracle pair identity does not match series pair.
 - Price is zero or negative.
@@ -387,7 +377,6 @@ Before production:
 - Decide whether single-oracle series are allowed at all.
 - Decide max deviation bps for Chainlink/Pyth.
 - Decide stale thresholds by asset class.
-- Decide whether DEX TWAP is required for launch pairs.
 - Decide the prolonged-outage recovery path, FD-20. This one can permanently lock user funds.
 - Confirm exact Chainlink and Pyth feed addresses/feed IDs for Monad mainnet.
 - Confirm that Chainlink actually operates feeds for the intended pairs on Monad; if it does not, FD-01 becomes a launch blocker rather than a policy question.

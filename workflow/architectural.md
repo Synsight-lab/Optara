@@ -118,7 +118,6 @@ Responsibilities:
 - Read the series' immutable `OracleConfig` from `SeriesRegistry` using `seriesId`.
 - Use Chainlink as primary when configured and available for the pair.
 - Use Pyth as secondary/corroborator when configured and available for the pair.
-- Optionally use independent DEX TWAP as a tertiary sanity check.
 - Apply all freshness, deviation, and quorum policy.
 - Reject zero, negative, stale, or incomplete prices.
 - Forward only the required pull-oracle fee and refund the remainder.
@@ -130,7 +129,7 @@ Security requirements:
 - Chainlink/Pyth deviation must be checked when both are configured.
 - Settlement must fail safely if the oracle cannot provide a valid price.
 
-### `ChainlinkOracleAdapter`, `PythOracleAdapter`, `DexTwapOracleAdapter`
+### `ChainlinkOracleAdapter` and `PythOracleAdapter`
 
 Single-source fetchers. Deliberately dumb.
 
@@ -200,7 +199,7 @@ quoteAsset            ERC-20
 collateralAsset       underlying for calls, quote for puts
 strikePrice           PRICE_SCALE quote per 1 whole underlying
 expiry                timestamp
-oracleConfig          Chainlink feed, Pyth feed id, optional DEX TWAP, thresholds
+oracleConfig          Chainlink feed, Pyth feed id, thresholds, settlement lag
 contractSize          underlying raw units per whole option
 optionTokenDecimals
 optionScale           10 ** optionTokenDecimals
@@ -257,16 +256,21 @@ Long token holders burn option tokens to receive payout. Writers claim residual 
 
 ```text
 User or keeper
-    calls settle()
-        OptionSeriesVault checks expiry
-        OptionSeriesVault asks OracleRouter for valid price
+    finds the first oracle observation at or after expiry, builds a SettlementProof
+    calls settle(proof)
+        OptionSeriesVault checks expiry and that settlement is not paused
+        OptionSeriesVault asks OracleRouter for the price, passing seriesId and proof
         OracleRouter reads series oracle config from SeriesRegistry
-        OracleRouter queries adapters and applies quorum policy
+        OracleRouter passes feed ids and the proof to the adapters
+        Adapters verify the proof against the source and return normalized prices
+        OracleRouter applies quorum and deviation policy
         OracleRouter returns settlement price
         OptionSeriesVault computes payout and residual rates
         OptionSeriesVault stores final settlement result
-        OptionSeriesVault emits SeriesSettled
+        OptionSeriesVault refunds unused native token, emits SeriesSettled
 ```
+
+The proof is what makes the settlement price the **expiry** price rather than the price at the moment someone chose to call. Settling early and settling much later return the same result.
 
 Settlement must not:
 
@@ -412,9 +416,8 @@ OptionsMinted(seriesId, writer, receiver, amount, collateralAmount, feeAmount)
 PremiumRouteRejected(seriesId, market, reason)
 SeriesSettled(seriesId, settlementPrice, buyerPayoutRate, writerResidualRate)
 OptionsRedeemed(seriesId, holder, receiver, optionAmount, payoutAmount, feeAmount)
-WriterResidualClaimed(seriesId, writer, receiver, shortAmount, residualAmount, feeAmount)
+WriterResidualClaimed(seriesId, writer, receiver, shortAmount, residualAmount)
 FeesSwept(seriesId, receiver, amount)
-DustSwept(seriesId, receiver, amount)
 PauseSet(seriesId, flag, paused, reason)
 KuruLinkPauseSet(paused, reason)
 RoutingPauseSet(paused, reason)
