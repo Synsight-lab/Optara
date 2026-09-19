@@ -121,6 +121,7 @@ Creates official series.
 
 Must:
 
+- Restrict `createSeries` to `SERIES_CREATOR_ROLE` in V1.
 - Accept `CreateSeriesParams`, never `SeriesParams`.
 - Validate assets, decimals, expiry, strike, contract size, oracle configuration, and minimum size.
 - Derive `collateralAsset`, `optionScale`, `uqScale`, and `collateralPerOption`.
@@ -272,6 +273,7 @@ PARAMETER_ADMIN_ROLE      can update future-series risk parameters
 ASSET_ADMIN_ROLE          can allowlist assets for future series
 ORACLE_ADMIN_ROLE         can allowlist oracle configs for future series
 KURU_ADMIN_ROLE           can update Kuru adapter addresses and defaults
+SERIES_CREATOR_ROLE       can create new series; V1 is guarded, not permissionless
 FEE_ADMIN_ROLE            can set future-series fee rates, set fee recipient, and sweep accrued fees
 PAUSER_ROLE               can pause new minting or unsafe helper functions
 KEEPER_ROLE               optional; settlement should also be permissionless
@@ -351,11 +353,14 @@ struct CreateSeriesParams {
     uint256 contractSize;      // underlying raw units per whole option
     uint8 optionDecimals;
     uint256 minOptionAmount;   // option token raw units
+    uint256 maxTotalShortAmount; // open-interest cap; 0 means uncapped
     OracleConfig oracleConfig;
     string name;
     string symbol;
 }
 ```
+
+`maxTotalShortAmount` implements the per-series open-interest cap recommended in FD-09. It is immutable once set, so a cap cannot be raised on a live series after writers and buyers have sized their risk against it. A series intended to be uncapped sets it to 0.
 
 This is the complete caller-supplied input set. It is a different struct from `SeriesParams`, which is the assembled, immutable series definition the factory produces.
 
@@ -401,7 +406,7 @@ Creation must revert if:
 - `minOptionAmount == 0`.
 - `expiry <= block.timestamp + MIN_EXPIRY_DELAY`.
 - `expiry > block.timestamp + MAX_EXPIRY_DELAY`.
-- Oracle config is not approved.
+- Oracle config is not approved **for this exact pair**, checked as `isApprovedOracleConfig(underlying, quote, keccak256(abi.encode(oracleConfig)))`. Approving on the config hash alone would let one approval bind the same feeds to every pair.
 - Chainlink feed is missing when a Chainlink feed exists for the pair and policy requires it.
 - Pyth feed is missing when a Pyth feed exists for the pair and policy requires it.
 - Computed required collateral for `minOptionAmount` is zero.
@@ -430,6 +435,10 @@ seriesId = keccak256(abi.encode(
 
 Do not include name or symbol in `seriesId`.
 
+This has a consequence that must be handled at the access-control layer rather than here. Because metadata is outside the identifier, and because a repeat call with identical economics resolves to the existing series, **whoever creates a series first fixes its name and symbol permanently.** If creation were permissionless, an attacker could pre-create every plausible strike and expiry for a popular pair with misleading or offensive metadata, and no one could ever create a correctly-named series for those economics.
+
+Registry identity still protects funds: `isOptionToken` is the source of truth and a squatted series is a real, correctly-collateralized series. The damage is confined to the display layer, but it is permanent and unfixable, which is why V1 gates creation behind `SERIES_CREATOR_ROLE`. See FD-22.
+
 Do not include fee rates in `seriesId` either. Fees are snapshotted at first creation, so excluding them means one canonical series per economic definition: a later `createSeries` call with identical parameters resolves to the existing series rather than minting a second, fee-differentiated twin that would fragment liquidity and confuse canonical identity. The consequence is that a governance fee change never applies to an already-created series, which is exactly the intended behavior.
 
 ## Mint Specification
@@ -449,6 +458,7 @@ Must revert if:
 - Series is paused for minting.
 - `block.timestamp >= expiry`.
 - `optionAmount < minOptionAmount`.
+- `maxTotalShortAmount != 0` and `totalShortAmount + optionAmount > maxTotalShortAmount`, with `OpenInterestCapExceeded`.
 - `receiver == address(0)`.
 - Required collateral is zero.
 - Collateral transfer fails.

@@ -57,6 +57,9 @@ This checklist must be complete before mainnet launch.
 - [ ] `writerResidualRate` computed by subtraction, never independently rounded.
 - [ ] Worked test vectors from the math spec asserted exactly.
 - [ ] Minimum sizes enforced at mint only, never on redeem or residual claim.
+- [ ] Oracle config approval keyed on `(underlying, quote, configHash)`, verified by cross-pair rejection test.
+- [ ] `createSeries` gated by `SERIES_CREATOR_ROLE`, FD-22.
+- [ ] Open-interest caps set per launch series, FD-09.
 - [ ] Transfer pause verified not to block mint or burn.
 - [ ] Kuru never used for settlement.
 - [ ] Chainlink/Pyth deviation checks implemented.

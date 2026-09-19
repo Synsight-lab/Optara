@@ -203,7 +203,27 @@ Recommended:
 Yes for guarded launch.
 ```
 
-Needs exact cap values.
+Mechanism: `maxTotalShortAmount` on each series, checked at mint. It is immutable, so a cap cannot be raised after writers and buyers have sized their risk against it. Raising a cap means creating a new series. Setting it to 0 means uncapped.
+
+Needs exact cap values per launch pair.
+
+### FD-22: Who Can Create Series
+
+Question:
+
+Is `createSeries` permissionless, or restricted to `SERIES_CREATOR_ROLE`?
+
+Safe default:
+
+```text
+Restricted to SERIES_CREATOR_ROLE in V1.
+```
+
+Context: `name` and `symbol` sit outside `seriesId`, and a repeat call with identical economics resolves to the existing series. So whoever creates a series first fixes its metadata permanently, and no one can ever create a correctly-named series for those economics afterward.
+
+Permissionless creation would let anyone pre-create every plausible strike and expiry for a popular pair with misleading or offensive metadata. Funds stay safe, because `isOptionToken` is the source of truth and a squatted series is still correctly collateralized, but the damage to the display layer is permanent.
+
+Opening creation up later requires first deciding how metadata is arbitrated. Options include including name and symbol in `seriesId` and accepting the liquidity fragmentation, or letting governance override display metadata while leaving economics immutable.
 
 ## Governance Decisions
 

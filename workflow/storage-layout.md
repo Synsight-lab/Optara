@@ -36,17 +36,23 @@ Rules:
 contract OptionSeriesFactory {
     SeriesRegistry public registry;
     ProtocolConfig public config;
-    address public vaultImplementationTemplate; // only if using clones
+    address public vaultImplementation;   // EIP-1167 clone target
 
     mapping(bytes32 => bool) public created;
 }
 ```
 
+**V1 uses EIP-1167 minimal clones.** Deploying a full vault per series is prohibitively expensive once there are many strikes and expiries, and a minimal clone is non-upgradeable — its delegate target is fixed in the clone's bytecode — so it satisfies DD-13.
+
+This choice has a consequence the rest of this file depends on. A clone has no constructor, so the vault's "immutable" series parameters **cannot use Solidity `immutable`**, which lives in bytecode. They are ordinary storage written once by an initializer. Immutability is therefore enforced by the absence of any setter plus an initialization guard, not by the compiler.
+
 Rules:
 
-- If clones are used, clone initialization must be single-use.
-- If direct deployment is used, no implementation template is needed.
-- Factory must not store mutable per-series economic parameters outside registry.
+- The initializer must be callable exactly once per clone, and must revert on a second call.
+- The implementation contract itself must be initialized at deployment so it cannot be initialized by a third party. It holds no funds, but leaving it open is a known footgun.
+- No setter may exist for any field written by the initializer.
+- Every series parameter read is a storage read, not a bytecode constant. Cache the values needed in a hot path into memory once per call rather than re-reading them.
+- Factory must not store mutable per-series economic parameters outside the registry.
 
 ## `OptionSeriesVault`
 
@@ -63,6 +69,7 @@ uint64 public expiry;
 uint256 public contractSize;
 uint8 public optionDecimals;
 uint256 public minOptionAmount;
+uint256 public maxTotalShortAmount;  // 0 = uncapped; immutable, never raised on a live series
 OracleConfig public oracleConfig;
 address public registry;
 address public oracleRouter;
@@ -132,8 +139,10 @@ Rules:
 ```solidity
 contract ProtocolConfig {
     mapping(address => bool) public allowedAsset;
-    mapping(address => bool) public allowedOracleAdapter;
-    mapping(bytes32 => bool) public approvedOracleConfigHash;
+    // Keyed on keccak256(underlying, quote, configHash). The pair MUST be in the key:
+    // an OracleConfig names feeds but not which assets they price, so a config-only key
+    // would let one approval bind those feeds to every pair.
+    mapping(bytes32 => bool) public approvedOracleConfig;
 
     uint32 public defaultMaxOracleDeviationBps;
     uint32 public defaultChainlinkStaleAfter;
@@ -167,6 +176,7 @@ Rules:
 - Any global value used by live series must be considered governance risk and documented.
 - Fee rate setters must enforce the compile-time caps and revert with `FeeExceedsCap`.
 - `ProtocolConfig` never holds collateral or fees. Fee accrual lives in each vault.
+- There is deliberately no per-adapter allowlist. Adapters are stateless fetchers held by `OracleRouter`, and which feed a series uses is frozen in its own config, so an adapter allowlist would gate nothing that the config does not already pin.
 
 ## Accounting Relationships
 
@@ -174,7 +184,7 @@ Before settlement:
 
 ```text
 option totalSupply == totalShortAmount
-collateralLocked >= maxLiability(totalShortAmount)
+collateralLocked >= requiredCollateral(totalShortAmount)
 sum(writerShortBalance) == totalShortAmount
 sum(writerShortBalance) == totalUnclaimedShortAmount
 ```

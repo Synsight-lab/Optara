@@ -113,6 +113,7 @@ struct CreateSeriesParams {
     uint256 contractSize;       // underlying raw units per ONE WHOLE option
     uint8 optionDecimals;       // <= 18
     uint256 minOptionAmount;    // option token raw units
+    uint256 maxTotalShortAmount; // open-interest cap in option raw units; 0 = uncapped
     OracleConfig oracleConfig;
     string name;
     string symbol;
@@ -131,6 +132,7 @@ struct SeriesParams {
     uint256 contractSize;        // underlying raw units per ONE WHOLE option
     uint8 optionDecimals;
     uint256 minOptionAmount;     // option token raw units
+    uint256 maxTotalShortAmount; // open-interest cap; 0 = uncapped; immutable
     OracleConfig oracleConfig;
     FeeConfig feeConfig;         // snapshotted from ProtocolConfig at creation, immutable
     uint256 optionScale;         // derived: 10 ** optionDecimals
@@ -241,6 +243,12 @@ interface IOptionSeriesFactory {
         uint64 expiry
     );
 
+    /// @dev V1: restricted to SERIES_CREATOR_ROLE. Creation is NOT permissionless.
+    ///      `name` and `symbol` are excluded from seriesId and are permanent once set, and a
+    ///      later call with identical economics resolves to the existing series rather than
+    ///      creating a second one. Open creation would therefore let anyone front-run every
+    ///      popular strike and expiry with misleading metadata that can never be corrected.
+    ///      See FD-22.
     function createSeries(CreateSeriesParams calldata params)
         external
         returns (bytes32 seriesId, address vault);
@@ -482,10 +490,12 @@ interface IOracleAdapter {
 Because the adapter receives a feed identifier rather than an asset pair, it cannot verify that the feed describes the series' underlying/quote pair. That check is therefore a **creation-time** control, not a settlement-time one:
 
 ```text
-factory validates that the oracle config is approved for this underlying/quote pair
-ProtocolConfig.isApprovedOracleConfig(configHash) gates it
+configHash = keccak256(abi.encode(oracleConfig))
+factory requires ProtocolConfig.isApprovedOracleConfig(underlying, quote, configHash)
 the config is then frozen into the series and can never change
 ```
+
+**The pair must be part of the approval key.** An `OracleConfig` names feed addresses and ids; it does not say which assets those feeds price. Keying approval on the config hash alone would mean that approving a MON/USD feed set for the MON/USDC pair simultaneously approves those same feeds for every other pair — so anyone could create a WBTC/USDC series carrying the MON feeds and have it settle at MON's price. Including `underlying` and `quote` in the key is what actually binds identity.
 
 This is stronger than a runtime string comparison against a feed description, which is fragile and not uniformly supported. It does mean approving an oracle config is a security-critical action: an approval that binds the wrong feed to a pair cannot be corrected on any series already created against it.
 
@@ -494,13 +504,26 @@ This is stronger than a runtime string comparison against a feed description, wh
 ```solidity
 interface IProtocolConfig {
     event AssetAllowed(address indexed asset, bool allowed);
-    event OracleConfigApproved(bytes32 indexed configHash, bool approved);
+    event OracleConfigApproved(
+        address indexed underlying,
+        address indexed quote,
+        bytes32 indexed configHash,
+        bool approved
+    );
     event DefaultFeesUpdated(uint16 mintFeeBps, uint16 exerciseFeeBps, uint16 residualFeeBps);
     event FeeRecipientUpdated(address indexed recipient);
     event RiskParamsUpdated();
 
     function isAllowedAsset(address asset) external view returns (bool);
-    function isApprovedOracleConfig(bytes32 configHash) external view returns (bool);
+
+    /// @notice Is this oracle configuration approved FOR THIS PAIR?
+    /// @dev The pair is part of the key, not incidental to it. An OracleConfig names feeds
+    ///      but says nothing about which assets those feeds price, so approving a config
+    ///      globally would let the same feeds be bound to any pair. See the note below.
+    function isApprovedOracleConfig(address underlying, address quote, bytes32 configHash)
+        external
+        view
+        returns (bool);
 
     /// @dev Read by the factory at creation time and snapshotted into the series.
     ///      Changes here never reach an already-created series.
@@ -523,7 +546,12 @@ interface IProtocolConfig {
     function maxLinkableTakerFeeBps() external view returns (uint16);
 
     function setAllowedAsset(address asset, bool allowed) external;
-    function setApprovedOracleConfig(bytes32 configHash, bool approved) external;
+    function setApprovedOracleConfig(
+        address underlying,
+        address quote,
+        bytes32 configHash,
+        bool approved
+    ) external;
     function setDefaultFeeConfig(FeeConfig calldata config) external;
     function setFeeRecipient(address recipient) external;
 }
@@ -612,6 +640,7 @@ error AlreadySettled();
 error Expired();
 error NotExpired();
 error AmountTooSmall();
+error OpenInterestCapExceeded();
 error InsufficientOptionBalance();
 error InsufficientShortBalance();
 

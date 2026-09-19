@@ -63,10 +63,12 @@ A mapping inside the adapter would be a second source of truth for which feed se
 Because an adapter receives a feed identifier rather than an asset pair, it cannot verify at settlement time that the feed describes the series' pair. That check is a **creation-time** control:
 
 ```text
-factory validates the oracle config is approved for this underlying/quote pair
-ProtocolConfig.isApprovedOracleConfig(configHash) gates it
+configHash = keccak256(abi.encode(oracleConfig))
+factory requires ProtocolConfig.isApprovedOracleConfig(underlying, quote, configHash)
 the config is frozen into the series and can never change
 ```
+
+**The pair is part of the approval key and must not be omitted.** An `OracleConfig` names feed addresses and feed ids. It does not record which assets those feeds price. If approval were keyed on the config hash alone, then approving a MON/USD feed set for the MON/USDC pair would approve those same feeds for every other pair at once, and anyone could create a WBTC/USDC series carrying the MON feeds. It would pass validation, mint normally, and settle WBTC options at MON's price. Because the adapter no longer re-checks the pair at settlement, this key is the only thing binding feeds to assets.
 
 This is stronger than comparing a feed's description string at runtime, which is fragile and inconsistently supported across sources. The tradeoff is that approving an oracle config becomes security-critical: an approval binding the wrong feed to a pair cannot be corrected on any series already created against it.
 

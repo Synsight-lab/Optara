@@ -57,8 +57,10 @@ Preconditions:
 ```text
 state == ACTIVE
 block.timestamp < expiry
+VaultPause.MINT not set
 optionAmount >= minOptionAmount
 requiredCollateral(optionAmount) > 0
+maxTotalShortAmount == 0 or totalShortAmount + optionAmount <= maxTotalShortAmount
 ```
 
 Effects:

@@ -13,8 +13,10 @@ Before deployment:
 - Tests from [testing-and-invariants.md](./testing-and-invariants.md) pass.
 - External audit complete.
 - Launch assets selected and allowlisted.
-- Chainlink feed addresses confirmed.
-- Pyth feed IDs confirmed.
+- Chainlink feed addresses confirmed, and confirmed to price the pair they will be approved for.
+- Pyth feed IDs confirmed, likewise pair-checked.
+- `maxSettlementLag` chosen per feed heartbeat, FD-21.
+- Open-interest caps chosen per launch series, FD-09.
 - Optional DEX TWAP source confirmed.
 - Kuru Router address confirmed.
 - Kuru market parameter recommendations confirmed.
@@ -33,9 +35,9 @@ Before deployment:
 5. Deploy `KuruMarketAdapter`.
 6. Deploy `PremiumExecutionGuard`.
 7. Deploy `OptionSeriesFactory`.
-8. Grant roles, including `FEE_ADMIN_ROLE`.
+8. Grant roles, including `FEE_ADMIN_ROLE` and `SERIES_CREATOR_ROLE`.
 9. Configure allowlisted assets.
-10. Configure approved oracle configs.
+10. Configure approved oracle configs, keyed on `(underlying, quote, configHash)`. Approving on the config hash alone would bind the same feeds to every pair, so verify each approval names the pair it is meant for.
 11. Configure default fee rates and the fee recipient, within the hard caps.
 12. Configure Kuru Router/market defaults and maximum linkable venue fees.
 13. Transfer admin roles to multisig/timelock.

@@ -61,6 +61,8 @@ Frontends, indexers, wallets, and analytics tools use the canonical registry to 
 
 The protocol must allow creation of new option series through a canonical factory.
 
+In V1 creation is restricted to `SERIES_CREATOR_ROLE` rather than permissionless. Series name and symbol sit outside the series identifier and are permanent once set, so open creation would let anyone claim the metadata for every popular strike and expiry irreversibly. See FD-22.
+
 Required inputs:
 
 - `optionType`: call or put.

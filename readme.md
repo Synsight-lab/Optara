@@ -28,8 +28,12 @@ For V1, Optara uses fully collateralized European-style options. Call options ar
 
 Kuru is used strictly as the trading and price-discovery layer. Optara independently controls collateral, option issuance, expiry, and settlement. This separation ensures that manipulation or illiquidity in the secondary market cannot directly compromise protocol solvency.
 
+Optara charges protocol fees at mint and exercise. They are structured so they can never touch the collateral backing live claims: mint fees are added on top of required collateral rather than taken from it, and exercise fees are carved out of an already-computed payout. Fee rates are fixed per series when the series is created and cannot be changed afterward, so the economics of a position cannot shift once someone has entered it. Kuru's own trading fees are separate, are never received by Optara, and are shown to users as their own line item.
+
 The core security principle of Optara is simple:
 
 **Every outstanding option claim must remain fully backed by collateral regardless of how the option is traded or who currently owns it.**
 
 This allows buyers and sellers to behave adversarially without threatening the solvency of the protocol.
+
+Full specifications live in [workflow/](./workflow/), starting with [workflow/README.md](./workflow/README.md).

@@ -44,6 +44,11 @@ Test:
 - `computeSeriesId` returns the same id the subsequent `createSeries` assigns.
 - `registry.getVault(seriesId)` and `registry.getSeriesByToken(vault)` are exact inverses.
 - `isOptionToken` is false for a lookalike ERC-20 with an identical name and symbol.
+- **An oracle config approved for one pair is rejected on a different pair.** Approve a config for (MON, USDC), then attempt to create (WBTC, USDC) with the same config; creation must revert. Without the pair in the approval key this succeeds and the WBTC series settles at MON's price, so this is the regression test for that binding.
+- `configHash` is computed as `keccak256(abi.encode(oracleConfig))` and a single differing field produces a different, unapproved hash.
+- `createSeries` reverts for a caller without `SERIES_CREATOR_ROLE`.
+- Minting beyond `maxTotalShortAmount` reverts with `OpenInterestCapExceeded`; a series with the cap set to 0 is uncapped.
+- `maxTotalShortAmount` has no setter and cannot be raised after creation.
 
 ### Minting
 

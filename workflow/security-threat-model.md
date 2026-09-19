@@ -58,6 +58,9 @@ Untrusted:
 | Kuru manipulation | Wash trades distort option premium. | Kuru never settlement, route safety checks, buyer limits. |
 | Unrealistic writer ask | Writer posts harmful premium. | Acceptable premium range, warnings, route rejection. |
 | Fake series | Token mimics official option. | Canonical factory/registry checks. |
+| Oracle config reuse across pairs | A config approved for one pair is attached to a different pair, so a series settles at the wrong asset's price. | Approval is keyed on `(underlying, quote, configHash)`, not the config hash alone. |
+| Series metadata squatting | Attacker pre-creates popular strikes with misleading names; metadata is outside `seriesId` and permanent. | `SERIES_CREATOR_ROLE` gates creation in V1, FD-22. |
+| Unbounded open interest | A single series absorbs more risk than the guarded launch intends. | Immutable `maxTotalShortAmount` checked at mint, FD-09. |
 | Reentrancy | Malicious token re-enters vault. | ReentrancyGuard, CEI, allowlisted tokens, SafeERC20. |
 | Rounding extraction | Dust positions accumulate value. | Round collateral up, payout down, min sizes. |
 | Decimal mismatch | Wrong scale drains collateral. | Explicit decimals, mulDiv tests, per-asset test vectors. |
