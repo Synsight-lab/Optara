@@ -34,12 +34,12 @@ Read in this order:
 - Kuru is secondary trading only.
 - Kuru is never settlement.
 - Settlement uses Chainlink primary and Pyth corroborator. There is no third oracle source.
-- The settlement price is the first oracle observation at or after expiry, proven onchain, never a live read.
+- The settlement price is pinned to expiry and proven onchain, never a live read: the Chainlink round in force at expiry, and the first Pyth update at or after expiry.
 - Oracle config approval is keyed on the asset pair, never on the config alone.
 - Series creation is gated by `SERIES_CREATOR_ROLE` in V1, not permissionless.
 - Premium execution uses Kuru depth only for route safety.
 - Writer asks must pass acceptable premium range checks for official routed execution.
-- Buyer routes must enforce max premium, min output, and deadline, all on fee-inclusive cost.
+- Buyer routes must enforce fee-inclusive max premium and min output; official routes must also enforce a deadline, using Kuru onchain expiry only if verified for the exact order type.
 - Series parameters, fee rates, and settlement results are immutable per series.
 - Protocol fees never reduce collateral backing outstanding claims.
 - Kuru venue fees are accounted for in every quote and never captured by Optara.

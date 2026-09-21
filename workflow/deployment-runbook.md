@@ -13,9 +13,12 @@ Before deployment:
 - Tests from [testing-and-invariants.md](./testing-and-invariants.md) pass.
 - External audit complete.
 - Launch assets selected and allowlisted.
-- Chainlink feed addresses confirmed, and confirmed to price the pair they will be approved for.
-- Pyth feed IDs confirmed, likewise pair-checked.
-- `maxSettlementLag` chosen per feed heartbeat, FD-21.
+- Chainlink feed addresses confirmed, confirmed to price the pair they will be approved for, and confirmed to be direct feeds.
+- Pyth feed IDs confirmed, likewise pair-checked and direct.
+- `maxChainlinkAgeAtExpiry` chosen per Chainlink feed from its heartbeat plus a buffer, FD-21.
+- `maxPythSettlementLag` chosen per Pyth feed, FD-21.
+- `maxPythConfidenceBps` chosen per Pyth feed, FD-02.
+- Keeper procedure in place to archive Pyth update data around each expiry for every Pyth-required series.
 - Open-interest caps chosen per launch series, FD-09.
 - Kuru Router address confirmed.
 - Kuru market parameter recommendations confirmed.
@@ -25,21 +28,23 @@ Before deployment:
 ## Deployment Order
 
 1. Deploy `ProtocolConfig`.
-2. Deploy oracle adapters:
+2. Deploy `SeriesRegistry` with the deployer as a one-time factory-setter.
+3. Deploy oracle adapters:
    - `ChainlinkOracleAdapter`
    - `PythOracleAdapter`
-3. Deploy `OracleRouter`.
-4. Deploy `SeriesRegistry`.
-5. Deploy `KuruMarketAdapter`.
-6. Deploy `PremiumExecutionGuard`.
-7. Deploy `OptionSeriesFactory`.
-8. Grant roles, including `FEE_ADMIN_ROLE` and `SERIES_CREATOR_ROLE`.
-9. Configure allowlisted assets.
-10. Configure approved oracle configs, keyed on `(underlying, quote, configHash)`. Approving on the config hash alone would bind the same feeds to every pair, so verify each approval names the pair it is meant for.
-11. Configure default fee rates and the fee recipient, within the hard caps.
-12. Configure Kuru Router/market defaults and maximum linkable venue fees.
-13. Transfer admin roles to multisig/timelock.
-14. Renounce deployer-only admin roles where appropriate.
+4. Deploy `OracleRouter` with the registry, `ProtocolConfig`, and the two adapter addresses.
+5. Deploy the `OptionSeriesVault` implementation and initialize it immediately so it cannot be initialized by a third party.
+6. Deploy `KuruMarketAdapter`.
+7. Deploy `PremiumExecutionGuard`.
+8. Deploy `OptionSeriesFactory` with the registry, `ProtocolConfig`, the vault implementation, and the router.
+9. Call `SeriesRegistry.setFactory(factory)` exactly once, then permanently disable the setter. Verify `registry.factory() == factory`.
+10. Grant roles, including `FEE_ADMIN_ROLE` and `SERIES_CREATOR_ROLE`.
+11. Configure allowlisted assets.
+12. Configure approved oracle configs, keyed on `(underlying, quote, configHash)`. Approving on the config hash alone would bind the same feeds to every pair, so verify each approval names the pair it is meant for.
+13. Configure default fee rates and the fee recipient, within the hard caps.
+14. Configure Kuru Router/market defaults and maximum linkable venue fees.
+15. Transfer admin roles to multisig/timelock.
+16. Renounce deployer-only admin roles where appropriate.
 
 Fee rates must be configured **before** the first `createSeries` call, because each series snapshots them at creation and can never be changed afterward. A series created against the wrong defaults must be abandoned and recreated.
 
@@ -111,7 +116,7 @@ deployments/verification.md
 
 Monitor:
 
-- Oracle freshness.
+- Oracle reference freshness and settlement-anchor availability.
 - Chainlink/Pyth deviation.
 - Per-series `vaultBalance` against `collateralLocked + accruedFees`.
 - Fee accrual and sweep events.
@@ -147,10 +152,10 @@ If issue found during redemption:
 
 ## Needs Founder Decision
 
-- Mainnet launch date.
-- Initial asset pairs.
-- Series caps.
-- Admin multisig signers.
-- Timelock duration.
-- Bug bounty provider and size.
-- Whether launch is guarded beta or open.
+- FD-15: mainnet launch date.
+- FD-05: initial asset pairs.
+- FD-09: series caps.
+- FD-10: admin multisig signers.
+- FD-11: timelock duration.
+- FD-16: bug bounty provider and size.
+- FD-15: whether launch is guarded beta or open.

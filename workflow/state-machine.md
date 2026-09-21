@@ -41,13 +41,13 @@ CREATED
 |---|---:|---:|---:|
 | `mint` | allowed | revert | revert |
 | ERC-20 transfer | allowed | allowed | allowed |
-| `settle` | revert | allowed | revert or return stored result |
+| `settle` | revert | allowed | revert with `AlreadySettled` |
 | `redeem` | revert | revert | allowed |
 | `claimWriterResidual` | revert | revert | allowed |
 | `linkKuruMarket` | allowed if not linked | allowed with warning | allowed metadata only |
 | `sweepFees` | allowed, fee admin | allowed, fee admin | allowed, fee admin |
 
-Recommended behavior for repeated `settle`: revert with `AlreadySettled`.
+Repeated `settle` reverts with `AlreadySettled`.
 
 ## Mint Transition
 
@@ -89,8 +89,10 @@ Preconditions:
 state == ACTIVE
 block.timestamp >= expiry
 VaultPause.SETTLEMENT not set
-anchor proof identifies the first observation at or after expiry
-that observation is within expiry + maxSettlementLag
+Chainlink (if required): proof names the round in force at expiry (updatedAt <= expiry)
+    and its immediate successor (updatedAt > expiry), and expiry - updatedAt <= maxChainlinkAgeAtExpiry
+Pyth (if required): proof identifies the first update at or after expiry,
+    inside expiry + maxPythSettlementLag
 oracle quorum passes on the anchored observation
 ```
 
@@ -110,7 +112,7 @@ state = SETTLED
 Postconditions:
 
 ```text
-buyerPayoutRate + writerResidualRate <= collateralPerOption
+buyerPayoutRate + writerResidualRate == collateralPerOption
 settlement result cannot change
 ```
 
@@ -215,7 +217,9 @@ writer residual claim remains unavailable
 
 Frontend status may show `Awaiting valid oracle settlement`.
 
-A series can also reach this state permanently if no oracle observation exists inside `expiry + maxSettlementLag` — for example if the feed stopped updating across expiry. The anchor cannot then be proven and no later observation qualifies, so `settle` reverts forever.
+Settlement can also be delayed, without being locked, while Chainlink has not yet published the successor round that proves the round in force at expiry. It becomes possible as soon as that round exists.
+
+A series can reach this state permanently if Chainlink never publishes another round after expiry, if the round in force at expiry is older than `maxChainlinkAgeAtExpiry`, or if Pyth has no update inside `expiry + maxPythSettlementLag`. The anchor cannot then be proven, so `settle` reverts forever.
 
 Emergency recovery for prolonged oracle failure is a governance process and must be explicitly decided before launch. See FD-20 and FD-21 in [founder-decisions.md](./founder-decisions.md).
 
@@ -237,7 +241,7 @@ Recommended V1 defaults:
 
 - `PAUSER_ROLE` can pause minting, Kuru linking, and premium routing quickly.
 - Settlement pause requires a higher-trust role or timelock unless there is an active exploit.
-- Redemption pause is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
+- Redemption pause gates both `redeem` and `claimWriterResidual`. It is the highest-trust emergency action, because it blocks users from claiming collateral they are already owed.
 - There is no transfer pause. Option tokens are freely transferable for the life of the series and no role can stop it. See [implementation-spec.md](./implementation-spec.md) for why that flag was removed.
 - `sweepFees` is never gated by a pause flag, since it moves no collateral.
 

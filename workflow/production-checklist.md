@@ -38,7 +38,7 @@ This checklist must be complete before mainnet launch.
 - [ ] `sweepFees` restricted to `FEE_ADMIN_ROLE` and cannot reach collateral.
 - [ ] Zero-fee equivalence fuzz test passing.
 - [ ] Fee line items shown separately in all user-facing flows.
-- [ ] Kuru maker and taker fees included in every premium quote and bound.
+- [ ] Kuru taker fees, maker-side adjustments, and AMM spread included in every premium quote and bound.
 - [ ] Kuru taker-fee convention, maker fee or rebate convention, and AMM-spread behavior verified against deployed contracts, FD-17.
 - [ ] Maximum linkable venue fee configured and enforced.
 
@@ -61,7 +61,8 @@ This checklist must be complete before mainnet launch.
 - [ ] No transfer pause exists; option tokens are freely transferable.
 - [ ] Kuru never used for settlement.
 - [ ] Chainlink/Pyth deviation checks implemented.
-- [ ] Oracle stale checks implemented.
+- [ ] Reference-price stale checks implemented.
+- [ ] Settlement anchoring implemented: Chainlink round in force at expiry with `maxChainlinkAgeAtExpiry`, Pyth first update with `maxPythSettlementLag`.
 - [ ] Premium route fail-closed behavior implemented.
 - [ ] Emergency pause scoped.
 
@@ -100,8 +101,12 @@ This checklist must be complete before mainnet launch.
 - [ ] No DEX TWAP adapter deployed or referenced.
 - [ ] Deviation bounds within floor and ceiling on every approved config.
 - [ ] Settlement price anchored to expiry, never a live read.
-- [ ] Anchor proof verified against the preceding observation so a later round cannot be substituted.
-- [ ] `maxSettlementLag` configured per feed heartbeat, FD-21.
+- [ ] Chainlink anchor proof verified against the immediate successor round, so exactly one round qualifies and no other round can be substituted.
+- [ ] `maxChainlinkAgeAtExpiry` configured per feed heartbeat plus buffer, FD-21.
+- [ ] `maxPythSettlementLag` configured per feed, FD-21.
+- [ ] `maxPythConfidenceBps` configured per Pyth feed, FD-02, and the confidence check implemented.
+- [ ] Pyth update data archived around every expiry for Pyth-required series.
+- [ ] Composed settlement feeds are rejected in V1; every approved feed is direct for its pair.
 - [ ] Staleness thresholds confirmed to apply to reference reads only.
 - [ ] Prolonged-outage recovery path decided, FD-20, or permanent-lock risk explicitly accepted and disclosed.
 - [ ] Oracle outage procedure documented.

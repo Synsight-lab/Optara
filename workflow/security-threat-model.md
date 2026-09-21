@@ -48,15 +48,16 @@ Untrusted:
 | Undercollateralized mint | Writer mints more claims than collateral. | Full collateral before mint, round up, invariant tests. |
 | Double redemption | Holder redeems same option twice. | Burn before transfer, nonReentrant, state updates before external calls. |
 | Early exercise | Buyer claims before expiry. | Redemption only after `SETTLED`. |
-| Oracle manipulation | Attacker manipulates settlement source. | Chainlink/Pyth quorum, deviation checks, freshness checks, fail closed. |
+| Oracle manipulation | Attacker manipulates settlement source. | Chainlink/Pyth quorum, deviation checks, reference freshness checks, settlement anchoring, fail closed. |
 | Oracle outage | Required oracle unavailable. | Settlement reverts, no Kuru fallback, recovery process required. |
-| Settlement timing choice | Settlement is permissionless and undated, so a caller waits for a favorable post-expiry move and settles then, converting a worthless option into a claim on writer collateral. | Settlement price is anchored to the first oracle observation at or after expiry and proven onchain; freshness checks apply only to reference reads. |
-| Forged settlement anchor | Caller names a later, more favorable round. | Adapter verifies an explicitly supplied preceding round predates expiry, so only the first qualifying observation is accepted. Chainlink predecessor ids must not be derived as `roundId - 1` because proxy rounds can cross phases. |
+| Settlement timing choice | Settlement is permissionless and undated, so a caller waits for a favorable post-expiry move and settles then, converting a worthless option into a claim on writer collateral. | Settlement price is anchored to expiry (Chainlink round in force at expiry, Pyth first update at or after expiry) and proven onchain; freshness checks apply only to reference reads. |
+| Forged settlement anchor | Caller names an earlier or later, more favorable round. | Adapter verifies the named round has `updatedAt <= expiry` and that its explicitly supplied immediate successor has `updatedAt > expiry`, so exactly one round qualifies. Chainlink successor ids must not be derived as `roundId + 1` because proxy rounds can cross phases. |
 | Redemption minimum lockout | A minimum size applied to redemption traps holders who acquired less than it through a partial fill or transfer. | `minOptionAmount` is mint-only; redeem and claim require only a nonzero amount. |
 | Kuru manipulation | Wash trades distort option premium. | Kuru never settlement, route safety checks, buyer limits. |
 | Unrealistic writer ask | Writer posts harmful premium. | Acceptable premium range, warnings, route rejection. |
 | Fake series | Token mimics official option. | Canonical factory/registry checks. |
 | Oracle config reuse across pairs | A config approved for one pair is attached to a different pair, so a series settles at the wrong asset's price. | Approval is keyed on `(underlying, quote, configHash)`, not the config hash alone. |
+| Malicious oracle adapter replacement | Governance replaces an adapter with code that returns arbitrary prices for otherwise pinned feed ids. | Treat adapter replacement as settlement-critical governance: timelock, event, review, monitor, and avoid emergency replacement while live series depend on it unless settlement is otherwise impossible. |
 | Series metadata squatting | Attacker pre-creates popular strikes with misleading names; metadata is outside `seriesId` and permanent. | `SERIES_CREATOR_ROLE` gates creation in V1, FD-22. |
 | Unbounded open interest | A single series absorbs more risk than the guarded launch intends. | Immutable `maxTotalShortAmount` checked at mint, FD-09. |
 | Reentrancy | Malicious token re-enters vault. | ReentrancyGuard, CEI, allowlisted tokens, SafeERC20. |
@@ -72,7 +73,7 @@ Untrusted:
 | Governance fee capture | Admin sets a confiscatory fee on new series. | Compile-time caps that governance cannot exceed. |
 | Malicious fee recipient | Recipient contract reverts or re-enters, bricking core paths. | Accrue-and-pull: no transfer to recipient in mint, redeem, or claim; sweep is a separate role-gated call. |
 | Venue fee blindness | Buyer's limit passes on gross premium but real cost exceeds it. | All buyer limits bind on fee-inclusive `allInCost`; max linkable venue fee enforced. |
-| Unverified venue fee convention | Wrong assumption about Kuru taker-fee, maker-rebate, or AMM-spread mechanics breaks buyer limits or seller-protection checks. | Assume the conservative taker-cost and maker-fee conventions, independently enforce `minOptionAmountOut`, include AMM spread in route estimates, and verify before launch, FD-17. |
+| Unverified venue fee convention | Wrong assumption about Kuru taker-fee, maker-side fee or rebate, or AMM-spread mechanics breaks buyer limits or seller-protection checks. | Assume the conservative taker-cost and maker-side-fee conventions, independently enforce `minOptionAmountOut`, include AMM spread in route estimates, and verify before launch, FD-17. |
 | Permanent oracle lock | Required feed never recovers, collateral stuck forever. | Explicit FD-20 decision plus prominent disclosure; recovery path must be timelocked and never Kuru-sourced. |
 | Residual rate rounding | Independently rounded residual rate over-allocates collateral. | `writerResidualRate` computed only by subtraction; exact-identity fuzz invariant. |
 
@@ -130,6 +131,6 @@ Never:
 - Compute `writerResidualRate` by anything other than subtraction.
 - Compare a buyer's cost limit against a premium that excludes venue fees.
 - Use token symbol as identity.
-- Let one stale oracle settle by accident.
+- Let a live/latest reference read settle by accident.
 - Add margin or early exercise to V1 without new specs and audit.
 - Add a trade router without re-auditing the approval and reentrancy surface it introduces.

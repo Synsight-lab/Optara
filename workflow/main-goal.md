@@ -73,7 +73,7 @@ The protocol must therefore protect itself with structural guarantees:
 - Calculate maximum liability before accepting a position.
 - Burn or mark claims before transferring payout.
 - Use conservative rounding.
-- Reject stale or invalid oracle prices.
+- Reject stale reference prices and invalid, unanchored, or too-late settlement prices.
 - Isolate Kuru from collateral and settlement logic.
 - Never treat writer-selected asks or isolated Kuru premium prices as protocol-recognized fair value.
 - Validate premium execution against hard economic bounds, market-health checks, and buyer-side limits.

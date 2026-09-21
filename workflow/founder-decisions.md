@@ -27,17 +27,20 @@ Impact:
 - Stricter safety.
 - Fewer launchable pairs.
 
-### FD-02: Oracle Deviation Threshold
+### FD-02: Oracle Deviation and Confidence Thresholds
 
 Question:
 
-What is the max allowed Chainlink/Pyth deviation?
+What is the max allowed Chainlink/Pyth deviation, and the max Pyth confidence interval?
 
-Recommended starting value:
+Recommended starting values:
 
 ```text
-100 bps
+maxOracleDeviationBps = 100 bps
+maxPythConfidenceBps  = 100 bps
 ```
+
+A tight confidence cap rejects a Pyth price that Pyth itself is unsure about, but if set too tight it can block settlement when confidence briefly widens right after expiry.
 
 Needs final approval per asset volatility.
 
@@ -66,29 +69,66 @@ A TWAP cannot be anchored to expiry, so it cannot be a settlement source. Keepin
 
 Reopening this is a V2 question and needs three things together: a historical-window read, a separate flag that actually selects the source on the reference path, and a policy for insufficient observation cardinality that reconciles with FD-20.
 
-### FD-21: Maximum Settlement Lag
+### FD-21: Settlement Anchor Windows
 
 Question:
 
-How far past expiry may the anchoring oracle observation sit?
-
-Recommended starting value:
+What are the two expiry-anchor windows for each required feed?
 
 ```text
-maxSettlementLag = 1 hours
+maxChainlinkAgeAtExpiry   how old the Chainlink round in force at expiry may be
+maxPythSettlementLag      how far after expiry Pyth's first qualifying update may sit
 ```
 
-Context: settlement is pinned to the first oracle observation at or after expiry, which is what stops a caller from choosing the settlement price by choosing when to call. `maxSettlementLag` bounds how stale that anchor may be when a feed updates slowly or stops across expiry.
-
-The tradeoff runs in both directions:
+Safe default:
 
 ```text
-too short  a brief feed outage across expiry permanently blocks settlement (FD-20 territory)
-too long   the "expiry price" may be an observation hours after expiry, which is
-           economically wrong and partly reopens the timing problem
+No universal default. Do not approve a series until both are set per required feed.
 ```
 
-Set it per feed, based on that feed's actual heartbeat: a feed with a 1 hour heartbeat needs a lag comfortably above 1 hour, while a fast feed can use minutes. Pair the decision with FD-20, since a lag that expires is exactly the case FD-20's recovery path must handle.
+Context: settlement is pinned to expiry, which is what stops a caller from choosing the settlement price by choosing when to call. Chainlink is anchored to the round **in force** at expiry (the last round at or before expiry, proven by its successor). Pyth is anchored to its first update at or after expiry. Both therefore describe the same moment, so the Chainlink/Pyth deviation check compares like with like, and no timestamp-skew parameter exists.
+
+`maxChainlinkAgeAtExpiry`:
+
+```text
+too short  a healthy feed with a quiet stretch before expiry is rejected, which locks the series (FD-20 territory)
+too long   a feed that already died well before expiry is accepted, so the "expiry price" is very old
+```
+
+Set it from the feed's actual heartbeat plus a buffer: a feed with a 1 hour heartbeat needs comfortably more than 1 hour, not exactly 1 hour. Note it is measured against `expiry`, not against when `settle()` is called.
+
+`maxPythSettlementLag`:
+
+```text
+too short  a brief Pyth stall across expiry blocks settlement
+too long   the Pyth price drifts further from the Chainlink price at expiry, tightening the deviation check for no reason
+```
+
+Pyth publishes about once a second, so a small value is appropriate. A starting point of 60 seconds is reasonable, subject to observing the deployed feed.
+
+Chainlink's slowness is **not** a lock risk under this design: its next round after expiry only delays settlement, because the price used is the round already in force. A series locks only if that successor round never appears, if the round in force is older than `maxChainlinkAgeAtExpiry`, or if Pyth has no update in its window. Pair the decision with FD-20, since those are the cases its recovery path must handle.
+
+### FD-23: Oracle Feed Verification
+
+Question:
+
+Which exact Chainlink feed addresses and Pyth feed IDs are approved for each launch pair on Monad mainnet?
+
+Needs:
+
+- Exact Chainlink feed address for each pair where Chainlink is required.
+- Exact Pyth feed ID for each pair where Pyth is required.
+- Confirmation that each feed prices the intended underlying/quote pair.
+- Confirmation that Chainlink actually operates feeds for intended launch pairs on Monad.
+- Confirmation that every approved feed is direct for the intended pair. V1 does not support composed settlement feeds.
+
+Safe default:
+
+```text
+Do not approve an oracle config until both the feed identifiers and pair binding have been verified by two reviewers.
+```
+
+If Chainlink does not operate a feed for an intended pair, FD-01 becomes a launch blocker rather than a policy preference.
 
 ## Product Decisions
 
@@ -174,11 +214,13 @@ What tolerances should define acceptable premium range?
 
 Needs:
 
-- Seller discount tolerance bps.
+- Seller discount tolerance bps. Recommended to be at least `MAX_EXERCISE_FEE_BPS` (100), so the acceptable range cannot be empty on deep in-the-money options.
 - Buyer overpay tolerance bps.
 - Max spread bps.
 - Max price impact bps.
 - Minimum Kuru depth.
+- Whether below-intrinsic listings are blocked or only warned.
+- Whether official UI supports manual override after warning.
 
 Safe default:
 
@@ -214,7 +256,7 @@ Safe default:
 Restricted to SERIES_CREATOR_ROLE in V1.
 ```
 
-Context: `name` and `symbol` sit outside `seriesId`, and a repeat call with identical economics resolves to the existing series. So whoever creates a series first fixes its metadata permanently, and no one can ever create a correctly-named series for those economics afterward.
+Context: `name`, `symbol`, `minOptionAmount` and `maxTotalShortAmount` sit outside `seriesId`, and a repeat call with identical economics resolves to the existing series (or reverts if those four differ). So whoever creates a series first fixes its metadata, minimum size and cap permanently, and no one can ever create a correctly-named series for those economics afterward.
 
 Permissionless creation would let anyone pre-create every plausible strike and expiry for a popular pair with misleading or offensive metadata. Funds stay safe, because `isOptionToken` is the source of truth and a squatted series is still correctly collateralized, but the damage to the display layer is permanent.
 
@@ -274,6 +316,16 @@ Safe default:
 Optional. Series can exist without Kuru market.
 ```
 
+Related question:
+
+Should minting require an already-linked Kuru market?
+
+Safe default:
+
+```text
+No. Settlement and redemption must work even for a series with no Kuru market.
+```
+
 ### FD-14: Kuru Precision Defaults
 
 Question:
@@ -292,7 +344,7 @@ No default across all assets. Calibrate per pair.
 
 Question:
 
-Guarded beta or open launch?
+Guarded beta or open launch, and what is the mainnet launch date?
 
 Recommended:
 
@@ -325,6 +377,8 @@ Needs:
 - Verified answer on whether the taker fee increases quote spent or reduces base received, confirmed against deployed Monad contracts rather than docs.
 - Verified answer on whether the maker-side value is a fee or a rebate.
 - Verified answer on how `kuruAmmSpread` changes effective execution cost when fills touch AMM liquidity.
+- Verified answer on whether Kuru market orders or limit orders support an onchain deadline/expiry parameter.
+- Verified answer on whether resting limit orders can remain open indefinitely unless cancelled.
 - `maxLinkableMakerFeeBps`, interpreted as the maximum absolute maker-side adjustment allowed for a canonical market.
 - `maxLinkableTakerFeeBps`.
 
@@ -334,9 +388,29 @@ Safe default until verified:
 Assume the fee increases quote spent, AND independently enforce minOptionAmountOut.
 Treat maker-side adjustment as a fee, not a rebate, for seller-protection checks.
 Include AMM spread as execution cost whenever the route may touch Kuru AMM liquidity.
+Treat deadline as an official-route submission constraint unless Kuru is verified to enforce it onchain for the exact order type.
 ```
 
 This is a launch blocker: a wrong assumption here silently breaks buyer all-in cost limits or seller-protection checks. See [kuru-integration-spec.md](./kuru-integration-spec.md).
+
+### FD-18: Trading UI and Kuru Metadata Policy
+
+Question:
+
+What non-core trading paths and metadata updates does the official UI support?
+
+Needs:
+
+- Whether the protocol UI supports non-Kuru OTC transfers.
+- Whether Kuru market metadata can be updated after initial linking.
+- If metadata can be updated, who can update it and under what migration process.
+
+Safe default:
+
+```text
+Show direct ERC-20 transfer as technically possible, but do not build special OTC flows in V1.
+Treat Kuru market metadata as append-only unless a reviewed migration process is approved.
+```
 
 ## Accounting Decisions
 

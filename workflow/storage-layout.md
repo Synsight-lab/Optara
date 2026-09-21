@@ -24,6 +24,7 @@ contract SeriesRegistry {
 
 Rules:
 
+- `factory` is written exactly once by `setFactory` during deployment (the registry is deployed before the factory, which needs the registry address). The setter reverts once `factory` is nonzero.
 - `_seriesParams[seriesId]` is write-once.
 - `_vaultBySeriesId` and `_seriesIdByVault` are inverse views of the same address. There is no separate option-token mapping, because `OptionSeriesVault` is itself the ERC-20.
 - `isOptionToken(token)` resolves through `_seriesIdByVault`.
@@ -102,7 +103,9 @@ mapping(address => uint256) public writerShortBalance;
 mapping(VaultPause => bool) private _paused;
 ```
 
-ERC-20 fields are inherited from OpenZeppelin ERC20 or equivalent.
+ERC-20 fields: because the vault is an EIP-1167 clone with no constructor, name, symbol, and decimals cannot come from OpenZeppelin `ERC20`'s constructor. Use an initializer-based ERC-20 (for example OpenZeppelin's upgradeable `ERC20Upgradeable`, used only for its initializer pattern and never behind a proxy admin), or store `name`/`symbol` written once by the vault initializer and override `name()`, `symbol()`, and `decimals()` (returning `optionDecimals`). The same applies to `ReentrancyGuard`: use a variant whose status slot is valid at zero, or initialize it in the initializer.
+
+Access control: the vault holds no role storage of its own. `sweepFees` (`FEE_ADMIN_ROLE`) and `setPaused` (`PAUSER_ROLE`, plus the higher-trust role for `SETTLEMENT` and `REDEMPTION`) check `ProtocolConfig.hasRole(role, msg.sender)`, so role rotation applies to every live series at once and no per-clone role state exists.
 
 Rules:
 
@@ -129,8 +132,8 @@ Rules:
 
 - The router reads each series' `OracleConfig` from `registry`, never from a call argument.
 - Adapters hold no per-pair state and no thresholds. They receive the feed identifier as an argument and return a normalized price. All policy lives in the router.
-- Adapter addresses may be updated through governance, but because adapters are stateless fetchers, a replacement cannot repoint which feed a live series uses. The feed identifiers are frozen in the series config.
-- If an adapter is upgraded, the upgrade must be timelocked and evented.
+- Adapter addresses may be updated through governance, but this is a trust assumption. A replacement cannot repoint which feed identifier a live series uses, because feed identifiers are frozen in the series config, but a malicious or broken replacement adapter can still return an arbitrary normalized price for that identifier.
+- If an adapter is replaced, the change must be timelocked, evented, reviewed, and treated as settlement-critical governance.
 
 ## `ProtocolConfig`
 
@@ -142,9 +145,8 @@ contract ProtocolConfig {
     // would let one approval bind those feeds to every pair.
     mapping(bytes32 => bool) public approvedOracleConfig;
 
-    uint32 public defaultMaxOracleDeviationBps;
-    uint32 public defaultChainlinkStaleAfter;
-    uint32 public defaultPythStaleAfter;
+    // No oracle default thresholds are stored here. Every threshold lives in the series' own
+    // OracleConfig, pinned by its approved hash, so a stored default would gate nothing.
 
     uint32 public maxPremiumSpreadBps;
     uint32 public maxPriceImpactBps;
@@ -153,7 +155,7 @@ contract ProtocolConfig {
     uint16 public buyerOverpayToleranceBps;
     mapping(address => uint256) public minKuruDepth;   // per quote asset
 
-    // Maximum venue fees a Kuru market may charge and still be linkable.
+    // Maximum taker fee and absolute maker-side adjustment a Kuru market may apply and still be linkable.
     uint16 public maxLinkableMakerFeeBps;
     uint16 public maxLinkableTakerFeeBps;
 
@@ -172,7 +174,7 @@ Rules:
 - Any global value used by live series must be considered governance risk and documented.
 - Fee rate setters must enforce the compile-time caps and revert with `FeeExceedsCap`.
 - `ProtocolConfig` never holds collateral or fees. Fee accrual lives in each vault.
-- There is deliberately no per-adapter allowlist. Adapters are stateless fetchers held by `OracleRouter`, and which feed a series uses is frozen in its own config, so an adapter allowlist would gate nothing that the config does not already pin.
+- There is deliberately no per-series adapter allowlist. Adapters are settlement-critical dependencies held by `OracleRouter`, and which feed a series uses is frozen in its own config. Replacing an adapter is governance-sensitive because a bad adapter can lie about the pinned feed's result even though it cannot change the feed id.
 
 ## Accounting Relationships
 
@@ -200,4 +202,3 @@ totalBuyerPayoutClaimed + totalWriterResidualClaimed + collateralLocked == origi
 `accruedFees` does not appear in that identity because fees are carved out of the gross claim amounts rather than out of collateral. Mint fees never enter `collateralLocked` in the first place.
 
 Implementation should not try to iterate writers or holders. All claims are user-pulled.
-

@@ -50,8 +50,15 @@ Test:
 - A config marking a source required but leaving its identifier zero is rejected.
 - `maxOracleDeviationBps` below the floor is rejected, since a near-zero tolerance makes the series permanently unsettleable while looking valid until expiry.
 - `maxOracleDeviationBps` above the ceiling is rejected.
-- `maxSettlementLag == 0` is rejected.
+- `chainlinkStaleAfter == 0` is rejected when Chainlink is required, and `pythStaleAfter == 0` when Pyth is required.
+- `maxPythConfidenceBps == 0` or above the ceiling is rejected when Pyth is required.
+- `maxChainlinkAgeAtExpiry == 0` is rejected when Chainlink is required.
+- `maxPythSettlementLag == 0` is rejected when Pyth is required.
+- Composed settlement feed configs are rejected; V1 accepts only direct feeds for the approved pair.
 - `createSeries` reverts for a caller without `SERIES_CREATOR_ROLE`.
+- A vault `initialize` call reverts with `AlreadyInitialized` on a second call, and reverts for any caller other than the canonical factory.
+- The vault implementation contract behind the clones cannot be initialized by a third party.
+- A cloned vault reports the correct `name()`, `symbol()` and `decimals()` (equal to `optionDecimals`).
 - Minting beyond `maxTotalShortAmount` reverts with `OpenInterestCapExceeded`; a series with the cap set to 0 is uncapped.
 - `maxTotalShortAmount` has no setter and cannot be raised after creation.
 
@@ -75,11 +82,13 @@ Test:
 Test:
 
 - Settle before expiry reverts.
-- Settle at expiry succeeds with valid oracle.
+- Settle succeeds once the Chainlink successor round (`updatedAt > expiry`) exists and, if Pyth is required, a Pyth update inside `maxPythSettlementLag` is supplied. Settlement at exactly `block.timestamp == expiry` fails unless the Chainlink successor round already exists, which it normally does not.
 - Repeated settle reverts.
 - Chainlink-only valid path if explicitly allowed.
-- Chainlink stale reverts.
-- Pyth stale reverts.
+- Pyth-only valid path if explicitly allowed.
+- Chainlink settlement anchor missing, too late, or invalid reverts.
+- Pyth settlement anchor missing, too late, or invalid reverts.
+- A Pyth price whose confidence interval exceeds `maxPythConfidenceBps` of its price reverts with `OraclePythConfidenceTooWide`, on both settlement and reference reads.
 - Chainlink/Pyth deviation too high reverts.
 - Chainlink/Pyth within threshold succeeds.
 - Settlement depends only on the anchored Chainlink and Pyth observations. No other price source exists to influence it.
@@ -87,22 +96,28 @@ Test:
 - The router reads config from the registry: there is no signature by which a caller supplies an `OracleConfig`, and a series cannot be settled under weakened requirements.
 - Replacing an adapter address cannot change which feed a live series resolves to, since feed identifiers are frozen in the series config.
 - An adapter returns a `PRICE_SCALE`-normalized price for sources with 8, 12, and 18 decimals.
-- Adapters apply no staleness or deviation policy of their own; stale data is rejected by the router, not the adapter.
+- Adapters apply no staleness or deviation policy of their own; stale reference data is rejected by the router, not the adapter.
 - `settle` refunds unused native token and the vault's native balance is zero afterward.
 - Overpaying the Pyth fee by a large margin still refunds correctly.
 
 Settlement anchoring, the highest-value group here:
 
 - **Settling early and settling late produce the identical price.** Settle one series immediately after expiry and an identical one days later, with the feed having moved substantially in between; both must return the expiry-anchored price.
-- A proof naming a round *after* the first qualifying round reverts with `SettlementAnchorInvalid`.
-- A proof naming a round *before* expiry reverts.
-- A proof whose preceding round also post-dates expiry reverts, since it is not the first.
-- A proof whose supplied predecessor skips an intervening Chainlink round reverts, even if that supplied predecessor predates expiry.
-- A Chainlink proof crossing a proxy phase boundary succeeds when the explicit predecessor is correct, and fails if the implementation tries to derive the predecessor as `roundId - 1`.
-- No observation inside `expiry + maxSettlementLag` reverts with `SettlementAnchorTooLate`, and the series stays `ACTIVE`.
-- A feed that goes dark across expiry and resumes after the lag window cannot be settled, confirming the FD-20 path is reachable.
-- Chainlink and Pyth legs are anchored to the same window; a live Pyth read paired with an anchored Chainlink read must not pass.
+- A proof naming a round whose `updatedAt > expiry` as the round in force reverts with `SettlementAnchorInvalid`.
+- A proof naming an earlier round whose real successor also has `updatedAt <= expiry` reverts, since that round is not the last one at or before expiry.
+- A proof whose supplied successor is not the immediate successor (it skips an intervening Chainlink round) reverts, even if the supplied successor has `updatedAt > expiry`.
+- A round published at exactly `updatedAt == expiry` is the round in force at expiry, and its successor is the proof's successor.
+- The settlement price is the answer of `chainlinkRoundId`, never of `chainlinkNextRoundId`. Assert this with a feed where the two answers differ.
+- A Chainlink proof crossing a proxy phase boundary succeeds when the explicit successor is correct, and fails if the implementation tries to derive the successor as `roundId + 1`.
+- **A slow but healthy Chainlink feed settles.** With a heartbeat gap of an hour, a series still settles once the successor round is published, using the round in force at expiry; there is no lag bound to breach.
+- Settlement reverts while no Chainlink successor round exists yet, the series stays `ACTIVE`, and the same call succeeds once the successor is published, at the same price.
+- A round in force at expiry older than `maxChainlinkAgeAtExpiry` reverts with `SettlementAnchorTooStale`, measured against `expiry`, not `block.timestamp`: changing when `settle()` is called must not change the outcome.
+- No Pyth update inside `expiry + maxPythSettlementLag` reverts with `SettlementAnchorTooLate`, and the series stays `ACTIVE`.
+- A Chainlink feed that never publishes a round after expiry cannot be settled, confirming the FD-20 path is reachable.
+- Chainlink is anchored to the round in force at expiry and Pyth to its first update at or after expiry; a live Pyth read paired with an anchored Chainlink read must not pass.
+- With both sources required, the deviation check compares the expiry-anchored Chainlink price with the expiry-anchored Pyth price. A price move between expiry and the Chainlink successor round must not cause a deviation failure, because the successor's price is not used.
 - `chainlinkStaleAfter` has no effect on settlement: setting it very small must not block an otherwise valid anchored settlement.
+- `chainlinkStaleAfter` and `pythStaleAfter` do affect reference-price reads used for premium safety.
 
 ### Redemption
 
@@ -140,12 +155,14 @@ Test:
 - **Bounds are compared as totals**: for an option amount well above one whole option, a route whose per-option cost is below the bound but whose total is above it must fail. This is the regression test for the total-versus-per-option unit bug.
 - A high-taker-fee market cannot pass a range check that the fee-inclusive cost would fail.
 - Seller-side minimum uses proceeds after the maker-side adjustment, and assumes the adjustment is a fee until FD-17 proves otherwise.
-- `hardMaxPremium` is net of `exerciseFeeBps`: with a nonzero exercise fee, the ceiling is strictly below the gross maximum payout.
-- An ask priced between the net and gross ceilings is rejected, since it cannot break even.
+- `hardMaxPremium` is net of `exerciseFeeBps`: with a nonzero exercise fee, the ceiling is strictly below the gross current-reference ceiling.
+- An ask priced between the net and gross current-reference ceilings is rejected by the official simplified route, without claiming the option could never later become profitable.
 - `acceptableMinPremium` is unaffected by `exerciseFeeBps`: changing that rate leaves the seller floor identical.
 - Minimum bounds round up and maximum bounds round down, so every rounding step tightens the rail; assert against exact expected integers at a decimal pair where the division does not terminate.
 - The two bounds do not share a single rounded `E(a)`; each rounds its exposure term in its own direction.
 - Depth-walk estimate includes taker fee and AMM spread.
+- The estimated taker fee rounds up and the maker-side fee rounds up (a rebate rounds down): assert exact integers at a premium where `premium * bps / BPS_SCALE` does not divide evenly.
+- When `acceptableMinPremium > acceptableMaxPremium`, the official simplified route is disabled and neither bound is silently preferred.
 - Insufficient depth for requested size fails rather than extrapolating.
 - Market with venue fees above the linkable cap is rejected with `KuruFeeTooHigh`.
 - Deadline expired fails.
@@ -248,8 +265,8 @@ Scenarios:
 7. Kuru market unavailable but settlement succeeds.
 8. Premium route manipulated but redemption unaffected.
 9. Emergency pause minting only, settlement still works.
-10. Redemption pause active only under simulated exploit.
-11. Each vault pause flag gates only its own action and leaves the other three working.
+10. Redemption pause active only under simulated exploit; it gates both `redeem` and `claimWriterResidual`, and neither mint, settle nor fee sweep.
+11. Each vault pause flag gates only its own action and leaves the other two working.
 11a. No pause flag can block an ERC-20 transfer. There is no transfer pause, and no combination of the remaining flags prevents a holder moving tokens.
 12. Registry `kuruLinkPaused` blocks linking without affecting mint, settle, or redeem.
 13. Guard `routingPaused` blocks route validation without affecting the vault at all.

@@ -139,17 +139,24 @@ premiumPaid = sum(fillOptionAmount_i * fillPrice_i)
 realizedPremiumPerOption = premiumPaid / sum(fillOptionAmount_i)
 ```
 
-Premium alone is not what the buyer actually pays. Kuru charges a venue fee on top, so every bound and every user-facing quote must use the fee-inclusive cost:
+Premium alone is not what the buyer actually pays. Kuru charges a taker-side venue fee on buys, so every bound and every user-facing quote must use the fee-inclusive cost:
 
 ```text
-allInCost = premiumPaid + kuruTakerFee
+allInCost = premiumPaid + kuruTakerFee     // estimated taker fee rounds UP, see fee-spec.md
 ```
 
 and symmetrically for the seller:
 
 ```text
-netProceeds = premiumPaid - kuruMakerFee
+if makerFeeIsRebate:
+    makerAdjustment = floor(premiumPaid * makerFeeBps / BPS_SCALE)   // rebate rounds DOWN
+    netProceeds     = premiumPaid + makerAdjustment
+else:
+    makerAdjustment = ceilDiv(premiumPaid * makerFeeBps, BPS_SCALE)  // fee rounds UP
+    netProceeds     = premiumPaid - makerAdjustment
 ```
+
+Until FD-17 is verified against Kuru's deployed Monad contracts, seller-protection checks assume the maker-side adjustment is a fee, not a rebate.
 
 Per-option figures may be derived for display:
 
@@ -210,11 +217,11 @@ A holder does not receive the gross payout. The exercise fee in [fee-spec.md](./
 hardMaxPremium(a) = mulDivDown(hardMaxGross(a), BPS_SCALE - exerciseFeeBps, BPS_SCALE)
 ```
 
-Use `hardMaxPremium(a)`, the net figure, as the buyer-side ceiling. A premium above it cannot break even even in the best possible outcome, so a rail set at the gross figure would let through asks that are provably unprofitable.
+Use `hardMaxPremium(a)`, the net figure, as the buyer-side route-safety ceiling. This is a conservative current-reference rail, not a proof that a trade cannot ever become profitable. For calls, the payout in quote terms can exceed the current quote value of the collateral if the underlying rallies after entry. The rail exists to stop official simplified routes from accepting asks above a defensible current replacement-value bound.
 
 The seller floor is **not** adjusted this way. The exercise fee is paid by the holder at redemption, never by the writer, so it has no bearing on whether a writer is underpricing. Applying the discount to `acceptableMinPremium` would wrongly lower the writer's protection.
 
-The lower side protects sellers from accidental or manipulated underpricing. The upper side protects buyers from paying more than a conservative net-replacement bound. These are safety bounds, not settlement formulas and not full theoretical option pricing.
+The lower side protects sellers from accidental or manipulated underpricing. The upper side protects buyers from paying more than a conservative net replacement-value bound at the current reference price. These are route-safety bounds, not settlement formulas, not no-arbitrage theorems, and not full theoretical option pricing.
 
 Recommended acceptable range, also totals for amount `a`:
 
@@ -258,8 +265,9 @@ The oracle price must satisfy:
 
 ```text
 S > 0
-S is the FIRST oracle observation at or after expiry, proven onchain
-that observation is no later than expiry + maxSettlementLag
+S is pinned to expiry and proven onchain:
+    Chainlink: the round in force at expiry, not older than maxChainlinkAgeAtExpiry at expiry
+    Pyth:      the first update at or after expiry, within maxPythSettlementLag
 S is PRICE_SCALE-normalized by the adapter
 S is not sourced from the Kuru option market
 S passes Chainlink/Pyth quorum when both are configured
@@ -638,7 +646,8 @@ the series' oracle config was approved at creation
 oracle pair identity was bound at that approval
 oracle price > 0
 the observation is anchored to expiry and the anchor proof verifies
-the observation is no later than expiry + maxSettlementLag
+each required source satisfies its own anchor window (maxChainlinkAgeAtExpiry, maxPythSettlementLag)
+if both sources are required, their expiry-anchored prices are within maxOracleDeviationBps
 the adapter returned a PRICE_SCALE-normalized value
 oracle answer is final enough for the selected oracle design
 ```
@@ -723,7 +732,7 @@ This is a **route-safety property, not a protocol invariant.** The distinction m
 
 Invariants 1 through 12 are enforced by Optara's own contracts and hold against any adversary. Premium protection is different: in V1 Optara does not execute trades, so there is no Optara code path a buyer's trade must pass through. Premium protection is delivered in two layers with very different strengths.
 
-**Layer 1, hard and onchain, enforced by Kuru:**
+**Layer 1, hard execution bounds enforced onchain by Kuru:**
 
 ```text
 a Kuru limit buy cannot fill above its limit price
@@ -736,10 +745,11 @@ These are real guarantees, but they are Kuru's guarantees, not Optara's. Optara'
 allInCost = grossPremium + kuruTakerFee
 allInCost <= buyerMaxTotalPremium
 optionAmountReceived >= buyerMinOptionAmount
-block.timestamp <= buyerDeadline
 ```
 
 Enforcing the limit on `grossPremium` instead of `allInCost` is a defect: a high-taker-fee market would let a buyer's real cost exceed the limit they consented to. See [fee-spec.md](./fee-spec.md).
+
+`buyerDeadline` is required for official routes, but it is not listed as a Kuru guarantee unless FD-17 verifies that the deployed Kuru order type enforces an onchain deadline or expiry. If Kuru does not enforce deadlines, the official frontend/backend must enforce deadline before submission and must not represent resting limit orders as expiring automatically.
 
 **Layer 2, advisory, enforced by the official frontend:**
 
@@ -753,6 +763,7 @@ quoteAge     <= configuredMaxQuoteAge
 availableDepth >= buyerMinDepth
 baseAsset  == optionToken
 quoteAsset == series quoteAsset
+currentTimestamp <= buyerDeadline
 ```
 
 Layer 2 checks cannot bind a user who chooses to trade directly against Kuru, and V1 must not claim otherwise in any user-facing copy. Their purpose is to stop the official path from routing users into bad executions, not to make bad executions impossible.
@@ -785,7 +796,7 @@ lim S -> infinity callBuyerPayout(a) = E(a)
 Put payout approaches the full quote collateral as `S` approaches zero:
 
 ```text
-lim S -> 0 putBuyerPayout(a) = E(a) * K
+lim S -> 0 putBuyerPayout(a) = E(a) * K / UQ_SCALE   (= requiredCollateral(a) up to rounding)
 ```
 
 The oracle adapter should reject `S == 0` as invalid.
@@ -812,4 +823,4 @@ The V1 policy is defined in Invariant 5A above: dust stays in the vault permanen
 - Tests proving Kuru market price cannot affect settlement.
 - Tests proving premium paid cannot affect collateral, settlement payout, or writer residual.
 - Tests proving fee-inclusive buyer limits bind on `allInCost` rather than `grossPremium`.
-- Tests for stale, zero, invalid, or wrong-pair oracle responses.
+- Tests for stale reference reads, zero prices, invalid settlement anchors, and wrong-pair oracle config approval at creation.

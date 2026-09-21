@@ -10,7 +10,8 @@ Founder-approved V1 oracle model:
 Settlement sources
   Primary:                Chainlink if feed exists for pair.
   Secondary/corroborator: Pyth if feed exists for pair.
-  Priced at:              the first observation at or after expiry, proven onchain.
+  Priced at:              expiry. Chainlink: the round in force at expiry.
+                          Pyth: the first update at or after expiry. Both proven onchain.
 
 Not oracle sources
   Kuru:                   premium execution and depth sanity only, never a price input.
@@ -47,11 +48,15 @@ Adapters must read the source's decimals and convert explicitly. `PriceData.sour
 Adapters and the router have deliberately separate jobs:
 
 ```text
-adapter   fetches ONE source, normalizes it, reports what it found
-router    applies ALL policy: staleness, deviation, quorum, fail-closed
+adapter   fetches ONE source, normalizes it, reports what it found, and for settlement
+          verifies the anchor proof and that source's anchor window
+router    applies ALL cross-source and reference policy: reference staleness,
+          Pyth confidence, deviation, quorum, fail-closed
 ```
 
-Adapters hold no thresholds and make no accept/reject decision beyond marking data structurally unusable. Every threshold comes from the series' immutable `OracleConfig`, applied by the router.
+An adapter's only accept/reject decisions are structural ones: the data is unusable, or, on the anchored read, the proof does not identify the correct observation or the observation falls outside that source's anchor window (`maxChainlinkAgeAtExpiry` or `maxPythSettlementLag`, passed in as an argument from the series' immutable `OracleConfig`). Those are properties of one source's own history, so they live with the code that reads that source. Everything that compares or combines sources, or applies a reference-read threshold, is the router's job.
+
+Each threshold value comes from the series' immutable `OracleConfig`.
 
 This matters because policy in one place can be audited once. Policy spread across three adapters can drift, and an adapter upgrade could silently relax how strictly a live series is validated.
 
@@ -97,7 +102,9 @@ struct OracleConfig {
     uint32 maxOracleDeviationBps;
     uint32 chainlinkStaleAfter;   // reference reads only, never settlement
     uint32 pythStaleAfter;        // reference reads only, never settlement
-    uint32 maxSettlementLag;      // how far past expiry the anchor may sit
+    uint32 maxChainlinkAgeAtExpiry; // how old the Chainlink round in force at expiry may be
+    uint32 maxPythSettlementLag;    // how far past expiry Pyth's first qualifying update may sit
+    uint32 maxPythConfidenceBps;    // max Pyth confidence interval as bps of price
 }
 ```
 
@@ -105,7 +112,7 @@ Recommended production policy:
 
 - If Chainlink feed exists for the pair, `requireChainlink = true`.
 - If Pyth feed exists for the pair, `requirePyth = true`.
-- If both exist, both must anchor to the same expiry window and pass the deviation check.
+- If both exist, each must anchor to expiry by its own rule (Chainlink: the round in force at expiry; Pyth: the first update at or after expiry), each must satisfy its own window, and they must pass the deviation check.
 - If only one exists, listing the series requires explicit founder/governance approval.
 - There is no DEX TWAP source in V1. See the note under Settlement Quorum Rules.
 
@@ -117,43 +124,49 @@ A European option settles at the price **at expiry**. It does not settle at the 
 
 If settlement simply read the current price and required it to be fresh relative to `block.timestamp`, then whoever calls `settle()` chooses the settlement price by choosing when to call. Settlement is permissionless and the vault has no deadline of its own, so a holder with a large position would simply wait: if the option is out of the money at expiry, wait for a favorable move and settle then. The writer's collateral is taken by a caller who did nothing but pick a moment. Freshness checks do not help, because a price from an hour ago is perfectly fresh and still not the expiry price.
 
-V1 therefore requires that the settlement observation be **pinned to expiry and proven onchain**:
+V1 therefore requires that the settlement observation be **pinned to expiry and proven onchain**. Each source has its own rule, chosen so that both sources describe the same moment:
 
 ```text
-settlementPrice = the FIRST oracle observation with timestamp >= expiry
-                  and timestamp <= expiry + maxSettlementLag
+Chainlink   the round IN FORCE at expiry: the last round with updatedAt <= expiry,
+            proven by its immediate successor having updatedAt > expiry
+Pyth        the first update with publishTime >= expiry,
+            and publishTime <= expiry + maxPythSettlementLag
 ```
 
-The caller supplies a proof identifying that observation. The adapter verifies the proof against the source. A caller who supplies a later, more favorable observation is rejected, so the settlement price is a deterministic function of the series and the feed's history — identical no matter who settles or when.
+Chainlink is a push feed that updates on a deviation threshold or a heartbeat, so its first update after expiry can be an entire heartbeat away. Taking that later round as "the expiry price" would make it a price from up to an hour after expiry, while Pyth, which publishes about once a second, would describe the moment right at expiry. Comparing them in the deviation check would then compare two different market moments and could fail an honest settlement. Using the round that was **in force** at expiry gives Chainlink's true value at expiry and puts both sources on the same moment. Pyth's first update lands within seconds of expiry, so the only remaining gap is at most `maxPythSettlementLag`, which is small by construction.
+
+The caller supplies a proof identifying the observation. The adapter verifies the proof against the source. A caller who names any other round is rejected, so the settlement price is a deterministic function of the series and the feed's history, identical no matter who settles or when.
 
 ### Proving the Anchor
 
 ```solidity
 struct SettlementProof {
-    uint80 chainlinkRoundId;          // the first round with updatedAt >= expiry
-    uint80 chainlinkPreviousRoundId;  // explicit previous round; never derived as roundId - 1
-    bytes pythUpdateData;             // Pyth update(s) bracketing expiry
+    uint80 chainlinkRoundId;      // the round in force at expiry: updatedAt <= expiry
+    uint80 chainlinkNextRoundId;  // its immediate successor: updatedAt > expiry; never derived as roundId + 1
+    bytes pythUpdateData;         // Pyth update(s) proving the first publish at or after expiry
 }
 ```
 
-**Chainlink.** The caller names the candidate settlement round and the immediately preceding valid round. The adapter verifies the candidate is genuinely the first round at or after expiry by checking both supplied round ids:
+**Chainlink.** The caller names the round in force at expiry and its immediate successor. The adapter verifies that the named round really is the last one at or before expiry by checking both:
 
 ```text
-(, answer, , updatedAtN,   ) = feed.getRoundData(chainlinkRoundId)
-(, ,      , updatedAtPrev, ) = feed.getRoundData(chainlinkPreviousRoundId)
+(, answer, , updatedAtRound, ) = feed.getRoundData(chainlinkRoundId)
+(, ,      , updatedAtNext,   ) = feed.getRoundData(chainlinkNextRoundId)
 
-require(chainlinkPreviousRoundId != 0)
-require(chainlinkPreviousRoundId != chainlinkRoundId)
-require(isImmediateChainlinkPredecessor(feed, chainlinkPreviousRoundId, chainlinkRoundId))
-require(updatedAtN   >= expiry)                         // at or after expiry
-require(updatedAtPrev <  expiry)                        // and the first such round
-require(updatedAtN   <= expiry + maxSettlementLag)      // feed did not go dark across expiry
+require(chainlinkRoundId != 0)
+require(chainlinkNextRoundId != chainlinkRoundId)
+require(isImmediateChainlinkSuccessor(feed, chainlinkRoundId, chainlinkNextRoundId))
+require(updatedAtRound <= expiry)                          // in force at expiry
+require(updatedAtNext  >  expiry)                          // and nothing newer before expiry
+require(expiry - updatedAtRound <= maxChainlinkAgeAtExpiry) // not a long-dead feed
 require(answer > 0)
 ```
 
-The `updatedAtPrev < expiry` check is what makes the proof unforgeable. Without it a caller could name any later round.
+The price is `answer` of `chainlinkRoundId`, never the successor's.
 
-The immediate-predecessor check is as important as the timestamp check. If the contract accepted any older pre-expiry round as `chainlinkPreviousRoundId`, a caller could skip the real first post-expiry round and name a later, more favorable one.
+The `updatedAtNext > expiry` check is what makes the proof unforgeable: a caller cannot name an earlier round, because that round's successor would still be at or before expiry, and cannot name a later round, because it would not be at or before expiry. Exactly one round satisfies both checks.
+
+The immediate-successor check is as important as the timestamp checks. If the contract accepted any later round as `chainlinkNextRoundId`, a caller could name an older round whose real successor was still at or before expiry, pair it with a distant post-expiry round as its supposed successor, and settle at that older, more favorable price.
 
 Chainlink proxy round ids are phase-encoded:
 
@@ -161,41 +174,66 @@ Chainlink proxy round ids are phase-encoded:
 proxyRoundId = (phaseId << 64) | aggregatorRoundId
 ```
 
-The adapter must therefore verify predecessor adjacency explicitly:
+The adapter must therefore verify adjacency explicitly:
 
 ```text
 same phase:
-    phase(prev) == phase(current)
-    aggregatorRound(current) == aggregatorRound(prev) + 1
+    phase(next) == phase(round)
+    aggregatorRound(next) == aggregatorRound(round) + 1
 
 phase boundary:
-    phase(current) == phase(prev) + 1
-    aggregatorRound(current) == 1
-    feed.getRoundData(prev + 1) reverts, proving prev was the last valid round of its phase
+    phase(next) == phase(round) + 1
+    aggregatorRound(next) == 1
+    feed.getRoundData(round + 1) reverts, proving round was the last valid round of its phase
 ```
 
-All other predecessor shapes are invalid. An implementation must never derive the previous round by subtracting one from the candidate. If the candidate appears to be the first valid Chainlink round ever and there is no prior round to prove against, V1 fails closed rather than accepting an unprovable anchor. The offchain proof builder is responsible for resolving phase boundaries and supplying the right predecessor.
+All other successor shapes are invalid. An implementation must never derive the successor by adding one to the round id. The offchain proof builder is responsible for resolving phase boundaries and supplying the right successor.
 
-**Pyth.** Pyth exposes exactly this shape natively. Use the API that returns the first update within a publish-time window rather than the latest price:
+Because the successor must exist, `settle()` cannot succeed until Chainlink has published its first update after expiry. This is a delay of at most about one heartbeat, not a lock, and it does not change the price. Keepers simply wait for the successor round.
+
+`maxChainlinkAgeAtExpiry` checks that the round in force is not absurdly old. It is measured against `expiry`, not against `block.timestamp`, so it is a deterministic property of the feed's history and does not reintroduce the timing choice this section removes. It exists to catch a feed that had already gone dark before expiry.
+
+**Pyth.** Pyth exposes the first-update shape natively. Use the API that returns the first update within a publish-time window rather than the latest price:
 
 ```text
 parsePriceFeedUpdatesUnique(
     updateData,
     ids,
     minPublishTime = expiry,
-    maxPublishTime = expiry + maxSettlementLag
+    maxPublishTime = expiry + maxPythSettlementLag
 )
 ```
 
 Do not use a "latest price, no older than" call for settlement. That reintroduces exactly the timing choice this section exists to remove.
 
-### `maxSettlementLag`
+### Anchor Windows
 
-A per-series value, frozen at creation alongside the rest of the oracle config. It bounds how far past expiry the anchoring observation may sit, which matters when a feed stops updating across expiry.
+Two per-series values, frozen at creation alongside the rest of the oracle config:
 
-If no qualifying observation exists inside the window, settlement fails closed and the series enters the prolonged-outage case governed by FD-20. The window is deliberately *not* a deadline on calling `settle()`: the call can be made at any later time, because the proof pins the price regardless. Only the observation must fall inside the window.
+```text
+maxChainlinkAgeAtExpiry   how old the Chainlink round in force at expiry may be
+                          set from the feed's heartbeat plus a buffer
+maxPythSettlementLag      how far after expiry Pyth's first qualifying update may sit
+                          small, because Pyth publishes continuously
+```
 
-Recommended starting value and final approval: FD-21 in [founder-decisions.md](./founder-decisions.md).
+If Chainlink's round in force is older than `maxChainlinkAgeAtExpiry`, or Pyth has no update inside its window, settlement fails closed. The windows are deliberately *not* a deadline on calling `settle()`: the call can be made at any later time, because the proofs pin the prices regardless.
+
+The two windows fail in different ways. A too-small `maxChainlinkAgeAtExpiry` rejects a healthy feed that simply had a quiet stretch before expiry, so it must sit comfortably above the feed's heartbeat. A too-small `maxPythSettlementLag` rejects settlement when Pyth briefly stalls across expiry.
+
+Recommended starting values and final approval: FD-21 in [founder-decisions.md](./founder-decisions.md).
+
+### Pyth Confidence
+
+A Pyth price is published with a confidence interval. A price whose interval is wide relative to the price is a price Pyth itself is unsure about, so V1 rejects it:
+
+```text
+pyth.confidence * BPS_SCALE / pyth.price <= maxPythConfidenceBps
+```
+
+The adapter normalizes the confidence to `PRICE_SCALE` exactly as it does the price and reports it in `PriceData.confidence`. The router applies the threshold, on both settlement and reference reads. Chainlink reports no confidence and its `confidence` is zero.
+
+The check can add a settlement lock path if Pyth's confidence is unusually wide at the instant after expiry, so `maxPythConfidenceBps` is part of FD-02.
 
 ### Freshness Versus Anchoring
 
@@ -207,6 +245,8 @@ freshness   used for REFERENCE      is this observation recent enough to price a
 ```
 
 `chainlinkStaleAfter` and `pythStaleAfter` apply to `getReferencePrice`, which feeds premium bounds before expiry. They do **not** apply to settlement, where the anchor replaces them. Applying a now-relative freshness check to settlement is the bug described above.
+
+Settlement has its own, expiry-relative bounds, `maxChainlinkAgeAtExpiry` and `maxPythSettlementLag`. They compare an observation against `expiry`, never against `block.timestamp`, so they are properties of the feed's history and not of when `settle()` was called.
 
 ## Settlement Quorum Rules
 
@@ -220,14 +260,31 @@ Pass conditions:
 
 ```text
 chainlinkPrice > 0
-anchored round proven per the rules above
-updatedAt in [expiry, expiry + maxSettlementLag]
+round in force at expiry proven per the rules above
+expiry - updatedAt <= maxChainlinkAgeAtExpiry
 ```
 
 Result:
 
 ```text
 settlementPrice = normalizedChainlinkPrice
+```
+
+### Pyth Only
+
+Allowed only if no Chainlink feed exists or the series is explicitly approved as single-oracle.
+
+Pass conditions:
+
+```text
+pythPrice > 0
+Pyth update proves the first publish time in [expiry, expiry + maxPythSettlementLag]
+```
+
+Result:
+
+```text
+settlementPrice = normalizedPythPrice
 ```
 
 ### Chainlink + Pyth
@@ -237,12 +294,14 @@ Preferred V1 mode.
 Pass conditions:
 
 ```text
-chainlink valid and anchored at expiry
-pyth valid and anchored in the same window
+chainlink valid: round in force at expiry, proven, and not older than maxChainlinkAgeAtExpiry
+pyth valid: first update at or after expiry, inside maxPythSettlementLag
 abs(chainlinkPrice - pythPrice) / min(chainlinkPrice, pythPrice) <= maxOracleDeviationBps
 ```
 
-Both sources must be anchored to the same expiry window. Comparing an anchored Chainlink price against a live Pyth price would make the deviation check depend on when settlement is called.
+Both prices are anchored to expiry, each by its own rule, so they describe the same moment to within `maxPythSettlementLag`. That is what makes the deviation check meaningful: a failure means the sources genuinely disagree, not that they were sampled at different times. Comparing an anchored Chainlink price against a live Pyth price would make the deviation check depend on when settlement is called.
+
+There is deliberately no separate timestamp-skew parameter. Chainlink's round in force at expiry may have been published long before expiry, so comparing publish timestamps would reject healthy feeds; what matters is the moment each price describes, and the anchor rules already align that.
 
 Result:
 
@@ -261,7 +320,7 @@ Rationale:
 
 V1 has no DEX TWAP oracle. There is no `dexTwapAdapter`, no `requireDexTwap`, and no `DexTwapOracleAdapter` contract.
 
-A TWAP cannot be anchored the way the other sources can. Anchoring names a single observation — a Chainlink round, a Pyth publish time — and proves it is the first at or after expiry. A TWAP is an average over a window, so there is no observation to name. Making it settlement-grade would require reading the average over a window *ending* at expiry, and those observation buffers have finite cardinality and get overwritten, so a series settled long after expiry would find them gone and become unsettleable. That would silently remove the settle-at-any-time property anchoring exists to provide.
+A TWAP cannot be anchored the way the other sources can. Anchoring names a single observation — a Chainlink round, a Pyth publish time — and proves it is the correct one for expiry. A TWAP is an average over a window, so there is no observation to name. Making it settlement-grade would require reading the average over a window *ending* at expiry, and those observation buffers have finite cardinality and get overwritten, so a series settled long after expiry would find them gone and become unsettleable. That would silently remove the settle-at-any-time property anchoring exists to provide.
 
 Keeping it as a reference-only signal was considered and rejected too, because nothing would ever read it: the reference path selects sources by the same `require*` flags settlement uses, so a source that can never be required is a source that can never be consulted. An adapter that cannot be reached is not a safety feature, it is unreachable code that an implementer would build and an auditor would have to review.
 
@@ -271,11 +330,11 @@ If a later version wants TWAP corroboration, it needs the historical-window read
 
 Settlement must fail closed if:
 
-- Required Chainlink source is stale or invalid.
-- Required Pyth source is stale or invalid.
-
+- The Chainlink proof does not identify the round in force at expiry and its immediate successor.
+- The Chainlink round in force at expiry is older than `maxChainlinkAgeAtExpiry`.
+- The Chainlink successor round has not been published yet (settlement waits; it is not a lock).
+- Required Pyth source has no valid first update inside `[expiry, expiry + maxPythSettlementLag]`.
 - Chainlink and Pyth deviation exceeds threshold.
-- Oracle pair identity does not match series pair.
 - Price is zero or negative.
 - Price decimals are unsupported.
 - Pyth update data is invalid or underpaid.
@@ -311,7 +370,7 @@ Rules:
 - Must not write settlement state.
 - Must not be confused with final expiry settlement price.
 
-It is kept as a separate function from `getSettlementPrice` rather than merged, so that the two can diverge later — settlement could adopt stricter staleness, for instance — without that change silently loosening or tightening the other, and so events distinguish the two uses.
+It is kept as a separate function from `getSettlementPrice` rather than merged, so that the two can diverge later — reference pricing could adopt stricter staleness, for instance — without that change silently loosening or tightening settlement, and so events distinguish the two uses.
 
 ## Pyth Pull-Oracle Handling
 
@@ -321,21 +380,27 @@ If Pyth is required:
 - Caller pays the required Pyth update fee as `msg.value`.
 - Invalid Pyth update causes revert.
 
+### Archiving Pyth Update Data
+
+Chainlink rounds stay readable on chain forever, so a Chainlink proof can always be rebuilt later. Pyth update data comes from an off-chain service, and its retention for old windows is not something this protocol controls. The settle-at-any-time guarantee therefore depends on that data still being obtainable.
+
+Operations must archive, for every series that requires Pyth, the Pyth update data covering `[expiry, expiry + maxPythSettlementLag]` shortly after expiry, and keep it until the series is settled. The keeper should also be able to settle promptly, since a prompt settlement avoids the dependency entirely. A series whose Pyth data cannot be recovered cannot be settled, which is the FD-20 case.
+
 ### Native Token Refunds
 
 Pyth update fees are quoted per call, so a caller will routinely send more than is consumed. Every payable function in the path must return the remainder:
 
 ```text
-vault.settle           forwards only the required fee to the router,
-                       refunds the remainder to msg.sender before returning
-router.getSettlementPrice  forwards only the required fee to the adapter,
-                       refunds the remainder to its caller
-adapter.read           consumes the exact update fee, refunds the remainder
+vault.settle               forwards msg.value to the router when Pyth is required,
+                           refunds the returned remainder to msg.sender
+router.getSettlementPrice  forwards available native value to the adapter,
+                           refunds the returned remainder to its caller
+adapter.read/readAt        consumes the exact update fee, refunds the remainder
 ```
 
 No contract in this path may retain native token. A vault that accumulates ETH has no withdrawal path, since `sweepFees` moves the collateral asset only.
 
-Refund with a low-level call and check the return value. Refunds happen after all state updates, and every function in the path is `nonReentrant`, so a refund to a contract that re-enters observes fully updated state.
+Refund with a low-level call and check the return value. Refunds happen after all state updates, and every payable state-changing function in the path is `nonReentrant`, so a refund to a contract that re-enters observes fully updated state.
 
 ## Chainlink Handling
 
@@ -352,25 +417,26 @@ Note that `chainlinkStaleAfter` does **not** appear here. Staleness is a router-
 
 ### Composed Feeds
 
-If the quote asset is not USD and the available feeds are USD-based, the adapter must compose them:
+V1 does **not** support composed settlement feeds.
+
+If the quote asset is not USD and the available feeds are USD-based, a composed price may look tempting:
 
 ```text
 MON/USDC from MON/USD and USDC/USD
 ```
 
-Composition interacts badly with anchoring and needs care. The two legs update on independent schedules, so there is no single round that is "the" observation at expiry — each leg has its own first-round-after-expiry, and those two rounds carry different timestamps.
+But the V1 interfaces cannot express the required proof safely. `OracleConfig` carries only one Chainlink feed and one Pyth feed id per source, `SettlementProof` carries one Chainlink round/successor pair, and `IOracleAdapter.readAt` accepts one feed identifier at a time. A composed settlement feed would require proving two independently anchored legs, carrying two successor proofs, and composing prices only after both legs pass those checks.
 
-Rules for a composed settlement anchor:
+Therefore V1 requires direct feeds for every approved settlement pair:
 
 ```text
-anchor each leg independently to the first round at or after expiry
-require BOTH anchored rounds to fall within expiry + maxSettlementLag
-compose the two anchored prices, never an anchored price with a live one
+approved settlement config -> direct Chainlink feed and/or direct Pyth feed id for the pair
+no composed Chainlink legs
+no composed Pyth legs
+no USD-leg composition inside adapters
 ```
 
-The composed result is therefore only as timely as the slower leg, which is why `maxSettlementLag` for a composed pair must accommodate the slower feed's heartbeat rather than the faster one's.
-
-Composed feeds also compound oracle risk: two feeds, two failure modes, two staleness profiles, and a division that amplifies error in the denominator leg. Prefer a direct feed for the pair whenever one exists, and treat composition as a per-pair decision at approval time rather than a default.
+If a later version supports composed feeds, it must expand `OracleConfig`, `SettlementProof`, adapter interfaces, validation tests, and the deviation policy together. Until then, approving a composed feed config is invalid.
 
 ## Prolonged Outage and the Permanent-Lock Risk
 
@@ -385,6 +451,17 @@ redeem()               unreachable, because it requires SETTLED
 claimWriterResidual()  unreachable, because it requires SETTLED
 collateral             permanently locked, for holders and writers alike
 ```
+
+Under the anchoring rules above, the ways to reach this state are narrow:
+
+```text
+Chainlink   the feed never publishes another round after expiry (no successor to prove against),
+            or the round in force at expiry is older than maxChainlinkAgeAtExpiry
+Pyth        no update exists inside [expiry, expiry + maxPythSettlementLag]
+two-oracle  the sources genuinely disagree beyond maxOracleDeviationBps and keep disagreeing
+```
+
+A slow-but-alive Chainlink feed is **not** on this list: its next round only delays settlement, because the price used is the round already in force.
 
 There is no code path out of this state in the current design. That is a deliberate consequence of refusing to fall back to a manipulable price source, but it is a real user-funds risk and not merely a liveness inconvenience.
 
@@ -401,9 +478,10 @@ Shipping without an explicit decision selects permanent lock by default. That ma
 
 Before production:
 
-- Decide whether single-oracle series are allowed at all.
-- Decide max deviation bps for Chainlink/Pyth.
-- Decide stale thresholds by asset class.
-- Decide the prolonged-outage recovery path, FD-20. This one can permanently lock user funds.
-- Confirm exact Chainlink and Pyth feed addresses/feed IDs for Monad mainnet.
-- Confirm that Chainlink actually operates feeds for the intended pairs on Monad; if it does not, FD-01 becomes a launch blocker rather than a policy question.
+- FD-01: decide whether single-oracle series are allowed at all.
+- FD-02: decide max deviation bps for Chainlink/Pyth and the max Pyth confidence.
+- FD-03: decide stale thresholds by asset class.
+- FD-21: decide `maxChainlinkAgeAtExpiry` and `maxPythSettlementLag` per feed.
+- FD-20: decide the prolonged-outage recovery path. This one can permanently lock user funds.
+- FD-23: confirm exact Chainlink and Pyth feed addresses/feed IDs for Monad mainnet.
+- FD-23: confirm that Chainlink actually operates feeds for the intended pairs on Monad; if it does not, FD-01 becomes a launch blocker rather than a policy question.

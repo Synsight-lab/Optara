@@ -92,7 +92,7 @@ Reject if:
 
 ## Kuru Fee Calculation
 
-Kuru charges its own maker and taker fees on every trade. Optara never receives this revenue and must never attempt to capture or rebate it, but every quote, bound, and UI figure must account for it.
+Kuru charges taker fees and may apply maker-side fees or rebates on trades. Optara never receives this venue value and must never attempt to capture or rebate it, but every quote, bound, and UI figure must account for it.
 
 ### Fee Inputs
 
@@ -111,7 +111,7 @@ These must be read from the deployed market at link time rather than assumed, an
 
 ```text
 grossPremium = sum(fillSize_i * fillPrice_i)
-kuruTakerFee = floor(grossPremium * takerFeeBps / BPS_SCALE)
+kuruTakerFee = ceilDiv(grossPremium * takerFeeBps, BPS_SCALE)    // estimate rounds UP; see fee-spec.md
 allInCost    = grossPremium + kuruTakerFee
 ```
 
@@ -121,12 +121,12 @@ There is no Optara trade surcharge, because V1 has no protocol-owned router.
 
 ```text
 grossPremium        = sum(fillSize_i * fillPrice_i)
-makerAdjustment     = floor(grossPremium * makerFeeBps / BPS_SCALE)
-
 if makerFeeIsRebate:
-    netProceeds = grossPremium + makerAdjustment
+    makerAdjustment = floor(grossPremium * makerFeeBps / BPS_SCALE)    // rebate rounds DOWN
+    netProceeds     = grossPremium + makerAdjustment
 else:
-    netProceeds = grossPremium - makerAdjustment
+    makerAdjustment = ceilDiv(grossPremium * makerFeeBps, BPS_SCALE)   // fee rounds UP
+    netProceeds     = grossPremium - makerAdjustment
 ```
 
 A writer posting a resting ask receives or pays the maker-side adjustment according to the deployed market's convention. A writer crossing the spread to sell pays the taker-side cost instead. The UI must use whichever applies to the order type the user is actually submitting. Until FD-17 is verified, seller-protection checks assume the maker-side adjustment is a fee, not a rebate.
@@ -201,7 +201,7 @@ Official one-click buy flows must:
 - Estimate executable output from depth.
 - Enforce `buyerMaxTotalPremium` on the fee-inclusive all-in cost.
 - Enforce `minOptionAmountOut`.
-- Enforce deadline.
+- Enforce deadline in the official route submission path, and use Kuru's onchain deadline/expiry only if FD-17 verifies that the deployed order type supports it.
 - Check spread, depth, quote age, and price impact.
 - Reject out-of-range writer asks.
 
@@ -227,10 +227,10 @@ Kuru docs describe the OrderBook as a central limit order book with integrated A
 
 ## Needs Founder Decision
 
-- Whether official UI deploys Kuru market automatically at series creation.
-- Whether every series must have a Kuru market before minting.
-- Default market parameters for each launch pair.
-- Maximum linkable maker and taker fee thresholds.
-- Confirmation of Kuru's taker-fee convention, maker fee or rebate convention, and AMM-spread behavior on the deployed Monad contracts.
-- Whether the protocol UI supports non-Kuru OTC transfers.
-- Whether Kuru market metadata can be updated after linking.
+- FD-13: whether official UI deploys Kuru market automatically at series creation.
+- FD-13: whether every series must have a Kuru market before minting.
+- FD-14: default market parameters for each launch pair.
+- FD-17: maximum linkable taker fee and maker-side adjustment thresholds.
+- FD-17: confirmation of Kuru's taker-fee convention, maker fee or rebate convention, and AMM-spread behavior on the deployed Monad contracts.
+- FD-18: whether the protocol UI supports non-Kuru OTC transfers.
+- FD-18: whether Kuru market metadata can be updated after linking.

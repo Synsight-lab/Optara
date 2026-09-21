@@ -89,12 +89,12 @@ The final settlement price comes from `OracleRouter`, using the approved oracle 
 
 ### Rationale
 
-Option payoff must be based on an external settlement source, not the price of the option token itself. The router enforces freshness, deviation, and quorum rules; pair identity is bound when the oracle config is approved at creation.
+Option payoff must be based on an external settlement source, not the price of the option token itself. The router enforces reference freshness, settlement anchoring, deviation, and quorum rules; pair identity is bound when the oracle config is approved at creation.
 
 ### Consequences
 
 - Oracle design becomes a critical security dependency.
-- Settlement can fail safely if the oracle is stale or invalid.
+- Settlement can fail safely if the required oracle anchor is missing, too late, disputed, or invalid.
 - The project needs oracle manipulation analysis before launch.
 
 ## DD-07: Calls Use Underlying Collateral and Puts Use Quote Collateral
@@ -288,7 +288,7 @@ V1 settlement uses Chainlink as the primary oracle when a feed exists for the pa
 
 ### Rationale
 
-External oracle networks are designed for settlement-grade price data. Kuru order-book prices are valuable for execution and liquidity checks, but they can be thin, manipulated, paused, or unavailable. Requiring independent oracle corroboration reduces the chance that a single compromised or stale source settles a series incorrectly.
+External oracle networks are designed for settlement-grade price data. Kuru order-book prices are valuable for execution and liquidity checks, but they can be thin, manipulated, paused, or unavailable. Requiring independent oracle corroboration reduces the chance that a single compromised or invalid source settles a series incorrectly.
 
 ### Consequences
 
@@ -346,7 +346,7 @@ Optara deploys no contract that executes Kuru trades on a user's behalf. `Premiu
 
 ### Rationale
 
-A router is the only component that would require approval over a buyer's quote balance, making it the highest-value target in the system and the one component that could lose user funds directly rather than merely routing badly. The protection a router adds over a Kuru limit order is the advisory range check, not the hard price bound — Kuru already enforces the hard bound onchain.
+A router is the only component that would require approval over a buyer's quote balance, making it the highest-value target in the system and the one component that could lose user funds directly rather than merely routing badly. The protection a router adds over a Kuru limit order is the advisory range check, not the hard buyer execution bound; Kuru already enforces that bound onchain.
 
 The cost of this decision is honesty: the range checks cannot bind a user who trades directly against Kuru, and V1 must say so rather than implying protocol-level premium protection it does not have.
 
@@ -362,7 +362,7 @@ The cost of this decision is honesty: the range checks cannot bind a user who tr
 
 ### Decision
 
-Settlement uses the first oracle observation at or after expiry, identified by a caller-supplied proof that the contracts verify against the source. It does not read the current price. `settle()` may be called at any time after expiry and returns the same result.
+Settlement uses the price pinned to expiry, identified by a caller-supplied proof that the contracts verify against the source. For Chainlink that is the round **in force** at expiry (the last round at or before expiry, proven by its successor); for Pyth it is the first update at or after expiry. It does not read the current price. `settle()` may be called at any time after expiry and returns the same result.
 
 ### Rationale
 
@@ -374,7 +374,9 @@ A settlement window was the obvious cheaper alternative — require settlement w
 
 - Settlement is a deterministic function of the series and the feed's history. Who settles, and when, cannot change the outcome.
 - No keeper liveness requirement. A series settled months late produces the same price as one settled immediately.
-- `settle` takes a `SettlementProof`, and an offchain helper must find the first round or publish time after expiry. This is a binary search over round ids, not novel work.
+- `settle` takes a `SettlementProof`, and an offchain helper must find the Chainlink round in force at expiry and its successor, and the first Pyth publish after expiry. This is a binary search over round ids, not novel work.
+- Settlement cannot begin until Chainlink publishes the round after expiry, a delay of at most about one heartbeat. The price is unaffected.
 - Adapters need an anchored read path alongside the live one used for reference prices.
-- `maxSettlementLag` bounds how far past expiry the anchor may sit, which introduces a new way to reach permanent lock if a feed goes dark across expiry. That case is FD-20's, and the lag value is FD-21.
+- `maxChainlinkAgeAtExpiry` and `maxPythSettlementLag` bound the anchors, which leaves a narrow route to permanent lock if a feed goes dark. That case is FD-20's, and the window values are FD-21.
+- An earlier draft anchored both sources to "the first observation at or after expiry". That was rejected: Chainlink's first update after expiry can be an entire heartbeat away, so it described a later market moment than Pyth's and made the deviation check compare mismatched prices. It also forced a large lag bound and a skew parameter, each a way to lock a healthy series. Using the round in force at expiry gives Chainlink's true value at expiry, needs no lag bound, and needs no skew parameter.
 - A DEX TWAP cannot participate, because an average over a window has no single observation to anchor. Since the reference path selects sources by the same flags settlement uses, a source excluded from settlement is unreachable everywhere, so V1 drops it rather than shipping an adapter nothing calls. See DD-18.

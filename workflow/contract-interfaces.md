@@ -58,6 +58,7 @@ enum OracleStatus {
     STALE,
     INVALID,
     DEVIATION_TOO_HIGH,
+    CONFIDENCE_TOO_WIDE,
     MISSING_REQUIRED_SOURCE
 }
 
@@ -66,7 +67,7 @@ enum OracleStatus {
 enum VaultPause {
     MINT,
     SETTLEMENT,
-    REDEMPTION
+    REDEMPTION   // gates redeem() and claimWriterResidual()
 }
 
 struct OracleConfig {
@@ -77,14 +78,16 @@ struct OracleConfig {
     uint32 maxOracleDeviationBps;   // bps
     uint32 chainlinkStaleAfter;     // seconds; REFERENCE reads only, never settlement
     uint32 pythStaleAfter;          // seconds; REFERENCE reads only, never settlement
-    uint32 maxSettlementLag;        // seconds past expiry the settlement anchor may sit
+    uint32 maxChainlinkAgeAtExpiry; // seconds; max age, measured at expiry, of the Chainlink round in force
+    uint32 maxPythSettlementLag;    // seconds past expiry Pyth's first qualifying update may sit
+    uint32 maxPythConfidenceBps;    // bps; max Pyth confidence interval as a fraction of price
 }
 
 /// @notice Identifies the oracle observation at expiry. Settlement is anchored to it
 ///         so that the price does not depend on when settle() happens to be called.
 struct SettlementProof {
-    uint80 chainlinkRoundId;          // the FIRST round with updatedAt >= expiry
-    uint80 chainlinkPreviousRoundId;  // immediate predecessor; never derive as roundId - 1
+    uint80 chainlinkRoundId;          // the round in force at expiry: updatedAt <= expiry
+    uint80 chainlinkNextRoundId;      // its immediate successor: updatedAt > expiry; never derive as roundId + 1
     bytes pythUpdateData;             // Pyth update(s) bracketing expiry
 }
 
@@ -207,7 +210,7 @@ interface ISeriesRegistry {
 
     /// @dev Callable only by KURU_ADMIN_ROLE or the KuruMarketAdapter.
     ///      Reverts with NotKuruAdmin otherwise. Append-only unless an explicitly
-    ///      reviewed migration path exists; see FD-13.
+    ///      reviewed migration path exists; see FD-18.
     function linkKuruMarket(bytes32 seriesId, KuruMarketConfig calldata config) external;
 
     function setKuruLinkPaused(bool paused, bytes32 reason) external;
@@ -220,6 +223,10 @@ interface ISeriesRegistry {
     function getSeriesByToken(address optionToken) external view returns (bytes32);
     function getKuruMarket(bytes32 seriesId) external view returns (KuruMarketConfig memory);
     function factory() external view returns (address);
+
+    /// @dev One-time wiring, callable once by the deployer-held admin during deployment.
+    ///      Reverts if a factory is already set. There is no way to change it afterward.
+    function setFactory(address factory_) external;
 }
 ```
 
@@ -240,9 +247,10 @@ interface IOptionSeriesFactory {
     );
 
     /// @dev V1: restricted to SERIES_CREATOR_ROLE. Creation is NOT permissionless.
-    ///      `name` and `symbol` are excluded from seriesId and are permanent once set, and a
-    ///      later call with identical economics resolves to the existing series rather than
-    ///      creating a second one. Open creation would therefore let anyone front-run every
+    ///      `name`, `symbol`, `minOptionAmount` and `maxTotalShortAmount` are excluded from
+    ///      seriesId and are permanent once set. An exact repeat call returns the existing
+    ///      series; the same seriesId with any of those four differing reverts with
+    ///      DuplicateSeries. Open creation would therefore let anyone front-run every
     ///      popular strike and expiry with misleading metadata that can never be corrected.
     ///      See FD-22.
     function createSeries(CreateSeriesParams calldata params)
@@ -298,6 +306,27 @@ interface IOptionSeriesVault is IERC20 {
     );
     event FeesSwept(bytes32 indexed seriesId, address indexed receiver, uint256 amount);
     event PauseSet(bytes32 indexed seriesId, VaultPause indexed flag, bool paused, bytes32 reason);
+
+    // --- initialization ---
+
+    /// @notice One-time initialization of a freshly cloned vault. Writes every
+    ///         "immutable" series field, the ERC-20 name, symbol and decimals, and the
+    ///         wiring addresses. The vault is an EIP-1167 clone with no constructor, so
+    ///         this is the only place those values are ever written.
+    /// @dev Callable exactly once per clone: reverts with AlreadyInitialized on a second
+    ///      call. Callable only by the canonical factory, checked as
+    ///      msg.sender == ISeriesRegistry(registry_).factory(). The factory creates and
+    ///      initializes the clone in one transaction. The vault trusts the factory's derived
+    ///      values (collateralAsset, optionScale, uqScale, collateralPerOption, feeConfig)
+    ///      and must not accept them from anyone else. The implementation contract behind
+    ///      the clones is initialized at deployment so no third party can initialize it.
+    ///      `decimals()` must return params.optionDecimals.
+    function initialize(
+        SeriesParams calldata params,
+        address registry_,
+        address oracleRouter_,
+        address protocolConfig_
+    ) external;
 
     // --- series definition ---
 
@@ -394,7 +423,6 @@ interface IOracleRouter {
         uint256 chainlinkPrice,
         uint256 pythPrice
     );
-    event OraclePriceRejected(bytes32 indexed seriesId, OracleStatus status, string reason);
 
     /// @notice Strict settlement path. Enforces the full quorum for the series, on the
     ///         observation anchored to expiry rather than on a live read.
@@ -428,14 +456,17 @@ interface IOracleRouter {
 
 ## `IOracleAdapter`
 
-Adapters are deliberately dumb. They fetch and normalize one source and report what they found. **All policy — staleness thresholds, deviation limits, quorum — is applied by the router using the series' immutable config.** Keeping policy in one place means an adapter cannot silently change how strictly a live series is validated.
+Adapters are deliberately dumb. They fetch and normalize one source and report what they found. On the anchored `readAt` they also verify the anchor proof and that one source's own anchor window. **All cross-source and reference policy — reference staleness, Pyth confidence, deviation limits, quorum — is applied by the router using the series' immutable config.** Keeping policy in one place means an adapter cannot silently change how strictly a live series is validated.
 
 The feed identifier is passed in rather than looked up. An adapter that held its own `(base, quote) -> feed` mapping would be a second, governable source of truth, and repointing it would change the settlement oracle of an already-live series — breaking the immutability guarantee in DD-03 that the whole token model rests on.
+
+Passing the feed identifier does not make adapter replacement risk-free. A replacement adapter cannot choose a different feed id, but it can still return a false normalized price for the pinned feed if it is malicious or defective. Adapter replacement is therefore settlement-critical governance.
 
 ```solidity
 interface IOracleAdapter {
     struct PriceData {
         uint256 price;        // ALWAYS normalized to PRICE_SCALE, regardless of source decimals
+        uint256 confidence;   // PRICE_SCALE-normalized confidence interval; 0 for sources that report none
         uint64 updatedAt;     // unix seconds, as reported by the source
         uint8 sourceDecimals; // informational only; the price above is already normalized
         bool valid;           // false if the source returned unusable data
@@ -454,19 +485,25 @@ interface IOracleAdapter {
 
     function peek(address feed, bytes32 feedId) external view returns (PriceData memory);
 
-    /// @notice ANCHORED read, for settlement. Returns the first observation at or after
-    ///         `atTimestamp`, and reverts unless the proof shows it is genuinely the first.
+    /// @notice ANCHORED read, for settlement. Reverts unless the proof shows the returned
+    ///         observation is the correct one for `atTimestamp` under this source's rule:
+    ///         Chainlink returns the round IN FORCE at `atTimestamp` (last round with
+    ///         updatedAt <= atTimestamp, proven by its immediate successor); Pyth returns the
+    ///         first update with publishTime >= atTimestamp.
     /// @param atTimestamp the series expiry
-    /// @param maxLag      how far past expiry the observation may sit
-    /// @param proofData   source-specific proof; a Chainlink round id, or Pyth update data
-    /// @dev The returned PriceData.updatedAt must lie in [atTimestamp, atTimestamp + maxLag].
+    /// @param maxWindow   Chainlink: max age of the round in force, measured at atTimestamp
+    ///                    (maxChainlinkAgeAtExpiry). Pyth: max lag past atTimestamp
+    ///                    (maxPythSettlementLag).
+    /// @param proofData   source-specific proof; Chainlink round and next round ids, or Pyth update data
+    /// @dev Chainlink: returned updatedAt lies in [atTimestamp - maxWindow, atTimestamp].
+    ///      Pyth: returned publish time lies in [atTimestamp, atTimestamp + maxWindow].
     ///      An adapter must not fall back to a latest-price read if the proof fails: that
     ///      would restore the caller's ability to choose the settlement price by timing.
     function readAt(
         address feed,
         bytes32 feedId,
         uint64 atTimestamp,
-        uint32 maxLag,
+        uint32 maxWindow,
         bytes calldata proofData
     ) external payable returns (PriceData memory);
 }
@@ -526,7 +563,7 @@ interface IProtocolConfig {
     function sellerDiscountToleranceBps() external view returns (uint16);
     function buyerOverpayToleranceBps() external view returns (uint16);
 
-    // Maximum venue fees or absolute maker-side adjustment a Kuru market may charge
+    // Maximum taker fee and absolute maker-side adjustment a Kuru market may apply
     // and still be linkable.
     function maxLinkableMakerFeeBps() external view returns (uint16);
     function maxLinkableTakerFeeBps() external view returns (uint16);
@@ -553,7 +590,6 @@ Buyer price protection in V1 comes from Kuru's own limit-order parameters, which
 
 ```solidity
 interface IPremiumExecutionGuard {
-    event PremiumRouteRejected(bytes32 indexed seriesId, address indexed market, string reason);
     event RoutingPauseSet(bool paused, bytes32 reason);
 
     /// @notice Validates a prospective route. Reverts on failure so a future router
@@ -616,6 +652,7 @@ error InvalidMinOptionAmount();
 error InvalidOracleConfig();
 error DuplicateSeries(bytes32 seriesId);
 error NotFactory();
+error AlreadyInitialized();
 error NotRegistry();
 error NotKuruAdmin();
 error NotSeries();
@@ -634,9 +671,11 @@ error InsufficientShortBalance();
 error OracleInvalid();
 error OracleStale();
 error OracleDeviationTooHigh();
+error OraclePythConfidenceTooWide();
 error MissingRequiredSource();
-error SettlementAnchorInvalid();   // proof does not identify the first observation at expiry
-error SettlementAnchorTooLate();   // no qualifying observation within maxSettlementLag
+error SettlementAnchorInvalid();   // proof does not identify the correct observation at expiry
+error SettlementAnchorTooStale();  // Chainlink round in force at expiry is older than maxChainlinkAgeAtExpiry
+error SettlementAnchorTooLate();   // no Pyth update within maxPythSettlementLag
 
 // kuru and premium
 error KuruMarketInvalid();
@@ -660,4 +699,4 @@ Notes on what is deliberately absent:
 - No `NotFeeAdmin` or similar role errors. Access control uses OpenZeppelin `AccessControl`, which already reverts with `AccessControlUnauthorizedAccount`. Duplicating it produces two error shapes for one condition.
 - No `InsufficientCollateral`. Collateral transfer failure surfaces through `SafeERC20`, which reverts with the token's own error.
 - No `InvalidOptionType`. The enum makes an out-of-range value unrepresentable; Solidity reverts on an invalid enum decode.
-- `PausedAction` is custom rather than OpenZeppelin `Pausable`'s `EnforcedPause`. The vault needs four independent flags and OZ `Pausable` provides a single global one, so it is not used. See [implementation-spec.md](./implementation-spec.md).
+- `PausedAction` is custom rather than OpenZeppelin `Pausable`'s `EnforcedPause`. The vault needs independent action-specific flags and OZ `Pausable` provides a single global one, so it is not used. See [implementation-spec.md](./implementation-spec.md).

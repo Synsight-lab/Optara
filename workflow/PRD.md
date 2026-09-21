@@ -61,7 +61,7 @@ Frontends, indexers, wallets, and analytics tools use the canonical registry to 
 
 The protocol must allow creation of new option series through a canonical factory.
 
-In V1 creation is restricted to `SERIES_CREATOR_ROLE` rather than permissionless. Series name and symbol sit outside the series identifier and are permanent once set, so open creation would let anyone claim the metadata for every popular strike and expiry irreversibly. See FD-22.
+In V1 creation is restricted to `SERIES_CREATOR_ROLE` rather than permissionless. Series name, symbol, minimum size, and open-interest cap sit outside the series identifier and are permanent once set, so open creation would let anyone claim the metadata for every popular strike and expiry irreversibly. See FD-22.
 
 Required inputs:
 
@@ -73,6 +73,7 @@ Required inputs:
 - `oracleConfig`: approved oracle configuration for the underlying/quote pair, covering feeds, thresholds, and which sources are required.
 - `contractSize`: underlying raw units represented by one whole option token.
 - `optionDecimals` and `minOptionAmount`.
+- `maxTotalShortAmount`: immutable open-interest cap in option raw units; `0` means uncapped.
 - `name` and `symbol` for the option token.
 - Optional Kuru market parameters if the creator also wants to deploy the market.
 
@@ -82,7 +83,7 @@ Acceptance criteria:
 
 - Series parameters are immutable after deployment.
 - Series are registered in the canonical registry.
-- Duplicate series are either rejected or deterministically resolved to the same canonical series.
+- A repeat `createSeries` call with an identical `seriesId` and identical remaining inputs resolves to the existing series; the same `seriesId` with different `minOptionAmount`, `maxTotalShortAmount`, `name`, or `symbol` reverts with `DuplicateSeries`.
 - Expiry must be in the future at creation.
 - Strike, contract size, and precision values must be nonzero.
 - Assets and oracle configs must pass protocol validation.
@@ -154,7 +155,7 @@ Official frontends, mint-and-list helpers, routed-buy helpers, and any protocol-
 
 The range has two layers:
 
-- Hard economic bounds derived from the approved current reference price for the underlying/quote pair, strike, option type, collateral model, and maximum possible payout.
+- Hard economic bounds derived from the approved current reference price for the underlying/quote pair, strike, option type, collateral model, and conservative current-reference payout rails.
 - Market-health bounds derived from canonical Kuru order-book depth, spread, recent volume, quote age, and price impact.
 
 For V1, the hard bounds are safety rails, not a complete options pricing model:
@@ -179,7 +180,7 @@ Acceptance criteria:
 - Premium quotes shown by frontends must be labeled as market quotes, not guaranteed fair value.
 - Premium quotes must never affect collateral requirements, settlement price, redemption payout, or writer residual withdrawal.
 - Frontends should warn when a displayed premium is based on thin liquidity, wide spread, stale market data, or low recent volume.
-- Frontends should warn when the premium is above a conservative reference bound, such as the current oracle-implied maximum payout estimate, while making clear that this warning is not settlement logic.
+- Frontends should warn when the premium is above a conservative current-reference route-safety bound, while making clear that this warning is not settlement logic and not a claim that the option can never become profitable.
 
 Recommended safe-fail controls:
 
@@ -217,7 +218,7 @@ Acceptance criteria:
 
 ### Venue Fees
 
-Kuru charges its own maker and taker fees, which Optara never receives and never attempts to capture or rebate.
+Kuru charges taker fees and may apply maker-side fees or rebates, which Optara never receives and never attempts to capture or rebate.
 
 Acceptance criteria:
 
@@ -254,12 +255,12 @@ Acceptance criteria:
 
 - Settlement can only occur at or after expiry.
 - The settlement price must come from `OracleRouter`, using the series' frozen oracle configuration.
-- The settlement price must be the first oracle observation at or after expiry, proven onchain, so that it does not depend on when settlement is called.
+- The settlement price must be pinned to expiry and proven onchain, so that it does not depend on when settlement is called: for Chainlink, the round in force at expiry; for Pyth, the first update at or after expiry.
 - Settlement must produce the same price whether it is called minutes or months after expiry.
-- The oracle price must be positive, fresh for the settlement window, and valid for the underlying/quote pair.
+- The oracle price must be positive, anchored to expiry within the series' frozen anchor windows, and valid under the series' approved oracle config.
 - Once settlement succeeds, the settlement price and payout ratios are final.
 - Settlement must be idempotent. Calling settlement again must not change the result.
-- If the oracle is stale, missing, or disputed, settlement must fail safely or enter a defined recovery path.
+- If the required oracle observation is missing, too stale, too late, invalid, or disputed, settlement must fail safely or enter a defined recovery path.
 
 ### Redemption
 
@@ -306,7 +307,7 @@ The protocol must defend against:
 - Double redemption.
 - Early exercise.
 - Reentrancy through ERC-20 calls.
-- Oracle manipulation or stale oracle data.
+- Oracle manipulation, stale reference data, or missing settlement anchors.
 - Fake option series.
 - Kuru price manipulation.
 - Premium price manipulation.
@@ -346,7 +347,7 @@ Security requirements:
 | Undercollateralization | Writer mints more options than collateral can cover. | Require full collateral before minting. Use formulas in [math-of-core-invariants.md](./math-of-core-invariants.md). |
 | Double redemption | Holder claims payout multiple times. | Burn or mark redeemed amount before transfer. |
 | Oracle manipulation | Expiry price is manipulated. | Chainlink/Pyth quorum, deviation checks, expiry-anchored observation, fail-closed settlement, and the FD-20 recovery decision. |
-| Settlement timing | Caller picks a favorable post-expiry moment to settle. | Price anchored to the first observation at or after expiry and proven onchain, so the result is identical whenever settlement is called. |
+| Settlement timing | Caller picks a favorable post-expiry moment to settle. | Price anchored to expiry (Chainlink round in force at expiry, Pyth first update at or after expiry) and proven onchain, so the result is identical whenever settlement is called. |
 | Kuru price manipulation | Wash trades create fake option prices. | Never use Kuru prices for settlement or collateral. |
 | Premium price manipulation | Thin liquidity, spoofing, wash trades, or unrealistic writer asks make the option premium look fair or force a bad execution route. | Use buyer-specified max premium, acceptable premium ranges, hard economic bounds, slippage limits, deadlines, depth checks, spread checks, stale-quote checks, and fail-closed routing. |
 | Fake series | Malicious token mimics official option symbol. | Canonical factory and registry checks. |

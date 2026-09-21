@@ -64,7 +64,7 @@ Security requirements:
 - Reject fee rates above the hard caps.
 - Accept only `CreateSeriesParams`; derive or snapshot everything else.
 - Enforce deterministic identity for a series.
-- Prevent duplicate canonical series unless the duplicate resolves to the existing series.
+- Prevent duplicate canonical series: an exact repeat resolves to the existing series, and a conflicting repeat reverts with `DuplicateSeries`.
 
 ### `SeriesRegistry`
 
@@ -118,8 +118,8 @@ Responsibilities:
 - Read the series' immutable `OracleConfig` from `SeriesRegistry` using `seriesId`.
 - Use Chainlink as primary when configured and available for the pair.
 - Use Pyth as secondary/corroborator when configured and available for the pair.
-- Apply all freshness, deviation, and quorum policy.
-- Reject zero, negative, stale, or incomplete prices.
+- Apply all reference freshness, settlement anchoring, deviation, and quorum policy.
+- Reject zero, negative, stale reference, missing-anchor, too-late-anchor, or incomplete prices.
 - Forward only the required pull-oracle fee and refund the remainder.
 
 Security requirements:
@@ -128,6 +128,7 @@ Security requirements:
 - The router must never accept a caller-supplied `OracleConfig`. A config passed as an argument is a config any caller can weaken, and nothing would bind it to the series it claims to describe.
 - Chainlink/Pyth deviation must be checked when both are configured.
 - Settlement must fail safely if the oracle cannot provide a valid price.
+- Adapter replacement is settlement-critical governance. A replacement cannot change the feed ids frozen into a series, but it can still return an arbitrary price for those ids if malicious or defective.
 
 ### `ChainlinkOracleAdapter` and `PythOracleAdapter`
 
@@ -138,12 +139,14 @@ Responsibilities:
 - Fetch one source, using the feed identifier passed in from the series' immutable config.
 - Normalize the price to `PRICE_SCALE` regardless of source decimals.
 - Report the source's `updatedAt` and whether the data is structurally usable.
+- On the anchored settlement read, verify the anchor proof and that source's own anchor window (Chainlink: the round in force at expiry and `maxChainlinkAgeAtExpiry`; Pyth: the first update at or after expiry and `maxPythSettlementLag`).
 
 Security requirements:
 
 - An adapter must not hold its own `(base, quote) -> feed` mapping. That would be a second, governable source of truth, and repointing it would change the settlement oracle of an already-live series.
-- An adapter must not apply staleness, deviation, or quorum policy. Policy in one place can be audited once; policy spread across three adapters can drift.
+- An adapter must not apply reference staleness, Pyth confidence, deviation, or quorum policy. Policy in one place can be audited once; policy spread across three adapters can drift.
 - Pair identity is bound at series creation through the approved oracle config, not re-checked at settlement. See [oracle-spec.md](./oracle-spec.md).
+- Adapter code itself is trusted to faithfully query and normalize the pinned feed. Replacing adapter code is therefore a trust assumption, not a harmless implementation detail.
 
 ### `KuruMarketAdapter`
 
@@ -153,7 +156,7 @@ Responsibilities:
 
 - Compute or deploy the Kuru market for `optionToken / quoteAsset`.
 - Store the resulting market address in the registry.
-- Validate Kuru parameters such as size precision, price precision, tick size, minimum size, maximum size, maker fee, taker fee, and AMM spread.
+- Validate Kuru parameters such as size precision, price precision, tick size, minimum size, maximum size, maker-side adjustment, taker fee, and AMM spread.
 
 Security requirements:
 
@@ -199,7 +202,7 @@ quoteAsset            ERC-20
 collateralAsset       underlying for calls, quote for puts
 strikePrice           PRICE_SCALE quote per 1 whole underlying
 expiry                timestamp
-oracleConfig          Chainlink feed, Pyth feed id, thresholds, settlement lag
+oracleConfig          Chainlink feed, Pyth feed id, thresholds, expiry-anchor windows
 contractSize          underlying raw units per whole option
 optionTokenDecimals
 optionScale           10 ** optionTokenDecimals
@@ -256,7 +259,8 @@ Long token holders burn option tokens to receive payout. Writers claim residual 
 
 ```text
 User or keeper
-    finds the first oracle observation at or after expiry, builds a SettlementProof
+    finds the Chainlink round in force at expiry and its successor, plus the Pyth update
+    at or after expiry, and builds a SettlementProof
     calls settle(proof)
         OptionSeriesVault checks expiry and that settlement is not paused
         OptionSeriesVault asks OracleRouter for the price, passing seriesId and proof
@@ -270,7 +274,7 @@ User or keeper
         OptionSeriesVault refunds unused native token, emits SeriesSettled
 ```
 
-The proof is what makes the settlement price the **expiry** price rather than the price at the moment someone chose to call. Settling early and settling much later return the same result.
+The proof is what makes the settlement price the **expiry** price rather than the price at the moment someone chose to call. Settling early and settling much later return the same result. Settlement can only begin once Chainlink has published the round after expiry that proves which round was in force, a delay of at most about one heartbeat.
 
 Settlement must not:
 
@@ -334,11 +338,13 @@ required inputs:
     deadline
     recipient
 
-safe-fail behavior:
-    if route cannot satisfy buyer limits, revert
-    if market is not canonical, revert
-    if writer ask is outside acceptable premium range, revert or require manual limit-order UX
-    if quote is stale or market safety checks fail, revert
+safe-fail behavior (V1: the official frontend refuses to submit; Kuru itself reverts on verified price/output Layer 1 limits;
+a future protocol-owned router would revert atomically on all of these):
+    if route cannot satisfy buyer limits, do not submit / Kuru reverts
+    if deadline has passed, do not submit; rely on Kuru onchain expiry only if FD-17 verifies it
+    if market is not canonical, refuse the simplified route
+    if writer ask is outside acceptable premium range, refuse and require manual limit-order UX
+    if quote is stale or market safety checks fail, refuse the simplified route
 ```
 
 Manipulated Kuru prices can make the displayed premium misleading, but they must not create a protocol loss. They also must not cause an automated buyer route to fill beyond the buyer's explicit limits or against an ask that fails the acceptable-range checks.
@@ -391,7 +397,7 @@ accruedFees    a separate balance; sweeping it can never reach collateralLocked
 
 Fee rates are snapshotted into each series at creation and are immutable for that series' life, so governance cannot change the economics of a position after a user has entered it. Compile-time caps bound what governance can set even for new series.
 
-Kuru's own maker and taker fees are a separate system that Optara never receives. They must still appear in every premium bound and user-facing quote, because a buyer's real cost is the premium plus the venue fee. See [fee-spec.md](./fee-spec.md).
+Kuru's own taker fees, maker-side adjustments, and AMM spread are a separate system that Optara never receives. They must still appear in every premium bound and user-facing quote, because a user's real trade economics include venue costs and adjustments. See [fee-spec.md](./fee-spec.md).
 
 ### Canonical Identity
 
@@ -413,7 +419,6 @@ Minimum event set:
 SeriesCreated(seriesId, series, optionType, underlying, quote, strike, expiry)
 KuruMarketLinked(seriesId, market, baseAsset, quoteAsset)
 OptionsMinted(seriesId, writer, receiver, amount, collateralAmount, feeAmount)
-PremiumRouteRejected(seriesId, market, reason)
 SeriesSettled(seriesId, settlementPrice, buyerPayoutRate, writerResidualRate)
 OptionsRedeemed(seriesId, holder, receiver, optionAmount, payoutAmount, feeAmount)
 WriterResidualClaimed(seriesId, writer, receiver, shortAmount, residualAmount)

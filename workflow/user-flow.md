@@ -121,15 +121,15 @@ Security checks:
 4. Frontend shows current executable premium, acceptable range, spread, liquidity depth, price impact, and quote age.
 5. Buyer submits a maximum total all-in cost, a minimum option amount out, and a deadline.
 6. Route checks canonical market, acceptable range, buyer limits, quote age, spread, depth, and price impact.
-7. If every check passes, the route executes the Kuru trade.
-8. If any check fails, the route reverts and no purchase occurs.
+7. If every check passes and the deadline has not passed, the frontend submits the Kuru trade with Kuru-native limit price and minimum output. Kuru-native deadline protection is used only if FD-17 verifies support for the exact order type.
+8. If Layer 1 buyer limits fail, the Kuru transaction reverts. If Layer 2 acceptable-range or market-health checks fail, the official UI refuses the simplified route before submission.
 
 User-facing result:
 
 - Buyer decides the maximum total cost they are willing to pay, fees included.
 - Collateral owner can specify an ask, but cannot force an out-of-range premium through official routes.
 - Unsafe market conditions fail closed.
-- The hard price bound comes from Kuru's own limit-order parameters. Optara's range checks are enforced by the official frontend and do not bind a user trading directly against Kuru.
+- The hard buyer execution limit comes from Kuru's own limit-order parameters. Optara's acceptable-range checks are enforced by the official frontend and do not bind a user trading directly against Kuru.
 
 Security checks:
 
@@ -175,7 +175,7 @@ Security checks:
 
 ## Flow 7: Settlement
 
-1. Keeper or any user assembles a `SettlementProof` identifying the first oracle observation at or after expiry.
+1. Keeper or any user waits until Chainlink has published a round after expiry, then assembles a `SettlementProof` naming the Chainlink round in force at expiry and its immediate successor, plus the Pyth update at or after expiry.
 2. They call `settle(proof)`, sending enough native token to cover any Pyth update fee.
 3. Vault checks that expiry has passed and that settlement is not paused.
 4. Vault asks `OracleRouter` for the settlement price, passing only `seriesId` and the proof.
@@ -196,7 +196,7 @@ Security checks:
 - Settlement cannot be called twice with different prices.
 - Invalid oracle data does not finalize the series.
 - The settlement price is the expiry price, not the price when settle happened to be called. Settling minutes after expiry and settling months after produce the same result, so no one gains by waiting for a favorable move.
-- A proof naming a later, more favorable observation is rejected.
+- A proof naming any round other than the one in force at expiry is rejected.
 
 ## Flow 8: Buyer Redeems
 
@@ -237,10 +237,10 @@ Security checks:
 - Writer cannot claim more short amount than recorded.
 - Buyer payout remains protected.
 
-## Flow 10: Oracle Failure or Stale Price
+## Flow 10: Oracle Failure or Missing Anchor
 
 1. Keeper calls `settle()`.
-2. Oracle adapter rejects the price because it is stale, zero, wrong-pair, incomplete, or otherwise invalid.
+2. Oracle adapter or router rejects the proof because the required anchored observation is missing, too stale, too late, zero, incomplete, or otherwise invalid.
 3. Settlement reverts or enters a predefined unresolved state.
 
 User-facing result:

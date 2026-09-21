@@ -84,7 +84,7 @@ Rounding: **down**, toward the user. Total outflow from `collateralLocked` equal
 
 Out-of-the-money redemptions produce `grossPayout == 0` and therefore charge no fee. Only profitable exercises pay.
 
-Because this fee reduces what a holder can ever realize, it also tightens the buyer-side premium ceiling: `hardMaxPremium` is computed net of `exerciseFeeBps`, so a rail is never set above a price that is provably unprofitable. See [premium-pricing-spec.md](./premium-pricing-spec.md). The seller-side floor is unaffected, since the writer never pays this fee.
+Because this fee reduces a holder's redemption proceeds, it also tightens the buyer-side route-safety ceiling: `hardMaxPremium` is computed net of `exerciseFeeBps`, so the official simplified route does not use a gross payout bound that ignores known protocol fees. This is a conservative current-reference rail, not a proof that the option cannot ever become profitable. See [premium-pricing-spec.md](./premium-pricing-spec.md). The seller-side floor is unaffected, since the writer never pays this fee.
 
 ### Writer Residual Is Not Fee-Bearing
 
@@ -168,7 +168,7 @@ This invariant exists so fee logic can be proven not to perturb the core math. I
 
 ## Kuru Venue Fees
 
-Kuru charges its own maker and taker fees. Optara receives none of this, but every premium bound, route check, and UI quote must account for it, or the buyer's stated limit will not be the buyer's actual cost.
+Kuru charges taker fees and may apply maker-side fees or rebates. Optara receives none of this venue value, but every premium bound, route check, and UI quote must account for it, or the buyer's stated limit will not be the buyer's actual cost.
 
 `KuruMarketConfig` already records `makerFeeBps`, `takerFeeBps`, and `kuruAmmSpread`. See [contract-interfaces.md](./contract-interfaces.md).
 
@@ -178,9 +178,11 @@ A buyer taking liquidity pays the premium plus Kuru's taker fee:
 
 ```text
 grossPremium = sum(fillSize_i * fillPrice_i)
-kuruTakerFee = floor(grossPremium * takerFeeBps / BPS_SCALE)
+kuruTakerFee = ceilDiv(grossPremium * takerFeeBps, BPS_SCALE)
 allInCost    = grossPremium + kuruTakerFee
 ```
+
+The estimated taker fee rounds **up**. It is a cost bound compared against a buyer's limit, so it follows the rule used everywhere in the premium rails: round in the direction that tightens the check. The amount Kuru actually charges is whatever Kuru charges; this is the estimate the rails use.
 
 ### Seller Proceeds
 
@@ -188,13 +190,15 @@ Kuru's maker-side adjustment may be either a fee or a rebate, depending on the d
 
 ```text
 grossPremium          = sum(fillSize_i * fillPrice_i)
-kuruMakerAdjustment   = floor(grossPremium * makerFeeBps / BPS_SCALE)
-
 if makerFeeIsRebate:
-    netProceeds = grossPremium + kuruMakerAdjustment
+    kuruMakerAdjustment = floor(grossPremium * makerFeeBps / BPS_SCALE)    // round the rebate DOWN
+    netProceeds         = grossPremium + kuruMakerAdjustment
 else:
-    netProceeds = grossPremium - kuruMakerAdjustment
+    kuruMakerAdjustment = ceilDiv(grossPremium * makerFeeBps, BPS_SCALE)   // round the fee UP
+    netProceeds         = grossPremium - kuruMakerAdjustment
 ```
+
+Both branches round toward a lower `netProceeds`, so the seller floor check can only get stricter.
 
 Until verified, seller-protection checks must use the conservative assumption that the maker-side adjustment is a fee, not a rebate.
 
@@ -261,5 +265,5 @@ See [founder-decisions.md](./founder-decisions.md):
 
 - FD-06: launch values for the mint and exercise fee rates.
 - FD-06a: fee recipient address.
-- FD-06b: whether fee accrual is per-vault or swept to a central collector.
+- FD-06b: sweep cadence for per-vault accrued fees.
 - FD-17: Kuru fee/rebate/spread convention verification and maximum acceptable venue cost for a linkable market.
