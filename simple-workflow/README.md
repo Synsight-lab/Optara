@@ -20,12 +20,13 @@ Trading changes who owns an option token. It never changes how much collateral t
 5. [testing.md](./testing.md): required tests, invariants, fuzz targets.
 6. [security-and-launch.md](./security-and-launch.md): threats, founder decisions, deployment order, launch checklist.
 
-## Contracts (three)
+## Contracts (four)
 
 | Contract | Job |
 |---|---|
 | `OptionSeriesFactory` | Lets anyone create a series within fixed limits, is the canonical registry, holds the two roles, allowlisted assets, the approved feed for each pair, default fees and the fee recipient. |
 | `OptionSeriesVault` | One per series. It is the option ERC-20 and holds the collateral. Mint, settle, redeem, claim, sweep fees, plus an optional keeper batch payout (`payout`). |
+| `VaultDeployer` | Holds the vault's creation code so the factory stays under the contract size limit. Only the factory can use it. |
 | `PremiumExecutionGuard` | Read-only helper that checks a proposed buy or sell against oracle-based bounds and buyer limits. |
 
 Plus two small libraries: `OptionMath` (rounding and rate formulas) and `ChainlinkAnchor` (proof verification and reference reads).
@@ -73,6 +74,10 @@ These were in the larger design and are not needed for a safe V1:
 5. `PremiumExecutionGuard`.
 6. Invariant and fuzz tests.
 7. Frontend and keeper (see `premium-guard.md` and the keeper procedure in `security-and-launch.md`).
+
+## Implementation
+
+The contracts are in [`../contracts/`](../contracts/README.md): 262 tests (unit, fuzz, invariant, reentrancy, multi-writer), all passing, plus deployment scripts and a local rehearsal of the whole runbook. They are not audited and not deployed.
 
 ## Pointers
 

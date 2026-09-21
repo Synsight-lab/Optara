@@ -194,11 +194,11 @@ seriesId = keccak256(abi.encode(
 | `maxTotalShortAmount` | `maxShortAmountOf[underlying]`, snapshotted |
 | `maxChainlinkAgeAtExpiry` | `pairConfig.maxChainlinkAgeAtExpiry`, snapshotted |
 | fee rates | copy of `defaultFeeConfig`, snapshotted |
-| `name` / `symbol` | `"Optara Option #N"` / `"OPT-N"`, where `N = ++seriesCount` |
+| `name` / `symbol` | `"Optara WMON/USDC Call #N"` / `"OPT-WMON-USDC-C-N"` (`Put` and `P` for puts), where `N = ++seriesCount` and the pair is read from the two tokens' own `symbol()` |
 
-Names are generic on purpose. Nothing a user types ends up in token metadata, so there is nothing to squat or fake. Frontends show a series' real details from `seriesInfo()`, never from the name.
+The name always carries the **real pair**, the option type and a running number. The pair comes from the two tokens' own `symbol()` (tokens `ADMIN` vetted when it allowlisted them), never from anything a user supplies, so there is nothing to squat or fake. If a token has no readable `symbol()`, the name uses `?` instead of guessing and creation still works. Strike and expiry are deliberately not in the name (formatting prices and dates on chain is costly and error-prone): frontends read them from `seriesInfo()` and must never rely on the name for anything but a label.
 
-The factory then does `new OptionSeriesVault(...)` with a `SeriesConfig`, the `seriesId`, its own address and the fee copy, stores both mappings, and emits `SeriesCreated`. The vault derives everything else itself.
+The factory then calls `deployer.deploy(...)` with a `SeriesConfig`, the `seriesId` and the fee copy, stores both mappings, and emits `SeriesCreated`. The vault derives everything else itself.
 
 **Why this stays safe without a trusted creator.**
 
@@ -224,9 +224,23 @@ Stores an optional pointer from a `seriesId` to its official Kuru market. It is 
 
 Because series are now permissionless, `ADMIN` should set this only for series that have a market worth linking. The pointer is convenience, never required.
 
-### Size
+### `VaultDeployer` and contract size
 
-The factory embeds the vault's creation code. Check the deployed factory against the chain's contract size limit before deployment. If it is too large, move `new OptionSeriesVault` into a small separate `VaultDeployer` contract that only the factory may call.
+The vault's creation code is about 16 KB. Embedding it in the factory pushed the factory past the 24,576-byte contract size limit (25,039 bytes), so vaults are deployed through a small separate contract, `VaultDeployer`, that holds the creation code. Measured sizes: factory 9,133 bytes, vault 12,179 bytes, deployer 17,581 bytes, guard 5,092 bytes.
+
+```solidity
+contract VaultDeployer {
+    address public factory;
+    function bind() external;                                            // first caller becomes the factory, once
+    function deploy(bytes32 seriesId, SeriesConfig calldata c, FeeConfig calldata fees)
+        external returns (address vault);                                // only the bound factory
+}
+```
+
+- The factory's constructor takes `(admin, deployer)`. It calls `deployer.bind()` and then checks `deployer.factory() == address(this)`. If anyone binds the deployer first, the factory deployment reverts (`AlreadyBound`) instead of silently using a deployer someone else controls.
+- `deploy` reverts with `Unauthorized` for any caller other than the bound factory. The deployer holds no funds and no other state.
+- The vault is constructed with the **factory** address, not the deployer's, so roles and the fee recipient are read from the factory.
+- `createSeries` is `nonReentrant`: it makes external calls while the vault is constructed, so a hostile token or feed cannot re-enter before the registry is written.
 
 ## `OptionSeriesVault`
 
@@ -250,7 +264,7 @@ It derives and stores as `immutable`:
 - `feedDecimals` (from `chainlinkFeed.decimals()`).
 - `mintFeeBps`, `exerciseFeeBps`.
 
-It reverts if `requiredCollateral(minOptionAmount) == 0` (`InvalidMinOptionAmount`), if `uqScale == 0`, or if any input is invalid. `decimals()` is overridden to return `optionDecimals`.
+It reverts if any input is invalid. The check `requiredCollateral(minOptionAmount) == 0` (`InvalidMinOptionAmount`) is purely defensive: `requiredCollateral` rounds **up** and every input is nonzero, so it is always at least one unit and a tiny strike cannot make it zero. `decimals()` is overridden to return `optionDecimals`.
 
 Because vaults are plain deployments, every series parameter is an `immutable` and there is no initializer and no setter.
 
@@ -401,7 +415,7 @@ function payout(address[] calldata accounts) external;            // anyone, aft
 function payAccount(address account) external;                    // only callable by the vault itself
 ```
 
-`payout` reverts with `NotSettled` before settlement. For each account it does `try this.payAccount(account) {} catch {}`. `payAccount` is `nonReentrant`, reverts with `Unauthorized` unless `msg.sender == address(this)`, and does the following:
+`payout` reverts with `NotSettled` before settlement. For each account it first checks `gasleft() >= PAYOUT_MIN_GAS` (250,000) and otherwise **reverts with `InsufficientGas`**, then does `try this.payAccount(account) {} catch {}`. `payAccount` is `nonReentrant`, reverts with `Unauthorized` unless `msg.sender == address(this)`, and does the following:
 
 1. If `account == address(0)` or `account.code.length > 0`, do nothing (see below).
 2. If `balanceOf(account) > 0`, redeem the **entire** balance to `account`, exactly as `redeem(balance, account)` would, including the exercise fee, accounting and `OptionsRedeemed` event.
@@ -411,6 +425,7 @@ An account that is both a holder and a writer gets both. An account owed nothing
 
 Design points:
 
+- **Too little gas fails loudly, never silently.** Each account runs inside a `try/catch`, so an account starved of gas would otherwise be skipped without any error, and gas estimators (which look for the smallest limit at which the outer call survives) would pick a limit too low to pay everyone. This was found while rehearsing on a local chain: `cast send` estimated a limit that paid Bob and silently skipped Alice. The gas floor makes the call revert until enough gas is supplied. A test sweeps gas limits and asserts there is no level at which the call succeeds yet leaves an account unpaid.
 - **Everyone in one call, and never blocking.** Each account runs in its own guarded self-call inside `try/catch`, so one that fails is skipped and rolled back and the rest still pay. Allowlisted tokens have no transfer hooks, so a recipient cannot run code or burn gas. The only thing that can fail an account is the token itself, for example a blacklisted USDC address.
 - **The keeper supplies the list, the vault supplies the amounts.** The contract cannot enumerate holders, so the keeper builds the list off chain from `Transfer` and `OptionsMinted` events. Balances and short positions are read live inside the call. No opt-in and no amounts are passed in.
 - **Payouts always go to the account, never to the caller.** Full balance only, so nobody can burn a holder's value by redeeming tiny chunks that round to zero.
@@ -468,6 +483,8 @@ Preview functions use the exact formulas of the real functions.
 
 ### Events
 
+The factory also emits `AssetAllowed`, `MaxShortAmountSet`, `DefaultFeeConfigSet` and `FeeRecipientSet` when ADMIN changes those settings.
+
 ```solidity
 event SeriesCreated(bytes32 indexed seriesId, address indexed vault, address indexed creator,
                     OptionType optionType, address underlying, address quote,
@@ -515,6 +532,11 @@ error NotSettled();
 error AmountTooSmall();
 error OpenInterestCapExceeded();
 error NoFeesAccrued();
+error InsufficientGas();
+error InsufficientShortBalance();
+error InvalidContractSize();
+error InvalidGuardParam();
+error AlreadyBound();
 
 error OracleInvalid();
 error SettlementAnchorInvalid();

@@ -66,7 +66,8 @@ enum Reason {
     EMPTY_RANGE,
     ABOVE_BUYER_LIMIT,
     ABOVE_HARD_MAX,
-    BELOW_ACCEPTABLE_MIN
+    BELOW_ACCEPTABLE_MIN,
+    ZERO_AMOUNT
 }
 
 struct BuyCheck {

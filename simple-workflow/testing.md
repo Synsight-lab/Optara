@@ -29,8 +29,8 @@ Then vectors for these cases:
 - Reverts for: zero address, same underlying and quote, non-allowlisted asset, decimals above 18, creation paused (`CreationPaused`), zero strike, strike not a multiple of `strikeStep`, expiry less than an hour away, expiry more than 30 days away, expiry not on the 08:00 UTC slot, and a fee above its cap.
 - **Feed check.** A feed that is not exactly the approved feed for the pair reverts (`FeedNotApproved`), including a real Chainlink feed for a different pair. A disabled pair (feed set to zero) reverts. A user cannot influence `maxChainlinkAgeAtExpiry`.
 - **Fixed parameters.** The vault's `contractSize` is `10 ** underlyingDecimals`, `optionDecimals` is 18, `minOptionAmount` is `MIN_OPTION_AMOUNT`, `maxTotalShortAmount` equals the underlying's cap at creation, and `maxChainlinkAgeAtExpiry` equals the pair's value at creation.
-- **Generated names.** `name` is "Optara Option #N" and `symbol` is "OPT-N" with `N` increasing by one per series, and no user input reaches either.
-- A tiny strike that makes `requiredCollateral(minOptionAmount)` zero reverts with `InvalidMinOptionAmount`.
+- **Generated names.** `name` is "Optara WMON/USDC Call #N" and `symbol` is "OPT-WMON-USDC-C-N" (Put and P for puts) with `N` increasing by one per series. The pair is always the pair of the actual assets, read from them. A token with no `symbol()` yields `?` and creation still works. No user input reaches either.
+- The smallest mintable position always needs at least one unit of collateral, because `requiredCollateral` rounds up. (`InvalidMinOptionAmount` is a defensive check only.)
 - `setPairConfig` is `ADMIN` only. It rejects an unallowlisted asset, an unreadable or above-18 feed decimals, a non-positive latest answer, a zero age and a zero strike step. It affects only series created afterward, and existing series keep their old feed and age.
 - `setMaxShortAmount` and `setDefaultFeeConfig` are `ADMIN` only and affect only series created afterward.
 - `seriesIdOf(vault)` and `vaultOf(seriesId)` are exact inverses. `computeSeriesId` matches the id `createSeries` assigns.
@@ -87,6 +87,19 @@ Then vectors for these cases:
 - Claim before settlement reverts. Claim more than the short balance reverts. Claiming twice fails.
 - Payout and residual match `math.md`. Buyer payout stays solvent after writers claim, in any order.
 - Re-entering tokens cannot double redeem or double claim.
+
+## Multiple Writers
+
+Several writers can mint into the same series and their collateral is pooled in one vault. Each writer's claim is capped by their own `writerShortBalance`, and the entitlement is a per-option rate fixed at settlement, so writers cannot affect each other. The tests try every route a malicious writer might use:
+
+- Claiming more than their own short (one wei more, another writer's amount, everyone's amount, `type(uint256).max`) reverts with `InsufficientShortBalance`. Claiming twice reverts.
+- Naming another writer as the `receiver` spends the caller's own short and pays that address: no gain, and the other writer's short is untouched.
+- `payout` pays each account to that account and cannot route one writer's residual to another, even if the attacker lists himself twice. `payAccount` cannot be called directly.
+- Being a writer gives no claim on the buyers' payout: a writer who holds no tokens cannot redeem.
+- A writer cannot claim before settlement, so no collateral can be pulled out early.
+- **A huge late mint changes nothing for anyone else.** Two identical vaults, one with a large last-second mint by an attacker: the rates, and every other writer's and holder's amounts, are identical.
+- The order in which writers and holders claim never changes any amount.
+- **Fuzz:** four writers with random sizes, a random price, calls and puts, random claim order, and an attacker trying to over-claim. Each honest writer receives exactly `floor(short * rate / scale)` and the holders are still fully paid afterward.
 
 ## Keeper Payout
 
