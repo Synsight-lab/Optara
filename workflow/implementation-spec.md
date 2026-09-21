@@ -505,7 +505,7 @@ The allowlist check must therefore be treated as a security-critical control rat
 function settle(SettlementProof calldata proof) external payable returns (uint256 settlementPrice);
 ```
 
-`proof` identifies the oracle observation at expiry. Its `pythUpdateData` may be empty if the series does not use Pyth; its `chainlinkRoundId` is ignored if the series does not use Chainlink.
+`proof` identifies the oracle observation at expiry. Its `pythUpdateData` may be empty if the series does not use Pyth; its Chainlink round ids are ignored if the series does not use Chainlink. When Chainlink is used, the proof includes both the candidate round and the explicit preceding round, because Chainlink proxy round ids can cross phase boundaries and the previous round must not be derived as `roundId - 1`.
 
 Settlement is anchored to that observation rather than to a live read, so the price does not depend on when `settle()` is called. [oracle-spec.md](./oracle-spec.md) explains why a live read is unsafe here; DD-22 records the decision and the rejected alternative.
 
@@ -691,7 +691,7 @@ Do not let an AI agent silently choose these:
 - Whether single-oracle series are allowed when only Chainlink or only Pyth exists.
 - Exact oracle deviation thresholds.
 - Exact stale-price thresholds.
-- Launch fee rates for mint, exercise, and residual fees.
+- Launch fee rates for mint and exercise fees.
 - Fee recipient address.
 - Emergency multisig addresses.
 - Governance/timelock model.
@@ -699,8 +699,6 @@ Do not let an AI agent silently choose these:
 - Default Kuru market precision parameters per asset.
 - Maximum acceptable Kuru venue fee for a market to be linkable.
 - Prolonged oracle outage recovery process.
-- Whether swept dust is protocol revenue or returned pro-rata.
 - Final `MIN_EXPIRY_DELAY` and `MAX_EXPIRY_DELAY` values.
 
 Protocol fees themselves are now **in scope for V1** by founder direction. What remains open is the rate values, not whether fees exist. See [fee-spec.md](./fee-spec.md) and FD-06.
-

@@ -83,8 +83,9 @@ struct OracleConfig {
 /// @notice Identifies the oracle observation at expiry. Settlement is anchored to it
 ///         so that the price does not depend on when settle() happens to be called.
 struct SettlementProof {
-    uint80 chainlinkRoundId;  // the FIRST round with updatedAt >= expiry
-    bytes pythUpdateData;     // Pyth update(s) bracketing expiry
+    uint80 chainlinkRoundId;          // the FIRST round with updatedAt >= expiry
+    uint80 chainlinkPreviousRoundId;  // immediate predecessor; never derive as roundId - 1
+    bytes pythUpdateData;             // Pyth update(s) bracketing expiry
 }
 
 struct FeeConfig {
@@ -153,7 +154,8 @@ struct KuruMarketConfig {
     uint96 minSize;
     uint96 maxSize;
     uint16 takerFeeBps;      // bps, venue fee paid to Kuru
-    uint16 makerFeeBps;      // bps, venue fee paid to Kuru
+    uint16 makerFeeBps;      // bps, maker-side adjustment
+    bool makerFeeIsRebate;   // false = fee reduces proceeds; true = rebate increases proceeds
     uint96 kuruAmmSpread;
     uint64 linkedAt;         // unix seconds
     address linkedBy;
@@ -162,6 +164,7 @@ struct KuruMarketConfig {
 /// @dev Field types for sizePrecision, pricePrecision, tickSize, minSize, maxSize
 ///      and kuruAmmSpread are provisional. Confirm the widths and semantics against
 ///      the deployed Kuru contracts before implementation; see FD-14 and FD-17.
+///      Confirm especially whether Kuru's maker-side value is a fee or rebate.
 
 struct PremiumCheckParams {
     bytes32 seriesId;
@@ -182,7 +185,7 @@ struct PremiumCheckResult {
     uint256 acceptableMaxPremium;    // quote raw units, TOTAL
     uint256 estimatedGrossPremium;   // quote raw units, TOTAL, before venue fees
     uint256 estimatedKuruTakerFee;   // quote raw units, TOTAL
-    uint256 estimatedAllInCost;      // quote raw units, TOTAL: gross + venue fee + route fee
+    uint256 estimatedAllInCost;      // quote raw units, TOTAL: gross + Kuru venue fee
     uint256 estimatedPriceImpactBps; // bps
     uint256 estimatedSpreadBps;      // bps
     string reason;                   // empty when valid
@@ -333,7 +336,7 @@ interface IOptionSeriesVault is IERC20 {
         external
         returns (uint256 residualAmount);
 
-    // --- fee and dust ---
+    // --- fees ---
 
     /// @dev FEE_ADMIN_ROLE only. Sends to ProtocolConfig.feeRecipient(), read live.
     ///      Deliberately takes no receiver; see implementation-spec.md.
@@ -523,7 +526,8 @@ interface IProtocolConfig {
     function sellerDiscountToleranceBps() external view returns (uint16);
     function buyerOverpayToleranceBps() external view returns (uint16);
 
-    // Maximum venue fees a Kuru market may charge and still be linkable.
+    // Maximum venue fees or absolute maker-side adjustment a Kuru market may charge
+    // and still be linkable.
     function maxLinkableMakerFeeBps() external view returns (uint16);
     function maxLinkableTakerFeeBps() external view returns (uint16);
 
@@ -641,10 +645,9 @@ error PremiumOutOfRange();
 error BuyerLimitExceeded();
 error DeadlineExpired();
 
-// fees and dust
+// fees
 error FeeExceedsCap();
 error NoFeesAccrued();
-error SeriesNotWoundDown();
 
 // pause
 error PausedAction(VaultPause flag);

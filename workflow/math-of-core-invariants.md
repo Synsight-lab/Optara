@@ -794,7 +794,7 @@ The oracle adapter should reject `S == 0` as invalid.
 
 Dust arises from token decimals, price decimals, fixed-point division, flooring claims, and ceiling collateral. It is bounded by roughly one unit of the collateral asset per claim transaction, so it is an accounting concern rather than an economic one.
 
-The V1 policy is defined in Invariant 5A above: dust stays in the vault and is sweepable by governance only once `totalSupply == 0` and `totalUnclaimedShortAmount == 0`. Vector 3 in the worked test vectors demonstrates a 1 wei dust case end to end.
+The V1 policy is defined in Invariant 5A above: dust stays in the vault permanently. There is no governance dust sweep and no user-facing dust claim. Vector 3 in the worked test vectors demonstrates a 1 wei dust case end to end.
 
 ## Required Test Categories
 

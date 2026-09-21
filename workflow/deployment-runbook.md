@@ -59,7 +59,7 @@ For each launch pair:
 10. Claim writer residual.
 11. Verify accounting invariants, including `vaultBalance >= collateralLocked + accruedFees`.
 12. Sweep fees and confirm collateral is untouched.
-13. Confirm the observed Kuru taker-fee convention against FD-17 and record the result.
+13. Confirm the observed Kuru taker-fee convention, maker fee or rebate convention, and AMM-spread behavior against FD-17 and record the result.
 14. Test oracle failure behavior.
 15. Test Kuru unavailable behavior.
 
@@ -154,4 +154,3 @@ If issue found during redemption:
 - Timelock duration.
 - Bug bounty provider and size.
 - Whether launch is guarded beta or open.
-

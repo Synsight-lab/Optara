@@ -97,6 +97,8 @@ Settlement anchoring, the highest-value group here:
 - A proof naming a round *after* the first qualifying round reverts with `SettlementAnchorInvalid`.
 - A proof naming a round *before* expiry reverts.
 - A proof whose preceding round also post-dates expiry reverts, since it is not the first.
+- A proof whose supplied predecessor skips an intervening Chainlink round reverts, even if that supplied predecessor predates expiry.
+- A Chainlink proof crossing a proxy phase boundary succeeds when the explicit predecessor is correct, and fails if the implementation tries to derive the predecessor as `roundId - 1`.
 - No observation inside `expiry + maxSettlementLag` reverts with `SettlementAnchorTooLate`, and the series stays `ACTIVE`.
 - A feed that goes dark across expiry and resumes after the lag window cannot be settled, confirming the FD-20 path is reachable.
 - Chainlink and Pyth legs are anchored to the same window; a live Pyth read paired with an anchored Chainlink read must not pass.
@@ -137,7 +139,7 @@ Test:
 - **Buyer limit binds on `allInCost`, not `grossPremium`**: a quote whose gross premium is under the limit but whose fee-inclusive cost is over must fail.
 - **Bounds are compared as totals**: for an option amount well above one whole option, a route whose per-option cost is below the bound but whose total is above it must fail. This is the regression test for the total-versus-per-option unit bug.
 - A high-taker-fee market cannot pass a range check that the fee-inclusive cost would fail.
-- Seller-side minimum uses proceeds net of the maker fee.
+- Seller-side minimum uses proceeds after the maker-side adjustment, and assumes the adjustment is a fee until FD-17 proves otherwise.
 - `hardMaxPremium` is net of `exerciseFeeBps`: with a nonzero exercise fee, the ceiling is strictly below the gross maximum payout.
 - An ask priced between the net and gross ceilings is rejected, since it cannot break even.
 - `acceptableMinPremium` is unaffected by `exerciseFeeBps`: changing that rate leaves the seller floor identical.
@@ -277,4 +279,3 @@ Before external audit:
 - Founder decisions resolved.
 - No TODOs in contracts.
 - NatSpec complete for public/external functions.
-

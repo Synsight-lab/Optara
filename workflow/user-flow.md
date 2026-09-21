@@ -221,7 +221,7 @@ Security checks:
 ## Flow 9: Writer Claims Residual Collateral
 
 1. Writer calls `claimWriterResidual(shortAmount, receiver)` after settlement.
-2. Vault calculates gross residual from the stored residual rate, then any residual fee, which is zero by V1 default.
+2. Vault calculates residual collateral from the stored residual rate. No fee is charged on writer residual claims in V1.
 3. Vault reduces writer claimable short balance.
 4. Vault transfers residual collateral to writer.
 5. Vault emits `WriterResidualClaimed`.
@@ -336,7 +336,7 @@ Before buying, show:
 Before posting an ask, show:
 
 - Gross ask.
-- Kuru maker fee.
+- Kuru maker-side fee or rebate.
 - Net proceeds, which is what the seller-protection check uses.
 
 After settlement, show:

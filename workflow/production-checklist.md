@@ -39,7 +39,7 @@ This checklist must be complete before mainnet launch.
 - [ ] Zero-fee equivalence fuzz test passing.
 - [ ] Fee line items shown separately in all user-facing flows.
 - [ ] Kuru maker and taker fees included in every premium quote and bound.
-- [ ] Kuru taker-fee convention verified against deployed contracts, FD-17.
+- [ ] Kuru taker-fee convention, maker fee or rebate convention, and AMM-spread behavior verified against deployed contracts, FD-17.
 - [ ] Maximum linkable venue fee configured and enforced.
 
 ## Security
@@ -131,4 +131,3 @@ This checklist must be complete before mainnet launch.
 ## Founder Decisions
 
 - [ ] All items in [founder-decisions.md](./founder-decisions.md) resolved or explicitly deferred.
-

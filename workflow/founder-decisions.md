@@ -4,9 +4,9 @@
 
 This file lists decisions that an AI agent or engineer must not silently choose. If unresolved, implementation should use safe defaults and leave the feature disabled where appropriate.
 
-This file is the canonical blocker list. If any other spec file says "Needs Founder Decision" about something not listed here, that is a bug in this file — raise it rather than choosing a value.
+This file is the canonical blocker list. Other specs may include "Needs Founder Decision" sections as pointers back here. If any of those sections introduces something not listed here, that is a bug in this file — raise it rather than choosing a value.
 
-Two items can cause irreversible user harm and should be resolved first: FD-20, where the default is permanent collateral lock during a prolonged oracle outage, and FD-17, where a wrong assumption about Kuru's fee convention silently breaks buyer cost limits.
+Two items can cause irreversible user harm and should be resolved first: FD-20, where the default is permanent collateral lock during a prolonged oracle outage, and FD-17, where a wrong assumption about Kuru's fee, rebate, or AMM-spread behavior silently breaks buyer cost limits or seller-protection checks.
 
 ## Oracle Decisions
 
@@ -318,22 +318,25 @@ Do not launch uncapped mainnet without bounty or external audit.
 
 Question:
 
-How does Kuru apply a taker fee on a buy, and what venue fee is too high to route through?
+How does Kuru apply taker fees, maker-side fees or rebates, and AMM spread, and what venue cost is too high to route through?
 
 Needs:
 
 - Verified answer on whether the taker fee increases quote spent or reduces base received, confirmed against deployed Monad contracts rather than docs.
-- `maxLinkableMakerFeeBps`.
+- Verified answer on whether the maker-side value is a fee or a rebate.
+- Verified answer on how `kuruAmmSpread` changes effective execution cost when fills touch AMM liquidity.
+- `maxLinkableMakerFeeBps`, interpreted as the maximum absolute maker-side adjustment allowed for a canonical market.
 - `maxLinkableTakerFeeBps`.
 
 Safe default until verified:
 
 ```text
 Assume the fee increases quote spent, AND independently enforce minOptionAmountOut.
-Enforcing both is correct under either convention.
+Treat maker-side adjustment as a fee, not a rebate, for seller-protection checks.
+Include AMM spread as execution cost whenever the route may touch Kuru AMM liquidity.
 ```
 
-This is a launch blocker: a wrong assumption here silently breaks the buyer's all-in cost limit. See [kuru-integration-spec.md](./kuru-integration-spec.md).
+This is a launch blocker: a wrong assumption here silently breaks buyer all-in cost limits or seller-protection checks. See [kuru-integration-spec.md](./kuru-integration-spec.md).
 
 ## Accounting Decisions
 
@@ -380,4 +383,3 @@ Option A by omission, disclosed prominently in user-facing risk copy.
 ```
 
 Shipping without an explicit decision means choosing A silently, which is the outcome most likely to surprise users. See [oracle-spec.md](./oracle-spec.md) and [state-machine.md](./state-machine.md).
-

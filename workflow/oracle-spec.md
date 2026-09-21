@@ -130,24 +130,51 @@ The caller supplies a proof identifying that observation. The adapter verifies t
 
 ```solidity
 struct SettlementProof {
-    uint80 chainlinkRoundId;  // the first round with updatedAt >= expiry
-    bytes pythUpdateData;     // Pyth update(s) bracketing expiry
+    uint80 chainlinkRoundId;          // the first round with updatedAt >= expiry
+    uint80 chainlinkPreviousRoundId;  // explicit previous round; never derived as roundId - 1
+    bytes pythUpdateData;             // Pyth update(s) bracketing expiry
 }
 ```
 
-**Chainlink.** The caller names a round id. The adapter verifies it is genuinely the first round at or after expiry by checking the named round and the one before it:
+**Chainlink.** The caller names the candidate settlement round and the immediately preceding valid round. The adapter verifies the candidate is genuinely the first round at or after expiry by checking both supplied round ids:
 
 ```text
-(, answer, , updatedAtN,   ) = feed.getRoundData(roundId)
-(, ,      , updatedAtPrev, ) = feed.getRoundData(roundId - 1)
+(, answer, , updatedAtN,   ) = feed.getRoundData(chainlinkRoundId)
+(, ,      , updatedAtPrev, ) = feed.getRoundData(chainlinkPreviousRoundId)
 
-require(updatedAtN   >= expiry)                      // at or after expiry
-require(updatedAtPrev <  expiry)                     // and the first such round
-require(updatedAtN   <= expiry + maxSettlementLag)   // feed did not go dark across expiry
+require(chainlinkPreviousRoundId != 0)
+require(chainlinkPreviousRoundId != chainlinkRoundId)
+require(isImmediateChainlinkPredecessor(feed, chainlinkPreviousRoundId, chainlinkRoundId))
+require(updatedAtN   >= expiry)                         // at or after expiry
+require(updatedAtPrev <  expiry)                        // and the first such round
+require(updatedAtN   <= expiry + maxSettlementLag)      // feed did not go dark across expiry
 require(answer > 0)
 ```
 
 The `updatedAtPrev < expiry` check is what makes the proof unforgeable. Without it a caller could name any later round.
+
+The immediate-predecessor check is as important as the timestamp check. If the contract accepted any older pre-expiry round as `chainlinkPreviousRoundId`, a caller could skip the real first post-expiry round and name a later, more favorable one.
+
+Chainlink proxy round ids are phase-encoded:
+
+```text
+proxyRoundId = (phaseId << 64) | aggregatorRoundId
+```
+
+The adapter must therefore verify predecessor adjacency explicitly:
+
+```text
+same phase:
+    phase(prev) == phase(current)
+    aggregatorRound(current) == aggregatorRound(prev) + 1
+
+phase boundary:
+    phase(current) == phase(prev) + 1
+    aggregatorRound(current) == 1
+    feed.getRoundData(prev + 1) reverts, proving prev was the last valid round of its phase
+```
+
+All other predecessor shapes are invalid. An implementation must never derive the previous round by subtracting one from the candidate. If the candidate appears to be the first valid Chainlink round ever and there is no prior round to prove against, V1 fails closed rather than accepting an unprovable anchor. The offchain proof builder is responsible for resolving phase boundaries and supplying the right predecessor.
 
 **Pyth.** Pyth exposes exactly this shape natively. Use the API that returns the first update within a publish-time window rather than the latest price:
 

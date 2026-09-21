@@ -253,7 +253,7 @@ V1 must never allow:
 - Redeeming before settlement.
 - Claiming writer residual before settlement.
 - Withdrawing collateral before settlement.
-- Any fee or dust sweep that reduces `collateralLocked` while claims remain outstanding.
+- Any fee sweep that reduces `collateralLocked` while claims remain outstanding.
+- Any dust sweep. V1 has no dust sweep function.
 - Reducing writer short balance without burning options or settling residual claim.
 - Increasing option supply without increasing collateral and writer short accounting.
-

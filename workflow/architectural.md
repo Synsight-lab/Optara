@@ -205,7 +205,7 @@ optionTokenDecimals
 optionScale           10 ** optionTokenDecimals
 uqScale               underlying/quote decimal conversion constant
 collateralPerOption   maximum liability of one whole option
-feeConfig             mint, exercise, and residual fee rates, snapshotted at creation
+feeConfig             mint and exercise fee rates, snapshotted at creation
 settlementStyle       oracle-based European
 ```
 

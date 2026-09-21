@@ -20,7 +20,7 @@ Protocol fees are never taken from collateral backing outstanding option claims.
 Concretely:
 
 - Mint fees are charged **on top of** required collateral, not deducted from it.
-- Exercise and residual fees are charged **out of an already-computed gross payout**, and the total outflow from `collateralLocked` is unchanged by the fee.
+- Exercise fees are charged **out of an already-computed gross payout**, and the total outflow from `collateralLocked` is unchanged by the fee.
 - `collateralLocked` must never decrease because a fee was charged.
 
 Any implementation where a fee reduces the collateral backing a live series is incorrect, regardless of how small the fee is.
@@ -90,9 +90,9 @@ Because this fee reduces what a holder can ever realize, it also tightens the bu
 
 No fee is charged when a writer claims residual collateral. The writer already paid at mint, and charging again would be charging twice for the same position.
 
-V1 therefore has exactly two fees, mint and exercise. A residual fee and a routing fee were both specified in an earlier draft and removed: the residual fee was permanently zero, and the routing fee applied only to a protocol-owned trade router that V1 does not have. Parameters that are always zero still have to be threaded through the struct, storage, events, and math, and still have to be read and reasoned about by anyone auditing the fee paths.
+V1 therefore has exactly two protocol fees: mint and exercise. No other protocol fee parameter exists. Dead parameters that are always zero still have to be threaded through structs, storage, events, and math, and still have to be read and reasoned about by anyone auditing the fee paths.
 
-If a later version wants either, it adds the parameter then, with a reason.
+If a later version wants another fee type, it adds the parameter then, with a reason.
 
 ## Fee Immutability
 
@@ -184,13 +184,19 @@ allInCost    = grossPremium + kuruTakerFee
 
 ### Seller Proceeds
 
-A writer posting a resting order pays Kuru's maker fee out of proceeds:
+Kuru's maker-side adjustment may be either a fee or a rebate, depending on the deployed market's convention. Optara must not assume which one applies until FD-17 is verified.
 
 ```text
-grossPremium  = sum(fillSize_i * fillPrice_i)
-kuruMakerFee  = floor(grossPremium * makerFeeBps / BPS_SCALE)
-netProceeds   = grossPremium - kuruMakerFee
+grossPremium          = sum(fillSize_i * fillPrice_i)
+kuruMakerAdjustment   = floor(grossPremium * makerFeeBps / BPS_SCALE)
+
+if makerFeeIsRebate:
+    netProceeds = grossPremium + kuruMakerAdjustment
+else:
+    netProceeds = grossPremium - kuruMakerAdjustment
 ```
+
+Until verified, seller-protection checks must use the conservative assumption that the maker-side adjustment is a fee, not a rebate.
 
 ### Range Checks Use Fee-Inclusive Totals
 
@@ -214,7 +220,7 @@ These are never compared against the bounds, which are totals. See [premium-pric
 
 ### Fee Convention Must Be Verified Before Launch
 
-Order-book venues differ in how a taker fee is applied on a buy. Two conventions exist:
+Order-book venues differ in how fees and rebates are applied. For taker buys, two conventions exist:
 
 ```text
 Convention A: fee increases the quote spent   -> buyer pays more quote, receives quoted base
@@ -225,6 +231,8 @@ Convention B: fee is deducted from base received -> buyer spends quoted quote, r
 
 - Compute `allInCost` assuming Convention A, which is the conservative assumption for the buyer's quote budget.
 - Always enforce `minOptionAmountOut` independently, which covers Convention B.
+- Treat maker-side adjustment as a fee, not a rebate, for seller-protection checks.
+- Include AMM spread as an added effective execution cost whenever the fill can touch Kuru AMM liquidity.
 
 Enforcing both bounds simultaneously is safe under either convention. The verification task is tracked in [founder-decisions.md](./founder-decisions.md) FD-17 and [production-checklist.md](./production-checklist.md).
 
@@ -243,7 +251,7 @@ Any official frontend must show, before a user signs:
 - Required collateral and mint fee as separate line items, with the total the writer will pay.
 - Gross payout, exercise fee, and net payout as separate line items before redemption.
 - Gross premium, Kuru taker fee, and all-in cost as separate line items before a buy.
-- Gross premium, Kuru maker fee, and net proceeds before posting an ask.
+- Gross premium, Kuru maker-side fee or rebate, and net proceeds before posting an ask.
 
 A single blended number is not acceptable. Users must be able to see which part of the cost is protocol fee and which is venue fee.
 
@@ -254,4 +262,4 @@ See [founder-decisions.md](./founder-decisions.md):
 - FD-06: launch values for the mint and exercise fee rates.
 - FD-06a: fee recipient address.
 - FD-06b: whether fee accrual is per-vault or swept to a central collector.
-- FD-17: Kuru fee convention verification and maximum acceptable venue fee for a linkable market.
+- FD-17: Kuru fee/rebate/spread convention verification and maximum acceptable venue cost for a linkable market.

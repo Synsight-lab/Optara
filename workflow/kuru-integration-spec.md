@@ -58,6 +58,7 @@ tickSize
 minSize
 maxSize
 makerFeeBps
+makerFeeIsRebate
 takerFeeBps
 kuruAmmSpread
 linkedAt
@@ -77,7 +78,7 @@ pricePrecision > 0
 tickSize > 0
 minSize >= series.minOptionAmount or explicitly justified
 maxSize >= minSize
-makerFeeBps <= maxLinkableMakerFeeBps
+makerFeeBps <= maxLinkableMakerFeeBps    // absolute maker-side adjustment
 takerFeeBps <= maxLinkableTakerFeeBps
 ```
 
@@ -98,7 +99,8 @@ Kuru charges its own maker and taker fees on every trade. Optara never receives 
 Recorded per market in `KuruMarketConfig`:
 
 ```text
-makerFeeBps        charged to the resting order
+makerFeeBps        maker-side adjustment in bps
+makerFeeIsRebate   false if adjustment is a fee; true if adjustment is a rebate
 takerFeeBps        charged to the order that crosses the spread
 kuruAmmSpread      additional effective cost when filling against integrated AMM liquidity
 ```
@@ -113,17 +115,21 @@ kuruTakerFee = floor(grossPremium * takerFeeBps / BPS_SCALE)
 allInCost    = grossPremium + kuruTakerFee
 ```
 
-There is no Optara routing fee, because V1 has no protocol-owned router.
+There is no Optara trade surcharge, because V1 has no protocol-owned router.
 
 ### Seller Proceeds
 
 ```text
-grossPremium = sum(fillSize_i * fillPrice_i)
-kuruMakerFee = floor(grossPremium * makerFeeBps / BPS_SCALE)
-netProceeds  = grossPremium - kuruMakerFee
+grossPremium        = sum(fillSize_i * fillPrice_i)
+makerAdjustment     = floor(grossPremium * makerFeeBps / BPS_SCALE)
+
+if makerFeeIsRebate:
+    netProceeds = grossPremium + makerAdjustment
+else:
+    netProceeds = grossPremium - makerAdjustment
 ```
 
-A writer posting a resting ask pays the maker fee. A writer crossing the spread to sell pays the taker fee instead. The UI must use whichever applies to the order type the user is actually submitting.
+A writer posting a resting ask receives or pays the maker-side adjustment according to the deployed market's convention. A writer crossing the spread to sell pays the taker-side cost instead. The UI must use whichever applies to the order type the user is actually submitting. Until FD-17 is verified, seller-protection checks assume the maker-side adjustment is a fee, not a rebate.
 
 ### AMM Spread
 
@@ -142,15 +148,17 @@ Convention B: fee deducted from base received -> quoted quote in, less base out
 
 - Compute `allInCost` under Convention A, the conservative assumption for the buyer's quote budget.
 - Independently enforce `minOptionAmountOut`, which covers Convention B.
+- Treat the maker-side adjustment as a fee for seller-protection checks until it is proven to be a rebate.
+- Include `kuruAmmSpread` in depth-walked estimates whenever a route can touch Kuru AMM liquidity.
 
-Enforcing both is safe under either convention. Verification is a launch blocker tracked in [founder-decisions.md](./founder-decisions.md) FD-17.
+Enforcing the conservative taker and maker assumptions is safe until the exact deployed behavior is verified. Verification is a launch blocker tracked in [founder-decisions.md](./founder-decisions.md) FD-17.
 
 ### Maximum Linkable Fee
 
 A market whose fees are set abusively high should not be linkable as the canonical market for a series:
 
 ```text
-makerFeeBps <= maxLinkableMakerFeeBps
+makerFeeBps <= maxLinkableMakerFeeBps       // absolute maker-side adjustment
 takerFeeBps <= maxLinkableTakerFeeBps
 ```
 
@@ -223,7 +231,6 @@ Kuru docs describe the OrderBook as a central limit order book with integrated A
 - Whether every series must have a Kuru market before minting.
 - Default market parameters for each launch pair.
 - Maximum linkable maker and taker fee thresholds.
-- Confirmation of Kuru's taker-fee convention on the deployed Monad contracts.
+- Confirmation of Kuru's taker-fee convention, maker fee or rebate convention, and AMM-spread behavior on the deployed Monad contracts.
 - Whether the protocol UI supports non-Kuru OTC transfers.
 - Whether Kuru market metadata can be updated after linking.
-

@@ -67,7 +67,7 @@ if allInCost > acceptableMaxPremium(optionAmount):
     block simplified buyer routing
 ```
 
-The seller-side check uses proceeds net of the Kuru maker fee, because a seller giving away value cares about what they actually receive, not the headline ask.
+The seller-side check uses proceeds after Kuru's maker-side fee or rebate adjustment, because a seller giving away value cares about what they actually receive, not the headline ask. Until FD-17 is verified, official helpers must assume the maker-side adjustment is a fee.
 
 Per-option figures are for display only. Comparing one against a total bound is wrong by a factor of the option amount and fails open, since a per-option cost sits below a total bound for any size above one whole option.
 
@@ -239,4 +239,3 @@ Fail closed if:
 - Maximum acceptable Kuru venue fee for a market to be routable.
 - Whether below-intrinsic listings are blocked or only warned.
 - Whether official UI supports manual override after warning.
-

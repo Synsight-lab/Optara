@@ -96,7 +96,7 @@ Each series must expose an ERC-20 option token.
 Acceptance criteria:
 
 - The option token represents a long claim on exactly one immutable series.
-- Token balances are freely transferable before settlement unless the series is paused for emergency reasons.
+- Token balances are freely transferable for the life of the series. V1 has no transfer pause.
 - The token is burnable only through protocol-approved flows, such as post-settlement redemption.
 - Token metadata must make fake-series risk easier to detect, but metadata must not be the source of truth. The registry is the source of truth.
 
@@ -222,10 +222,10 @@ Kuru charges its own maker and taker fees, which Optara never receives and never
 Acceptance criteria:
 
 - Every premium quote, acceptable-range check, and buyer limit uses the fee-inclusive all-in cost, not the gross premium.
-- Seller-side checks use proceeds net of the maker fee.
+- Seller-side checks use proceeds after Kuru's maker-side fee or rebate adjustment, with the conservative fee assumption until FD-17 is verified.
 - Depth-walked estimates include taker fee and AMM spread.
 - A market whose venue fees exceed the configured maximum is not linkable as canonical.
-- Kuru's taker-fee convention is verified against deployed contracts before launch, with both conventions defended against until then.
+- Kuru's taker-fee convention, maker fee or rebate convention, and AMM-spread behavior are verified against deployed contracts before launch, with conservative assumptions defended against until then.
 - Frontends show protocol fee and venue fee as separate line items, never blended into one number.
 
 ### Trading

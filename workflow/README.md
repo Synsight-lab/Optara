@@ -52,12 +52,12 @@ An AI agent building this system must:
 - Implement exactly the interfaces and state transitions unless the spec is updated first.
 - Stop and ask the founder before resolving any item in [founder-decisions.md](./founder-decisions.md).
 - Treat every `Needs Founder Decision` item as a blocker for production launch.
-- Treat a `Needs Founder Decision` note appearing in any other spec file as a bug in
-  [founder-decisions.md](./founder-decisions.md), and raise it rather than choosing a value.
+- Treat a `Needs Founder Decision` item in another spec as a pointer to
+  [founder-decisions.md](./founder-decisions.md). If it introduces a decision not
+  listed there, raise it rather than choosing a value.
 - Keep settlement independent from Kuru.
 - Implement the worked test vectors in [math-of-core-invariants.md](./math-of-core-invariants.md)
   as the first tests, before the vault, and treat them as normative.
 - Never let a fee path touch collateral backing outstanding claims.
 - Write tests before considering the implementation production-ready.
 - Run the launch checklist before deployment.
-

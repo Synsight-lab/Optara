@@ -51,7 +51,7 @@ Untrusted:
 | Oracle manipulation | Attacker manipulates settlement source. | Chainlink/Pyth quorum, deviation checks, freshness checks, fail closed. |
 | Oracle outage | Required oracle unavailable. | Settlement reverts, no Kuru fallback, recovery process required. |
 | Settlement timing choice | Settlement is permissionless and undated, so a caller waits for a favorable post-expiry move and settles then, converting a worthless option into a claim on writer collateral. | Settlement price is anchored to the first oracle observation at or after expiry and proven onchain; freshness checks apply only to reference reads. |
-| Forged settlement anchor | Caller names a later, more favorable round. | Adapter verifies the preceding round predates expiry, so only the first qualifying observation is accepted. |
+| Forged settlement anchor | Caller names a later, more favorable round. | Adapter verifies an explicitly supplied preceding round predates expiry, so only the first qualifying observation is accepted. Chainlink predecessor ids must not be derived as `roundId - 1` because proxy rounds can cross phases. |
 | Redemption minimum lockout | A minimum size applied to redemption traps holders who acquired less than it through a partial fill or transfer. | `minOptionAmount` is mint-only; redeem and claim require only a nonzero amount. |
 | Kuru manipulation | Wash trades distort option premium. | Kuru never settlement, route safety checks, buyer limits. |
 | Unrealistic writer ask | Writer posts harmful premium. | Acceptable premium range, warnings, route rejection. |
@@ -72,7 +72,7 @@ Untrusted:
 | Governance fee capture | Admin sets a confiscatory fee on new series. | Compile-time caps that governance cannot exceed. |
 | Malicious fee recipient | Recipient contract reverts or re-enters, bricking core paths. | Accrue-and-pull: no transfer to recipient in mint, redeem, or claim; sweep is a separate role-gated call. |
 | Venue fee blindness | Buyer's limit passes on gross premium but real cost exceeds it. | All buyer limits bind on fee-inclusive `allInCost`; max linkable venue fee enforced. |
-| Unverified venue fee convention | Wrong assumption about Kuru taker-fee mechanics breaks cost limits. | Assume the conservative convention and independently enforce `minOptionAmountOut`; verify before launch, FD-17. |
+| Unverified venue fee convention | Wrong assumption about Kuru taker-fee, maker-rebate, or AMM-spread mechanics breaks buyer limits or seller-protection checks. | Assume the conservative taker-cost and maker-fee conventions, independently enforce `minOptionAmountOut`, include AMM spread in route estimates, and verify before launch, FD-17. |
 | Permanent oracle lock | Required feed never recovers, collateral stuck forever. | Explicit FD-20 decision plus prominent disclosure; recovery path must be timelocked and never Kuru-sourced. |
 | Residual rate rounding | Independently rounded residual rate over-allocates collateral. | `writerResidualRate` computed only by subtraction; exact-identity fuzz invariant. |
 
@@ -133,4 +133,3 @@ Never:
 - Let one stale oracle settle by accident.
 - Add margin or early exercise to V1 without new specs and audit.
 - Add a trade router without re-auditing the approval and reentrancy surface it introduces.
-
