@@ -25,7 +25,7 @@
 
 ## 🚀 Pick your guide
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+<div style="display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 640px; margin: 0 auto;">
 
 <div style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 14px; padding: 22px; text-align: center;">
 
@@ -51,29 +51,20 @@ Calls vs Puts • Writer vs Buyer profit • 5-step flow<br>Fees in plain Englis
 
 </div>
 
+<!-- Developer guide hidden until keeper/indexer/kuru integration ready
 <div style="background: #ede9fe; border: 2px solid #836EF9; border-radius: 14px; padding: 22px; text-align: center;">
-
 ### 🧑‍💻 For Developers
-
 ## ⚙️ Developer Guide
-
 **Full technical reference.**
-
 Architecture, exact math & vectors, settlement proofs, contract interfaces, roles, deployment runbook, and test matrix.
-
 <div style="margin-top: 14px;">
-
 <a href="./DEVELOPER_GUIDE.md" style="background: #836EF9; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">📖 Open Developer Guide →</a>
-
 </div>
-
 <div style="margin-top: 12px; font-size: 0.85em; color: #6b7280;">
-
 Factories • Vaults • ChainlinkAnchor • Guards<br>Invariants • Fuzz • Slither
-
 </div>
-
 </div>
+-->
 
 </div>
 
@@ -118,15 +109,24 @@ flowchart LR
 
 ---
 
-## 🧭 What’s inside each guide
+## 🧭 What’s inside
 
+| Section | What you get |
+|:---|:---|
+| **Start** | 🔌 Wallet in 2 min (wrap `MON→WMON`, faucet) + 🧮 Profit calculator (break-even, PnL table) |
+| **Core** | 💰 Writer vs Buyer profit with stock-like examples, 5-step flow |
+| **Safety** | ⚠️ 3 must-know risks (illiquidity, delayed settlement, premium ≠ fair) |
+| **Reference** | 📚 Full specs in `simple-workflow/` — math, contracts, oracle, guard, tests |
+
+<!-- Developer guide contents hidden
 | Section | Users | Developers |
 |:---|:---|:---|
-| **Start** | 🔌 Wallet in 2 min (wrap `MON→WMON`, faucet) + 🧮 Profit calculator (break-even, 7-row PnL table) | 📍 Deployments (placeholder `0x...TBD` → fill post-deploy) + ABIs |
-| **Core** | 💰 Writer vs Buyer profit, 5-step visual flow | 🏗️ Architecture, 📦 Contracts + invariant, 🧮 Exact math + 6 vectors |
-| **Safety** | ⚠️ 3 must-know risks (no early sell, delayed settlement, premium ≠ fair) | 🚨 Full Error/Event catalog (32 errors / 17 events), 🔐 Threat matrix |
-| **Build** | — | 🍳 5 copy-paste recipes (`viem` + `cast`), ⛽ Gas table, 🚀 Deploy runbook + D1-D12 |
-| **Ops** | — | 🗺️ Roadmap & audit, 📝 Changelog, 🤝 Contributing |
+| **Start** | 🔌 Wallet + calculator | 📍 Deployments + ABIs |
+| **Core** | 💰 Writer vs Buyer | 🏗️ Architecture, 📦 Contracts, 🧮 Math |
+| **Safety** | ⚠️ 3 risks | 🚨 Errors/Events, 🔐 Threats |
+| **Build** | — | 🍳 Recipes, ⛽ Gas, 🚀 Deploy |
+| **Ops** | — | 🗺️ Roadmap, 📝 Changelog |
+-->
 
 ---
 
@@ -135,12 +135,14 @@ flowchart LR
 | I want to… | Open… |
 |:---|:---|
 | Understand options and make profit | **[USER_GUIDE.md](./USER_GUIDE.md)** — calls/puts, wallet setup, calculator, 5-step flow, fees, FAQ |
-| Integrate / audit / deploy | **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** — math, proofs, addresses, recipes, gas, catalog |
 | See the lean build spec | [`simple-workflow/README.md`](./simple-workflow/README.md) — 6 files that define V1 |
 | See the full 19-doc spec | [`workflow/README.md`](./workflow/README.md) — reference (`simple-workflow/` wins on conflict) |
 | See contracts + test results | [`contracts/README.md`](./contracts/README.md) — layout, 286 tests, sizes, status |
+
+<!-- Developer guide links hidden
+| Integrate / audit / deploy | **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** — math, proofs, addresses, recipes, gas, catalog |
 | Check what changed | [`DEVELOPER_GUIDE.md#--changelog`](./DEVELOPER_GUIDE.md#-changelog) |
-| Report a bug | `security@optara.xyz` *(TBD)* — see [Contributing](./DEVELOPER_GUIDE.md#-contributing--support) |
+-->
 
 ---
 
