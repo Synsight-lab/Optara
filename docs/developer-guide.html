@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Optara — Developer Guide</title>
+<link rel="stylesheet" href="./assets/css/style.css?v=10" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true, theme:'base'});</script>
+</head>
+<body>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="./index.html"><span class="brand-mark">◈</span><span><b>Optara</b></span> <small>Dev guide</small></a>
+    <nav class="nav-links">
+      <a class="nav-link" href="./index.html">Hub</a>
+      <a class="nav-link" href="./user-guide.html">User</a>
+      <a class="nav-link active" href="./developer-guide.html">Dev</a>
+      <a class="nav-link primary" href="#deployments">Addresses</a>
+    </nav>
+    <button class="hamburger" data-hamburger>Menu</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-card">
+      <a href="#arch">Architecture</a>
+      <a href="#contracts">Contracts</a>
+      <a href="#deployments">Addresses</a>
+      <h4>Core</h4>
+      <a href="#math">Math</a>
+      <a href="#oracle">Oracle proof</a>
+      <a href="#guard">Guard</a>
+      <a href="#fees">Fees</a>
+      <h4>Reference</h4>
+      <a href="#errors">Errors & Events</a>
+      <a href="#recipes">Recipes</a>
+      <a href="#gas">Gas</a>
+      <h4>Ops</h4>
+      <a href="#security">Security</a>
+      <a href="#deploy">Deploy</a>
+      <a href="#tests">Tests</a>
+      <a href="#roadmap">Roadmap</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <h1 style="font-family:var(--serif); font-size:36px; letter-spacing:-.02em; margin:6px 0">Developer guide</h1>
+    <p class="muted">Technical reference for integrating, building, and auditing V1. Not audited. Not on mainnet.</p>
+    <div class="alert alert-note"><strong>Invariant:</strong> Trading changes <em>who owns</em> a token. It never changes <em>how much the vault owes</em>. European, fully collateralized, one ERC-20 per series, Chainlink-only pinned to expiry.</div>
+
+    <h2 id="arch">Architecture</h2>
+    <div class="mermaid">
+flowchart TB
+  subgraph P["Protocol - owns lifecycle"]
+    F["Factory - registry + roles + config"]
+    V["Vault x N - ERC-20 + collateral"]
+    D["Deployer - creation code"]
+    F --> D --> V
+  end
+  subgraph K["Kuru - venue only"]
+    KK["Router + OrderBook - base=vault quote=quote - no collateral / no settlement"]
+  end
+  subgraph O["Oracle"]
+    A["ChainlinkAnchor - priceAtExpiry / tryLatestPrice"]
+  end
+  V -.->|tokens| K
+  A -->|priceAtExpiry| V
+    </div>
+    <p><strong>Immutable</strong> <code>SeriesConfig</code> (<code>contracts.md:58</code>, <code>Vault.sol:71</code>): <span class="inline-code">seriesId, optionType, underlying, quote, collateralAsset, strikePrice, expiry, contractSize, optionDecimals, minOptionAmount, maxTotalShortAmount, chainlinkFeed, feedDecimals, maxChainlinkAgeAtExpiry, optionScale, uqScale, collateralPerOption, mintFeeBps, exerciseFeeBps</span></p>
+    <p><strong>Mutable</strong> (<code>Vault.sol:94</code>): <span class="inline-code">settled, mintPaused, totalShortAmount, totalUnclaimedShortAmount, collateralLocked, accruedFees, settlementPrice, buyerPayoutRate, writerResidualRate, writerShortBalance</span> — states <span class="inline-code">ACTIVE / SETTLED</span> only, expiry derived from <span class="inline-code">block.timestamp ≥ expiry</span>.</p>
+
+    <h2 id="contracts">Contracts</h2>
+    <div class="table-wrap"><table><tr><th>Contract</th><th>File</th><th>Job</th><th class="num">Bytes</th></tr>
+      <tr><td><strong>Factory</strong></td><td><code>Factory.sol:53</code></td><td>Registry <span class="inline-code">vaultOf/isOptionToken</span>, AccessControl, allowlist, pairConfig, caps, fees, <span class="inline-code">kuruMarketOf</span> (write-once). <span class="inline-code">createSeries</span> permissionless, reverts <span class="inline-code">DuplicateSeries</span>.</td><td class="num">9,133</td></tr>
+      <tr><td><strong>Vault</strong></td><td><code>Vault.sol:59</code></td><td>ERC-20 + collateral. <span class="inline-code">mint/settle/redeem/claim/payout/sweepFees/setMintPaused</span>. <span class="inline-code">nonReentrant</span> + <span class="inline-code">SafeERC20</span>.</td><td class="num">12,268</td></tr>
+      <tr><td><strong>Deployer</strong></td><td><code>VaultDeployer.sol</code></td><td>Holds creation code (factory would be 25k). <span class="inline-code">bind()</span> once.</td><td class="num">17,670</td></tr>
+      <tr><td><strong>Guard</strong></td><td><code>Guard.sol:29</code></td><td>Read-only advisory. <span class="inline-code">checkBuy/checkSell</span> → <span class="inline-code">CheckResult</span>.</td><td class="num">5,092</td></tr>
+      <tr><td>OptionMath</td><td><code>libraries/OptionMath.sol</code></td><td>All math, explicit <span class="inline-code">mulDiv</span></td><td class="num">—</td></tr>
+      <tr><td>ChainlinkAnchor</td><td><code>libraries/ChainlinkAnchor.sol</code></td><td><span class="inline-code">priceAtExpiry / tryLatestPrice</span>, phase-aware</td><td class="num">—</td></tr>
+    </table></div>
+    <div class="table-wrap" style="margin-top:10px"><table><tr><th>Role</th><th>ID</th><th>Can</th><th>Cannot</th></tr>
+      <tr><td><strong>ADMIN</strong></td><td><code>DEFAULT_ADMIN_ROLE 0x00</code></td><td>allowlist, pairConfig, caps, fees, feeRecipient, kuruMarket, freeze+unfreeze</td><td>move collateral, change settlement, block payouts</td></tr>
+      <tr><td><strong>PAUSER</strong></td><td><code>PAUSER_ROLE</code></td><td>freeze only</td><td>unfreeze / touch funds</td></tr>
+    </table></div>
+    <div class="code"><pre>// CreateSeriesParams — only user inputs
+struct CreateSeriesParams {
+  OptionType optionType; address underlying; address quote;
+  uint256 strikePrice; uint64 expiry; address chainlinkFeed; // must == pairConfig.feed
+}
+// seriesId = keccak256(chainId, factory, type, underlying, quote, strike, expiry, feed)  :171</pre></div>
+
+    <h2 id="deployments">Deployments — addresses & ABIs</h2>
+    <div class="alert alert-warn"><strong>Not on mainnet.</strong> Placeholders — fill after <span class="inline-code">Deploy.s.sol</span> + <span class="inline-code">ConfigurePair.s.sol</span>. Mirror to <span class="inline-code">deployments/*.json</span>.</div>
+    <div class="table-wrap"><table><tr><th>Network</th><th>Chain ID</th><th>RPC</th><th>Explorer</th></tr>
+      <tr><td>Monad Testnet</td><td class="num">*TBD*</td><td><code>https://testnet-rpc.monad.xyz</code></td><td><code>https://testnet-explorer.monad.xyz</code></td></tr>
+      <tr><td>Monad Mainnet</td><td class="num">*TBD*</td><td><code>https://rpc.monad.xyz</code></td><td><code>https://explorer.monad.xyz</code></td></tr>
+    </table></div>
+    <div class="table-wrap" style="margin-top:10px"><table><tr><th>Contract</th><th>Testnet</th><th>Mainnet</th><th>ABI</th></tr>
+      <tr><td>Factory</td><td><code>0x...TBD</code></td><td><code>0x...TBD</code></td><td><code>out/Factory.json</code></td></tr>
+      <tr><td>Deployer</td><td><code>0x...TBD</code></td><td><code>0x...TBD</code></td><td><code>out/Deployer.json</code></td></tr>
+      <tr><td>Guard</td><td><code>0x...TBD</code></td><td><code>0x...TBD</code></td><td><code>out/Guard.json</code></td></tr>
+      <tr><td>Vault (per series)</td><td colspan="2" style="text-align:center"><code>factory.vaultOf(seriesId)</code></td><td><code>out/Vault.json</code></td></tr>
+      <tr><td>WMON</td><td><code>0x...TBD</code></td><td><code>0x...TBD</code></td><td>WETH9</td></tr>
+    </table></div>
+    <div class="table-wrap" style="margin-top:10px"><table><tr><th>Pair</th><th>Feed</th><th>Decimals</th><th>Heartbeat</th><th>maxAge</th><th>strikeStep</th></tr>
+      <tr><td>WMON/USDC</td><td><code>0x...TBD</code></td><td class="num">8</td><td>e.g. 3600s</td><td>heartbeat+buffer</td><td>0.5e18</td></tr>
+    </table></div>
+    <p class="muted" style="font-size:12px">Kuru Router: testnet <code>0x7EFbE105…054630</code>, mainnet <code>0xd651…695CC</code> — re-verify. Vaults never call Kuru.</p>
+
+    <h2 id="math">Math — exact</h2>
+    <div class="code"><pre>PRICE_SCALE=1e18  BPS=10_000  OPTION_SCALE=10**18
+UQ_SCALE=1e18*10**underlyingDecimals/10**quoteDecimals  // ≥1
+C=10**underlyingDecimals
+quoteRaw = underlyingRaw * price / UQ_SCALE
+CALL cpo=C   PUT cpo=ceil(C*K/UQ)   requiredCollateral=ceil(a*cpo/SCALE)
+CALL S≤K→0 else floor(C*(S-K)/S)   PUT S≥K→0 else floor(C*(K-S)/UQ)
+writerRate=cpo-buyerRate   // by subtraction only
+grossBuyer=floor(a*buyer/SCALE)  fee=floor(gross*exerciseBps/10000)</pre></div>
+    <div class="table-wrap"><table><tr><th>Vectors (bit-for-bit)</th><th>Key</th></tr>
+      <tr><td>1 Call 18/6</td><td>C=1e18 K=10 S=12.5 → cpo=1 buyer=0.2</td></tr>
+      <tr><td>2 Put 8/6</td><td>C=1e6 K=60k S=55k → cpo=6e8</td></tr>
+      <tr><td>3 Dust 1 wei</td><td>K=3 S=7 → 4/7 dust 1</td></tr>
+      <tr><td>4 OTM</td><td>buyer=0</td></tr><tr><td>5 Fees</td><td>mint 5e15, exercise 2.5e15</td></tr>
+      <tr><td>6 Put C=1e8</td><td>1 whole BTC, K=60k</td></tr>
+    </table></div>
+
+    <h2 id="oracle">Oracle — settlement proof</h2>
+    <div class="alert alert-note"><strong>Pinned:</strong> last round with <span class="inline-code">updatedAt ≤ expiry</span> proven by successor with <span class="inline-code">updatedAt &gt; expiry</span>. Successor answer never used.</div>
+    <div class="code"><pre>struct SettlementProof { uint80 chainlinkRoundId; uint80 chainlinkNextRoundId; }
+require(roundId !=0) // ZeroRoundId
+require(next != round) // RoundsNotDistinct
+try getRoundData(round) // RoundUnavailable + id check
+try getRoundData(next)  // SuccessorUnavailable
+require(isImmediateSuccessor(feed,round,next)) // phase-aware: phase&lt;&lt;64|agg
+require(updatedAtRound ≤ expiry)
+require(updatedAtNext  &gt; expiry)
+require(expiry-updatedAtRound ≤ maxAge) // TooStale
+require(answer &gt;0) // OracleInvalid
+price = answer * 10^(18-feedDecimals)</pre></div>
+
+    <h2 id="guard">Premium & Guard</h2>
+    <div class="code"><pre>E_up=ceil(a*C/SCALE) E_down=floor(a*C/SCALE)
+intrinsic = ceil(E_up*max(|R-K|,0)/UQ)
+hardMax = floor(floor(E_down*(isCall?R:K)/UQ)*(BPS-exerciseFee)/BPS)
+acceptableMin = ceil(intrinsic*(BPS-sellerTol)/BPS) // EMPTY_RANGE if min&gt;max</pre></div>
+    <p class="muted" style="font-size:12px">Totals in quote raw — never per-option. Layer 1 (Kuru limit) is hard; Layer 2 (Guard) advisory until router reverts.</p>
+
+    <h2 id="fees">Fees — isolation</h2>
+    <div class="table-wrap"><table><tr><th>Fee</th><th>When</th><th>Who</th><th>Rounding</th><th>Invariant</th></tr>
+      <tr><td>Mint <span class="inline-code">mintFeeBps</span></td><td>mint</td><td>writer</td><td>ceil</td><td>on top</td></tr>
+      <tr><td>Exercise <span class="inline-code">exerciseFeeBps</span></td><td>redeem ITM</td><td>holder</td><td>floor</td><td>from gross</td></tr>
+    </table></div>
+    <p class="muted" style="font-size:12px">Caps 100 bps, snapshot at creation, immutable. Writer residual 0 fee. Zero-fee ≡ no-fee (fuzz).</p>
+
+    <h2 id="errors">Error & Event catalog</h2>
+    <p class="muted" style="font-size:12px">At <code>Errors.sol</code> and <code>contracts.md:538</code> / <code>:487</code>. Each settlement failure has a distinct error.</p>
+    <details open><summary><strong>32 Errors</strong></summary><div class="ans">
+      <div class="table-wrap"><table><tr><th>Error</th><th>When</th></tr>
+        <tr><td><code>ZeroAddress()</code></td><td>zero address / receiver == vault</td></tr>
+        <tr><td><code>AssetNotAllowed()</code></td><td>not allowlisted</td></tr>
+        <tr><td><code>DuplicateSeries(seriesId)</code></td><td>id exists</td></tr>
+        <tr><td><code>FeedNotApproved()</code></td><td>feed != approved per pair</td></tr>
+        <tr><td><code>FeeExceedsCap()</code></td><td>&gt;100 bps</td></tr>
+        <tr><td><code>MintPaused() / CreationPaused()</code></td><td>paused</td></tr>
+        <tr><td><code>Expired() / NotExpired()</code></td><td>lifecycle gate</td></tr>
+        <tr><td><code>InsufficientGas()</code></td><td>gas &lt;250k in payout</td></tr>
+        <tr><td><code>SettlementAnchor*</code> (8)</td><td>proof checks</td></tr>
+      </table></div>
+      <p class="muted" style="font-size:12px">Full list: <code>ZeroAddress, AssetNotAllowed, InvalidDecimals/Strike/Expiry/ContractSize/MinOptionAmount/OracleConfig, DuplicateSeries, CreationPaused, FeedNotApproved, FeeExceedsCap, KuruMarketAlreadySet, SeriesNotFound, Unauthorized, MintPaused, Expired, NotExpired, AlreadySettled, NotSettled, AmountTooSmall, OpenInterestCapExceeded, NoFeesAccrued, InsufficientGas, InsufficientShortBalance, InvalidGuardParam, AlreadyBound, OracleInvalid, SettlementAnchorZeroRoundId/RoundsNotDistinct/RoundUnavailable/SuccessorUnavailable/NotImmediateSuccessor/RoundAfterExpiry/SuccessorNotAfterExpiry/TooStale</code></p>
+    </div></details>
+    <details><summary><strong>17 Events</strong></summary><div class="ans">
+      <div class="table-wrap"><table><tr><th>Event</th><th>Indexed</th><th>When</th></tr>
+        <tr><td><code>SeriesCreated(seriesId, vault, creator, type, underlying, quote, strike, expiry, feed)</code></td><td>seriesId, vault, creator</td><td>createSeries</td></tr>
+        <tr><td><code>OptionsMinted(writer, receiver, amount, collateral, fee)</code></td><td>writer, receiver</td><td>mint</td></tr>
+        <tr><td><code>SeriesSettled(price, buyerRate, writerRate)</code></td><td>—</td><td>settle</td></tr>
+        <tr><td><code>OptionsRedeemed(holder, receiver, amount, gross, fee)</code></td><td>holder, receiver</td><td>redeem/payout</td></tr>
+        <tr><td><code>WriterResidualClaimed(writer, receiver, short, residual)</code></td><td>writer, receiver</td><td>claim/payout</td></tr>
+      </table></div>
+      <p class="muted" style="font-size:12px">Plus <code>PairConfigSet, AssetAllowed, MaxShortAmountSet, DefaultFeeConfigSet, FeeRecipientSet, CreationPauseSet, KuruMarketSet, FeesSwept, MintPauseSet, SellerDiscountToleranceSet, MaxReferenceAgeSet, MaxVenueFeeSet, Transfer/Approval</code>. Fees always separate field.</p>
+    </div></details>
+
+    <h2 id="recipes">Recipes — copy-paste</h2>
+    <div class="tabs" data-panes=".recipe-pane"><button class="tab active" data-target="#r1">Create</button><button class="tab" data-target="#r2">Wrap + Mint</button><button class="tab" data-target="#r3">Settle</button><button class="tab" data-target="#r4">Redeem/Payout</button><button class="tab" data-target="#r5">Guard</button></div>
+    <div id="r1" class="recipe-pane"><div class="code"><pre>cast send $FACTORY "createSeries((uint8,address,address,uint256,uint64,address))" \
+ "(0,$WMON,$USDC,10000000000000000000,171...,$FEED)" --rpc-url $RPC --private-key $PK
+// viem: await factory.write.createSeries([{optionType:0, underlying:WMON, quote:USDC, strikePrice:10n*10n**18n, expiry, chainlinkFeed:FEED}])
+// DuplicateSeries → vaultOf(seriesId)</pre></div></div>
+    <div id="r2" class="recipe-pane" style="display:none"><div class="code"><pre>await wmon.write.deposit({value: parseEther("5")})
+const [collateral, fee] = await vault.read.previewMint([parseEther("5")])
+await wmon.write.approve([vault.address, collateral+fee])
+await vault.write.mint([parseEther("5"), receiver])</pre></div></div>
+    <div id="r3" class="recipe-pane" style="display:none"><div class="code"><pre>// poll until successor exists, binary search last updatedAt ≤ expiry per phase
+const proof = await buildProof(feed, Number(await vault.read.expiry()))
+await vault.write.settle([proof]) // distinct SettlementAnchor* on failure</pre></div></div>
+    <div id="r4" class="recipe-pane" style="display:none"><div class="code"><pre>await vault.write.redeem([parseEther("1"), receiver])
+await vault.write.claimWriterResidual([parseEther("5"), receiver])
+await vault.write.payout([chunk], {gas: 5_000_000n}) // ~50k/acct, floor 250k</pre></div></div>
+    <div id="r5" class="recipe-pane" style="display:none"><div class="code"><pre>const r = await guard.read.checkBuy([{seriesId, market: await factory.read.kuruMarketOf([seriesId]), optionAmount: parseEther("5"), grossPremium, takerFeeBps, buyerMaxTotalPremium: allIn, deadline}])</pre></div></div>
+    <p class="muted" style="font-size:12px">Rehearsal: <code>contracts/script/local/rehearsal.sh</code> (Anvil full lifecycle)</p>
+
+    <h2 id="gas">Gas</h2>
+    <div class="table-wrap"><table><tr><th>Action</th><th class="num">Approx</th><th>Note</th></tr>
+      <tr><td>createSeries</td><td class="num">~1.6M</td><td>vault deploy</td></tr>
+      <tr><td>mint</td><td class="num">~110k</td><td>+ transfer</td></tr>
+      <tr><td>settle</td><td class="num">~80k</td><td>2× getRoundData</td></tr>
+      <tr><td>redeem / claim</td><td class="num">~70k</td><td>zero skip</td></tr>
+      <tr><td>payout / acct</td><td class="num">~42.5k</td><td>explicit gas</td></tr>
+    </table></div>
+
+    <h2 id="security">Security</h2>
+    <div class="table-wrap"><table><tr><th>Threat</th><th>Mitigation</th></tr>
+      <tr><td>Undercollateralized / double / early</td><td>ceil, burn-before, nonReentrant, expiry gates</td></tr>
+      <tr><td>Forged anchor</td><td>updatedAt checks + phase-aware successor</td></tr>
+      <tr><td>Kuru manipulation</td><td>never vault input; advisory guard</td></tr>
+      <tr><td>Keeper tricks</td><td>full-balance only, skips contracts, try/catch</td></tr>
+    </table></div>
+
+    <h2 id="deploy">Deploy</h2>
+    <ol style="padding-left:18px">
+      <li><code>Deploy.s.sol</code> — Deployer, Factory (bind + check), Guard; fees + PAUSER</li>
+      <li><code>ConfigurePair.s.sol</code> per pair — allowlist, pairConfig (heartbeat+buffer), cap</li>
+      <li>Guard params if non-default</li>
+      <li><code>HandOverAdmin.s.sol</code> — multisig, renounce</li>
+      <li>Kuru market → <code>setKuruMarket</code> write-once</li>
+      <li>Trial cycle: mint → Kuru → settle → redeem/claim → sweep</li>
+    </ol>
+
+    <h2 id="tests">Tests</h2>
+    <div class="code"><pre>forge test                              # 286
+FOUNDRY_PROFILE=ci forge test           # 10k fuzz, 1024×128
+forge coverage --report summary --ir-minimum --no-match-test test_deployment_factoryFitsTheContractSizeLimit
+slither . --filter-paths "lib|test|script"</pre></div>
+
+    <h2 id="roadmap">Roadmap & Changelog</h2>
+    <div class="table-wrap"><table><tr><th>Phase</th><th>What</th><th>Status</th></tr>
+      <tr><td>V1</td><td>European calls/puts, Chainlink-only, advisory guard, 286 tests</td><td>✅ Built</td></tr>
+      <tr><td>Next</td><td>Audit + bounty — no cap raise before</td><td>Planned</td></tr>
+      <tr><td>V2</td><td>Pyth quorum, router that reverts on guard</td><td>Spec in workflow/</td></tr>
+    </table></div>
+    <div class="table-wrap" style="margin-top:10px"><table><tr><th>Version</th><th>Date</th><th>Change</th></tr><tr><td>v0.1.0</td><td>2026-09-22</td><td>Initial V1 (9133/12268/17670/5092), 6 vectors</td></tr></table></div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px">
+      <a class="btn btn-primary" href="./user-guide.html">User guide →</a>
+      <a class="btn btn-ghost" href="./index.html">Hub</a>
+    </div>
+  </main>
+</div>
+
+<footer class="footer"><a href="./user-guide.html">User guide</a> • Developer guide • <a href="../DEVELOPER_GUIDE.md">Markdown</a></footer>
+<script src="./assets/js/main.js"></script>
+</body>
+</html>

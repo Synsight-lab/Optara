@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Optara — Fully collateralized options on Monad</title>
+    <meta
+      name="description"
+      content="Optara keeps every option 100% backed. Trading moves who owns a ticket — it never changes what the vault owes. European options, Chainlink settlement at expiry, Kuru trading."
+    />
+    <link rel="stylesheet" href="./assets/css/style.css?v=10" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "base",
+        themeVariables: {
+          primaryColor: "#ffffff",
+          primaryTextColor: "#0A0F1F",
+          lineColor: "#FF9500",
+          secondaryColor: "#FFFBF0",
+          tertiaryColor: "#FFF0D1",
+        },
+      });
+    </script>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="brand" href="./index.html"
+          ><span class="brand-mark">◈</span><span><b>Optara</b></span>
+          <small>Monad • V1</small></a
+        >
+        <nav class="nav-links">
+          <a class="nav-link" href="./user-guide.html">User guide</a>
+          <a class="nav-link" href="./developer-guide.html">Developer guide</a>
+          <a
+            class="nav-link ghost"
+            href="https://github.com/anomalyco/opencode"
+            target="_blank"
+            >GitHub</a
+          >
+          <a class="nav-link primary" href="./user-guide.html#calc"
+            >Calculator</a
+          >
+        </nav>
+        <button class="hamburger" data-hamburger aria-label="menu">Menu</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="hero-meta">
+          <span class="meta-chip profit">European • Fully collateralized</span>
+          <span class="meta-chip violet"><span class="logo logo-chainlink">⬡</span> Chainlink at expiry</span>
+          <span class="meta-chip gold"><span class="logo logo-kuru">K</span> Kuru — venue only</span>
+        </div>
+        <h1>
+          Every option<br /><em>fully backed.</em><br />Trading can’t touch<br />the
+          collateral.
+        </h1>
+        <p class="lead">
+          Optara on Monad separates three jobs: <strong>Kuru</strong> moves who
+          owns a ticket, <strong>Chainlink</strong> decides the price at expiry,
+          the <strong>vault</strong> guarantees what’s owed. Wash trades and
+          thin books can’t drain a thing.
+        </p>
+        <div
+          style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px"
+        >
+          <a class="btn btn-primary" href="./user-guide.html"
+            >Start as a user →</a
+          >
+          <a class="btn btn-dark" href="./developer-guide.html"
+            >Build & integrate</a
+          >
+        </div>
+        <p class="muted" style="font-size: 13px; margin-top: 10px">
+          WMON (wrapped) • Calls = underlying • Puts = quote • 100% locked,
+          European
+        </p>
+      </div>
+
+      <div class="ledger" aria-label="vault ledger — drag to see how payout changes, collateral never does">
+        <div class="ledger-head">
+          <b>Vault ledger</b><span id="ledger-proof">live proof</span>
+        </div>
+        <div class="ledger-body">
+          <div class="ledger-row">
+            <span class="ledger-k">Collateral locked</span
+            ><span class="ledger-v strong">5.000 WMON</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ledger-k">Accrued fees</span
+            ><span class="ledger-v">0.005 WMON</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ledger-k">Total short</span
+            ><span class="ledger-v">5 tickets</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ledger-k">Settlement price</span
+            ><span class="ledger-v" id="hero-price-v">$12.50 <span style="color:var(--indigo)">at expiry</span></span>
+          </div>
+          <div class="ledger-row">
+            <span class="ledger-k">Buyer rate</span
+            ><span class="ledger-v" id="hero-buyer">0.20 WMON / ticket</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ledger-k">Writer residual</span
+            ><span class="ledger-v" id="hero-writer">0.80 WMON / ticket</span>
+          </div>
+          <div style="margin-top:12px; background:var(--stone); border:1px solid var(--line); border-radius:12px; padding:12px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+              <span class="kicker" style="color:var(--ink)">Drag expiry price → see profit move</span>
+              <span class="pill profit" id="hero-pill">$12.50</span>
+            </div>
+            <input id="hero-price" type="range" min="8" max="18" value="12.5" step="0.1" style="width:100%; accent-color:var(--profit)" />
+            <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-top:4px"><span>$8</span><span style="color:var(--profit); font-weight:800">Strike $10</span><span>$18</span></div>
+            <div class="muted" style="font-size:11px; margin-top:8px; line-height:1.4">Collateral stays <strong>5 WMON</strong> locked. Drag to <span style="color:var(--profit); font-weight:700">make money</span> — buyer + writer always = 1.00.</div>
+          </div>
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap:wrap">
+            <span class="chip" id="hero-solvent">Solvent: balance ≥ locked + fees ✓</span>
+            <span class="chip" id="hero-sum">buyer + writer = 1.00 ✓</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="promise">
+      <div class="promise-inner">
+        <div class="kicker">The invariant</div>
+        <div>
+          <strong
+            >Trading changes who owns a ticket. It never changes how much the
+            vault owes.</strong
+          >
+        </div>
+        <div class="muted" style="font-size: 13px">
+          Kuru is venue only. The vault never reads a market price. Settlement
+          is the Chainlink round <em>in force at expiry</em> — same result
+          whether you settle in 5 minutes or 5 months.
+        </div>
+      </div>
+    </div>
+
+    <main style="max-width: 1120px; margin: 0 auto; padding: 18px 20px 28px">
+      <div class="grid2" style="margin-top: 10px">
+        <a
+          href="./user-guide.html"
+          style="text-decoration: none; color: inherit"
+        >
+          <div class="choice call" style="height: 100%">
+            <div class="kicker">For users</div>
+            <h3
+              style="font-family: var(--serif); font-size: 20px; margin: 6px 0"
+            >
+              Understand, use, and profit.
+            </h3>
+            <p class="muted" style="font-size: 13px">
+              Calls vs puts, writer vs buyer P&L, 5-step flow, wallet in 2
+              minutes, interactive calculator, fees in plain English, risks and
+              FAQ. No code.
+            </p>
+            <div style="margin-top: 10px">
+              <span class="pill">Open user guide →</span>
+            </div>
+          </div>
+        </a>
+        <a
+          href="./developer-guide.html"
+          style="text-decoration: none; color: inherit"
+        >
+          <div class="choice put" style="height: 100%">
+            <div class="kicker">For developers</div>
+            <h3
+              style="font-family: var(--serif); font-size: 20px; margin: 6px 0"
+            >
+              Integrate with certainty.
+            </h3>
+            <p class="muted" style="font-size: 13px">
+              Production-ready reference. Architecture, invariants, and a tested deployment path for teams shipping on Monad.
+            </p>
+            <div style="margin-top: 10px">
+              <span class="pill">Open developer guide →</span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <h2 style="font-family: var(--serif)">How the pieces fit — money stays put</h2>
+      <div class="flow" role="img" aria-label="flow from writer to kuru to buyer to chainlink to holders and writers">
+        <div class="flow-node writer"><span class="flow-icon">✍️</span><b>Writer</b><small>locks 1 WMON/ticket<br><span style="color:var(--profit); font-weight:700">gets tickets</span></small></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node kuru"><span class="flow-icon"><span class="logo logo-kuru" style="width:20px; height:20px; display:inline-grid">K</span></span><b>Kuru</b><small>sells ticket<br>for USDC premium</small></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node buyer"><span class="flow-icon">🛒</span><b>Buyer</b><small>pays premium<br>holds ticket</small></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node chainlink"><span class="flow-icon"><span class="logo logo-chainlink" style="width:20px; height:20px; display:inline-grid; font-size:11px">⬡</span></span><b>Chainlink</b><small>price <em>at expiry</em><br><span style="font-family:var(--mono); font-size:11px; color:var(--indigo)">two-round proof</span></small></div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-branch">
+          <div class="flow-node holder"><span class="flow-icon">💸</span><b>Holder</b><small>burns ticket → <span style="color:var(--profit); font-weight:700">payout</span></small></div>
+          <div class="flow-node writer" style="border-top-color:var(--gold)"><span class="flow-icon">🏦</span><b>Writer</b><small>reclaims <span style="color:var(--gold-ink); font-weight:700">leftover</span></small></div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px; text-align:center; margin-top:8px; color:var(--ink-soft)">Hover any step — the vault is the only one that can move collateral. Kuru never can. <span style="color:var(--profit); font-weight:700">Try dragging the vault price slider ↑</span></p>
+
+      <div class="choice-grid" style="margin-top: 12px">
+        <div class="alert alert-note" style="margin: 0; display:flex; gap:8px; align-items:center">
+          <span class="logo logo-kuru">K</span> <strong>Who owns</strong> — Kuru (order book)
+        </div>
+        <div class="alert alert-tip" style="margin: 0">
+          <strong>🏦 How much owed</strong> — Vault (100% locked) ✅
+        </div>
+        <div class="alert alert-note" style="margin: 0; display:flex; gap:8px; align-items:center">
+          <span class="logo logo-chainlink">⬡</span> <strong>What price counts</strong> — Chainlink round in force at expiry
+        </div>
+        <div class="alert alert-warn" style="margin: 0">
+          <strong>Premium ≠ fair value</strong> — willing price, not worth
+        </div>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 14px">
+        <table>
+          <tr>
+            <th>Ask</th>
+            <th>Answer</th>
+          </tr>
+          <tr>
+            <td>Chain</td>
+            <td>
+              Monad — <span class="inline-code">WMON</span> (wrapped), not
+              native MON
+            </td>
+          </tr>
+          <tr>
+            <td>Style</td>
+            <td>European — redeem only after expiry</td>
+          </tr>
+          <tr>
+            <td>Backing</td>
+            <td><strong>100%</strong> — Calls = underlying, Puts = quote</td>
+          </tr>
+          <tr>
+            <td>Trading</td>
+            <td>Kuru — price discovery only</td>
+          </tr>
+          <tr>
+            <td>Settlement</td>
+            <td>Chainlink pinned to expiry (two-round proof)</td>
+          </tr>
+          <tr>
+            <td>Status</td>
+            <td>Built & tested (286), not audited</td>
+          </tr>
+        </table>
+      </div>
+
+
+    </main>
+
+    <footer class="footer">
+      Vault is law. Markets are venue. •
+      <a href="./user-guide.html">User guide</a> •
+      <a href="./developer-guide.html">Developer guide</a>
+    </footer>
+    <script src="./assets/js/main.js"></script>
+  </body>
+</html>
