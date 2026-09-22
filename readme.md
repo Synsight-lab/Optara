@@ -36,4 +36,4 @@ The core security principle of Optara is simple:
 
 This allows buyers and sellers to behave adversarially without threatening the solvency of the protocol.
 
-Full specifications live in [workflow/](./workflow/), starting with [workflow/README.md](./workflow/README.md).
+Full specifications live in [simple-workflow/](./simple-workflow/), starting with [simple-workflow/README.md](./simple-workflow/README.md).
