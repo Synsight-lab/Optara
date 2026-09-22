@@ -226,7 +226,7 @@ Because series are now permissionless, `ADMIN` should set this only for series t
 
 ### `VaultDeployer` and contract size
 
-The vault's creation code is about 16 KB. Embedding it in the factory pushed the factory past the 24,576-byte contract size limit (25,039 bytes), so vaults are deployed through a small separate contract, `VaultDeployer`, that holds the creation code. Measured sizes: factory 9,133 bytes, vault 12,179 bytes, deployer 17,581 bytes, guard 5,092 bytes.
+The vault's creation code is about 16 KB. Embedding it in the factory pushed the factory past the 24,576-byte contract size limit (25,039 bytes), so vaults are deployed through a small separate contract, `VaultDeployer`, that holds the creation code. Measured sizes: factory 9,133 bytes, vault 12,268 bytes, deployer 17,670 bytes, guard 5,092 bytes.
 
 ```solidity
 contract VaultDeployer {
@@ -539,7 +539,13 @@ error InvalidGuardParam();
 error AlreadyBound();
 
 error OracleInvalid();
-error SettlementAnchorInvalid();
+error SettlementAnchorZeroRoundId();
+error SettlementAnchorRoundsNotDistinct();
+error SettlementAnchorRoundUnavailable();
+error SettlementAnchorSuccessorUnavailable();
+error SettlementAnchorNotImmediateSuccessor();
+error SettlementAnchorRoundAfterExpiry();
+error SettlementAnchorSuccessorNotAfterExpiry();
 error SettlementAnchorTooStale();
 ```
 

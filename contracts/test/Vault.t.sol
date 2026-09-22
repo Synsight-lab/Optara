@@ -385,7 +385,7 @@ contract VaultTest is VaultBase {
     function test_settle_waitsForTheSuccessorRoundThenSucceedsAtTheSamePrice() public {
         feed.push(_id(1, 1), 12.5e8, expiry - 100); // in force at expiry, but no successor yet
         vm.warp(expiry + 1 hours);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorUnavailable.selector);
         vault.settle(SettlementProof(_id(1, 1), _id(1, 2)));
         assertFalse(vault.settled()); // still unsettled, nothing written
 
@@ -402,11 +402,11 @@ contract VaultTest is VaultBase {
         feed.push(_id(1, 4), 20e8, expiry + 400);
         vm.warp(expiry + 1000);
 
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         vault.settle(SettlementProof(_id(1, 1), _id(1, 3))); // stale round paired with a distant successor
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorRoundAfterExpiry.selector);
         vault.settle(SettlementProof(_id(1, 3), _id(1, 4))); // round after expiry
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorNotAfterExpiry.selector);
         vault.settle(SettlementProof(_id(1, 1), _id(1, 2))); // earlier round in force
         assertFalse(vault.settled());
 

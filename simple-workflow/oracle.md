@@ -81,25 +81,30 @@ library ChainlinkAnchor {
 ### `priceAtExpiry` checks
 
 ```text
-require(roundId != 0 && nextRoundId != roundId)                       else SettlementAnchorInvalid
-(answer, updatedAtRound) = feed.getRoundData(roundId)                 revert or 0 timestamp => SettlementAnchorInvalid
-(         updatedAtNext) = feed.getRoundData(nextRoundId)             revert or 0 timestamp => SettlementAnchorInvalid
+require(roundId != 0)                                                 else SettlementAnchorZeroRoundId
+require(nextRoundId != roundId)                                       else SettlementAnchorRoundsNotDistinct
+(answer, updatedAtRound) = feed.getRoundData(roundId)                 revert or 0 timestamp => SettlementAnchorRoundUnavailable
+(         updatedAtNext) = feed.getRoundData(nextRoundId)             revert or 0 timestamp => SettlementAnchorSuccessorUnavailable
 
-require(isImmediateSuccessor(feed, roundId, nextRoundId))             else SettlementAnchorInvalid
-require(updatedAtRound <= expiry)                                     else SettlementAnchorInvalid   // in force at expiry
-require(updatedAtNext  >  expiry)                                     else SettlementAnchorInvalid   // nothing newer by expiry
-require(expiry - updatedAtRound <= maxAgeAtExpiry)                    else SettlementAnchorTooStale  // feed was not already dead
+require(isImmediateSuccessor(feed, roundId, nextRoundId))             else SettlementAnchorNotImmediateSuccessor
+require(updatedAtRound <= expiry)                                     else SettlementAnchorRoundAfterExpiry       // in force at expiry
+require(updatedAtNext  >  expiry)                                     else SettlementAnchorSuccessorNotAfterExpiry // nothing newer by expiry
+require(expiry - updatedAtRound <= maxAgeAtExpiry)                    else SettlementAnchorTooStale               // feed was not already dead
 require(answer > 0)                                                   else OracleInvalid
 price = uint256(answer) * 10 ** (18 - feedDecimals)
 ```
 
-Wrap both `getRoundData` calls in `try/catch`. A round that does not exist reverts on a proxy, and must become `SettlementAnchorInvalid`, not an unexplained revert.
+Wrap both `getRoundData` calls in `try/catch`. A round that does not exist reverts on a proxy, and must become `SettlementAnchorRoundUnavailable` (for `roundId`) or `SettlementAnchorSuccessorUnavailable` (for `nextRoundId`), not an unexplained revert. Each failure has its own named error — `SettlementAnchorZeroRoundId`, `SettlementAnchorRoundsNotDistinct`, `SettlementAnchorRoundUnavailable`, `SettlementAnchorSuccessorUnavailable`, `SettlementAnchorNotImmediateSuccessor`, `SettlementAnchorRoundAfterExpiry`, `SettlementAnchorSuccessorNotAfterExpiry` — so a revert traces to exactly one check rather than one generic `SettlementAnchorInvalid` covering all of them.
 
 Why exactly one round passes:
 
 - A round **before** the one in force fails, because its real successor still has `updatedAt <= expiry`.
 - A round **after** the one in force fails, because its own `updatedAt` is greater than `expiry`.
 - A wrong successor fails the adjacency check. Without that check a caller could pair an older round with a distant post-expiry round and settle at the older, more favorable price.
+
+### `_tryRound` also checks the responder answered the right round
+
+Beyond the timestamp existing, `_tryRound` requires the round data returned actually describes the round that was asked for: the returned round id must equal the one requested, and `answeredInRound` must not be behind it. A well-formed Chainlink aggregator always satisfies both; the checks exist only to stop a feed or adapter that returns data for the wrong round from being trusted.
 
 ### Immediate successor
 
@@ -125,6 +130,8 @@ isImmediateSuccessor(round, next):
 ```
 
 Never compute the successor by adding one and trusting it. The caller supplies it and the library verifies it.
+
+This one function is what turns a caller-supplied pair of round ids into proof of a unique round, so it is tested directly and exhaustively, not only through `settle()`: every named attack shape (a skipped round, a missing `aggNext == 1` check, a phase jump of more than one, a reversed pair, the round-in-force probe skipped entirely), the `round == type(uint80).max` overflow guard, and three fuzz tests that check the library's result against an independent reference implementation across the full `uint80` space, biased toward small phase and round numbers where collisions are common, and across a real multi-round phase transition. Four deliberately reintroduced bugs (an off-by-one in the same-phase check, a missing `aggNext == 1` check, skipping the round-in-force probe, and removing the `_tryRound` hardening) were each confirmed to make these tests fail before being reverted.
 
 ### `tryLatestPrice`
 
@@ -177,3 +184,4 @@ There is deliberately no recovery path in V1. It is a real risk to user funds an
 - The Chainlink feed is trusted to be correct, live and to price the intended pair.
 - Chainlink can change the aggregator behind a proxy (a new phase). The phase-aware successor check handles that transition.
 - `ADMIN` is trusted to approve the right feed for each pair. The factory only accepts that one feed, so users cannot attach a different one. A feed approved by mistake cannot be corrected on series already created with it. Freeze minting on those series, and disable the pair with `setPairConfig` (feed set to zero).
+- The phase-boundary check trusts that a feed's aggregator round ids have no gaps within a phase (true for Chainlink's own aggregators) and that a round which genuinely does not exist reverts or returns a zero timestamp, rather than reverting for an unrelated reason. Both already follow from the feed being the one `ADMIN` approved.

@@ -103,7 +103,8 @@ expect_revert "settling before expiry" "NotExpired" cast send $VAULT "settle((ui
 NOW=$(cast block latest --rpc-url $RPC -f timestamp)
 cast rpc evm_increaseTime $((EXPIRY+3600-NOW)) --rpc-url $RPC >/dev/null; cast rpc evm_mine --rpc-url $RPC >/dev/null
 expect_revert "minting after expiry" "Expired" cast send $VAULT "mint(uint256,address)" 1000000000000000000 $BOB --rpc-url $RPC --private-key "$ALICE_KEY"
-expect_revert "a forged proof (the round AFTER expiry)" "SettlementAnchorInvalid" \
+expect_revert "a forged proof (round R3 named as in force, but its successor R3+1 was never published)" \
+  "SettlementAnchorSuccessorUnavailable" \
   cast send $VAULT "settle((uint80,uint80))" "($R3,$((R3+1)))" --rpc-url $RPC --private-key "$KEEPER_KEY"
 
 echo "== 9. a keeper with no role settles =="

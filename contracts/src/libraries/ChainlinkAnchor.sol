@@ -3,7 +3,18 @@ pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IAggregatorV3} from "../interfaces/IAggregatorV3.sol";
-import {OracleInvalid, SettlementAnchorInvalid, SettlementAnchorTooStale, InvalidDecimals} from "../Errors.sol";
+import {
+    OracleInvalid,
+    SettlementAnchorZeroRoundId,
+    SettlementAnchorRoundsNotDistinct,
+    SettlementAnchorRoundUnavailable,
+    SettlementAnchorSuccessorUnavailable,
+    SettlementAnchorNotImmediateSuccessor,
+    SettlementAnchorRoundAfterExpiry,
+    SettlementAnchorSuccessorNotAfterExpiry,
+    SettlementAnchorTooStale,
+    InvalidDecimals
+} from "../Errors.sol";
 
 /// @notice Reads the one Chainlink feed named in a series. See simple-workflow/oracle.md.
 ///
@@ -28,21 +39,23 @@ library ChainlinkAnchor {
         uint80 roundId,
         uint80 nextRoundId
     ) internal view returns (uint256 price) {
-        if (roundId == 0 || nextRoundId == roundId) revert SettlementAnchorInvalid();
+        if (roundId == 0) revert SettlementAnchorZeroRoundId();
+        if (nextRoundId == roundId) revert SettlementAnchorRoundsNotDistinct();
 
-        // A round that does not exist reverts on a proxy (or reports updatedAt == 0 on some
-        // aggregators). Both must become SettlementAnchorInvalid, never an unexplained revert.
+        // A round that does not exist reverts on a proxy (or reports updatedAt == 0 on some aggregators).
+        // Both must become a specific SettlementAnchor* error, never an unexplained revert.
         (bool okRound, int256 answer, uint256 updatedAtRound) = _tryRound(feed, roundId);
         (bool okNext,, uint256 updatedAtNext) = _tryRound(feed, nextRoundId);
-        if (!okRound || !okNext) revert SettlementAnchorInvalid();
+        if (!okRound) revert SettlementAnchorRoundUnavailable();
+        if (!okNext) revert SettlementAnchorSuccessorUnavailable();
 
         // The successor must be the IMMEDIATE successor. Without this a caller could pair an older round
         // with a distant post-expiry round and settle at the older, more favorable price.
-        if (!_isImmediateSuccessor(feed, roundId, nextRoundId)) revert SettlementAnchorInvalid();
+        if (!isImmediateSuccessor(feed, roundId, nextRoundId)) revert SettlementAnchorNotImmediateSuccessor();
 
         // In force at expiry, and nothing newer by expiry. Exactly one round satisfies both.
-        if (updatedAtRound > expiry) revert SettlementAnchorInvalid();
-        if (updatedAtNext <= expiry) revert SettlementAnchorInvalid();
+        if (updatedAtRound > expiry) revert SettlementAnchorRoundAfterExpiry();
+        if (updatedAtNext <= expiry) revert SettlementAnchorSuccessorNotAfterExpiry();
 
         // The feed was not already dead at expiry. Measured against expiry, never block.timestamp.
         if (expiry - updatedAtRound > maxAgeAtExpiry) revert SettlementAnchorTooStale();
@@ -81,14 +94,19 @@ library ChainlinkAnchor {
         return (true, result);
     }
 
-    /// @dev Reads one round. `ok` is false if the call reverts or the round reports updatedAt == 0.
+    /// @dev Reads one round. `ok` is false if the call reverts, the round reports updatedAt == 0, the
+    ///      returned round id does not match what was requested, or answeredInRound is behind the
+    ///      requested round. A well-formed Chainlink aggregator never triggers the last two: they exist as
+    ///      defense against an adapter or feed that returns data for the wrong round.
     function _tryRound(IAggregatorV3 feed, uint80 id)
         private
         view
         returns (bool ok, int256 answer, uint256 updatedAt)
     {
-        try feed.getRoundData(id) returns (uint80, int256 a, uint256, uint256 u, uint80) {
+        try feed.getRoundData(id) returns (uint80 returnedId, int256 a, uint256, uint256 u, uint80 answeredInRound) {
             if (u == 0) return (false, 0, 0);
+            if (returnedId != id) return (false, 0, 0);
+            if (answeredInRound < id) return (false, 0, 0);
             return (true, a, u);
         } catch {
             return (false, 0, 0);
@@ -101,7 +119,21 @@ library ChainlinkAnchor {
     ///        phase boundary:    phase(next) == phase(round) + 1, aggregatorRound(next) == 1, and
     ///                           round + 1 does not exist (so `round` was the last round of its phase).
     ///      The successor is NEVER derived by adding one to the round id and trusting the result.
-    function _isImmediateSuccessor(IAggregatorV3 feed, uint80 round, uint80 next) private view returns (bool) {
+    ///
+    ///      This function does not itself confirm that `next` exists or has real data — `priceAtExpiry`
+    ///      already did that via `_tryRound` before calling this. Its only external call is the round+1
+    ///      existence probe in the phase-boundary branch, which never runs in the same-phase branch.
+    ///
+    ///      Trust note: the phase-boundary branch trusts that a feed's aggregatorRoundId has no gaps within
+    ///      a phase (Chainlink's own aggregators guarantee this), and that a genuinely nonexistent round
+    ///      reverts or returns a zero timestamp rather than reverting for an unrelated reason. Both already
+    ///      follow from the feed being an ADMIN-approved Chainlink feed, the same trust boundary oracle.md
+    ///      documents for the feed generally.
+    ///
+    ///      Internal, not private: a library's internal functions are usable from any importing contract
+    ///      (the same way OptionMath's are), which lets the test suite exercise this function directly and
+    ///      exhaustively rather than only indirectly through priceAtExpiry.
+    function isImmediateSuccessor(IAggregatorV3 feed, uint80 round, uint80 next) internal view returns (bool) {
         uint256 phaseRound = uint256(round) >> 64;
         uint256 phaseNext = uint256(next) >> 64;
         uint256 aggRound = uint256(round) & type(uint64).max;

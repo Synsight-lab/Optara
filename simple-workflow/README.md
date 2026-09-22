@@ -77,7 +77,7 @@ These were in the larger design and are not needed for a safe V1:
 
 ## Implementation
 
-The contracts are in [`../contracts/`](../contracts/README.md): 262 tests (unit, fuzz, invariant, reentrancy, multi-writer), all passing, plus deployment scripts and a local rehearsal of the whole runbook. They are not audited and not deployed.
+The contracts are in [`../contracts/`](../contracts/README.md): 286 tests (unit, fuzz, invariant, reentrancy, multi-writer, exhaustive successor proof), all passing, plus deployment scripts and a local rehearsal of the whole runbook. They are not audited and not deployed.
 
 ## Pointers
 
