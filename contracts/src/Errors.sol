@@ -35,5 +35,12 @@ error InsufficientShortBalance();
 
 // oracle
 error OracleInvalid();
-error SettlementAnchorInvalid(); // proof does not identify the round in force at expiry
+// Each names exactly which check in ChainlinkAnchor.priceAtExpiry failed, so a revert traces to one path.
+error SettlementAnchorZeroRoundId(); // the round-in-force id supplied was 0
+error SettlementAnchorRoundsNotDistinct(); // the round-in-force id and its successor id were the same
+error SettlementAnchorRoundUnavailable(); // the round-in-force id has no valid, present data
+error SettlementAnchorSuccessorUnavailable(); // the successor id has no valid, present data
+error SettlementAnchorNotImmediateSuccessor(); // the successor is not the immediate next round
+error SettlementAnchorRoundAfterExpiry(); // the named round updated after expiry: not in force at expiry
+error SettlementAnchorSuccessorNotAfterExpiry(); // the successor did not update after expiry
 error SettlementAnchorTooStale(); // round in force at expiry is older than maxChainlinkAgeAtExpiry

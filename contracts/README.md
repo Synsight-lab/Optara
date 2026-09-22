@@ -33,7 +33,7 @@ forge build
 ## Test
 
 ```bash
-forge test                              # 262 tests, about 7 s
+forge test                              # 286 tests, about 6 s
 FOUNDRY_PROFILE=ci forge test           # 10,000 fuzz runs, 1,024 invariant runs at depth 128
 forge coverage --report summary --ir-minimum --no-match-test test_deployment_factoryFitsTheContractSizeLimit
 slither . --filter-paths "lib|test|script"
@@ -44,6 +44,7 @@ slither . --filter-paths "lib|test|script"
 |---|---|
 | `OptionMath.t.sol` | All six normative vectors from `math.md` bit for bit; the rate identity and single and fragmented solvency, fuzzed |
 | `ChainlinkAnchor.t.sol` | Exactly one round qualifies for any expiry (fuzzed); phase boundaries; forged proofs; settling late gives the same price |
+| `ChainlinkAnchorSuccessor.t.sol` | `isImmediateSuccessor` tested directly and exhaustively: every named attack shape, the round+1 overflow guard, and three fuzz tests checking it against an independent reference implementation across the full `uint80` space, near boundaries, and across a real phase transition. Plus: a feed returning data for the wrong round (mismatched round id, stale `answeredInRound`) is rejected. |
 | `Vault.t.sol` | Construction, mint, settle, redeem, claim, fees and the freeze; Vectors 1, 3, 5, 6 end to end through the real vault |
 | `VaultPayout.t.sol` | Keeper batch payout: pays everyone, never the caller, skips contracts, one failing recipient never blocks the rest, fails loudly on too little gas |
 | `VaultMultiWriter.t.sol` | Several writers pooled in one vault: a malicious writer cannot take anyone else's collateral by any route, each writer gets exactly `floor(short * rate / scale)`, and a writer's actions never change what another writer or holder receives (fuzzed) |
@@ -52,7 +53,7 @@ slither . --filter-paths "lib|test|script"
 | `Guard.t.sol` | Exact-integer bounds by hand, rounding toward rejection, totals not per-option, fee-inclusive limits, empty range |
 | `VaultInvariant.t.sol` | 10 invariants on a call vault and on a put vault under random sequences of every action |
 
-Results at the time of writing: 262 tests pass at default and at CI settings. Line coverage is 97 to 100% on every contract in `src/`.
+Results at the time of writing: 286 tests pass at default and at CI settings. Line coverage is 97 to 100% on every contract in `src/`.
 
 ### Mutation checks
 
@@ -63,6 +64,10 @@ Tests are only useful if they fail when the code is wrong. These deliberate bugs
 - rounding claims up instead of down (solvency invariant fails)
 - taking the mint fee out of the collateral (three invariants fail)
 - letting a writer claim against the pooled short amount instead of only their own (three multi-writer tests fail, and the fuzz test finds a counterexample at once)
+- the same-phase successor check accepting a skipped round (`aggNext >= aggRound + 1` instead of `==`): three named tests and all three successor fuzz tests fail
+- the phase-boundary branch forgetting to require `aggNext == 1`: two named tests, two fuzz tests, and one existing anchor test fail
+- the phase-boundary branch skipping the round-in-force probe entirely and always returning `true`: three named tests, two anchor tests, and a fuzz test fail
+- removing the `_tryRound` hardening (returned round id and `answeredInRound` checks): both dedicated hardening tests fail
 
 ### Static analysis
 
@@ -73,8 +78,8 @@ Slither reports two findings, both reviewed as false positives: the "reentrancy"
 | Contract | Runtime bytes |
 |---|---|
 | OptionSeriesFactory | 9,133 |
-| OptionSeriesVault | 12,179 |
-| VaultDeployer | 17,581 |
+| OptionSeriesVault | 12,268 |
+| VaultDeployer | 17,670 |
 | PremiumExecutionGuard | 5,092 |
 
 ## Status

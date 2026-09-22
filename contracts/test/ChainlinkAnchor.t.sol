@@ -4,7 +4,18 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {ChainlinkAnchor} from "../src/libraries/ChainlinkAnchor.sol";
 import {IAggregatorV3} from "../src/interfaces/IAggregatorV3.sol";
-import {OracleInvalid, SettlementAnchorInvalid, SettlementAnchorTooStale, InvalidDecimals} from "../src/Errors.sol";
+import {
+    OracleInvalid,
+    SettlementAnchorZeroRoundId,
+    SettlementAnchorRoundsNotDistinct,
+    SettlementAnchorRoundUnavailable,
+    SettlementAnchorSuccessorUnavailable,
+    SettlementAnchorNotImmediateSuccessor,
+    SettlementAnchorRoundAfterExpiry,
+    SettlementAnchorSuccessorNotAfterExpiry,
+    SettlementAnchorTooStale,
+    InvalidDecimals
+} from "../src/Errors.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
 
 /// Exposes the internal library so reverts can be asserted.
@@ -119,7 +130,7 @@ contract ChainlinkAnchorTest is Test {
         f.push(_id(1, 3), 122e8, EXPIRY + 1);
         assertEq(h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 2), _id(1, 3)), 111e18);
         // and the round before it is NOT the one in force: its successor is not after expiry
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorNotAfterExpiry.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 1), _id(1, 2));
     }
 
@@ -127,51 +138,51 @@ contract ChainlinkAnchorTest is Test {
 
     function test_reverts_roundNamedAsInForceIsAfterExpiry() public {
         // (4, 5): round 4 is after expiry, so it is not in force at expiry
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorRoundAfterExpiry.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r4, r5);
     }
 
     function test_reverts_earlierRoundWhoseRealSuccessorIsBeforeExpiry() public {
         // (2, 3): round 3 is at or before expiry, so round 2 is not the last round in force
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorNotAfterExpiry.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r2, r3);
     }
 
     function test_reverts_successorSkipsARound() public {
         // (3, 5): 5 is after expiry but is not the immediate successor of 3
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r3, r5);
         // an older, more favorable round paired with a distant post-expiry round is rejected too
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r1, r4);
     }
 
     function test_reverts_reversedOrder() public {
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r4, r3);
     }
 
     function test_reverts_sameRoundTwice() public {
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorRoundsNotDistinct.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r3, r3);
     }
 
     function test_reverts_zeroRoundId() public {
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorZeroRoundId.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, 0, r1);
     }
 
     function test_reverts_nonexistentRounds_proxyStyle() public {
-        // reads revert on a missing round: must become SettlementAnchorInvalid
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        // reads revert on a missing round: must become a specific SettlementAnchor* error
+        vm.expectRevert(SettlementAnchorSuccessorUnavailable.selector); // r3 exists, (1,99) does not
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r3, _id(1, 99));
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorRoundUnavailable.selector); // (1,98) does not exist either, checked first
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, _id(1, 98), _id(1, 99));
     }
 
     function test_reverts_nonexistentRounds_zeroReturningAggregator() public {
         feed.setZerosForMissing(true);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorUnavailable.selector);
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r3, _id(1, 99));
     }
 
@@ -179,7 +190,7 @@ contract ChainlinkAnchorTest is Test {
         // a feed that has not yet published after expiry cannot be settled
         MockAggregator f = new MockAggregator(8);
         f.push(_id(1, 1), 100e8, EXPIRY - 10);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorSuccessorUnavailable.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 1), _id(1, 2));
         // ... and becomes settleable, at the same price, once the successor is published
         f.push(_id(1, 2), 200e8, EXPIRY + 400);
@@ -188,7 +199,7 @@ contract ChainlinkAnchorTest is Test {
 
     function test_reverts_brokenFeed() public {
         feed.setBroken(true);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorRoundUnavailable.selector); // roundId is checked before nextRoundId
         h.priceAtExpiry(feed, 8, EXPIRY, MAX_AGE, r3, r4);
     }
 
@@ -265,15 +276,15 @@ contract ChainlinkAnchorTest is Test {
 
     function test_phaseBoundary_derivingSuccessorAsRoundPlusOneFails() public {
         MockAggregator f = _phaseFeed();
-        // round + 1 = (1, 4) does not exist
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        // (1, 4) is the SUPPLIED next round here (not the internal round+1 probe), and it does not exist
+        vm.expectRevert(SettlementAnchorSuccessorUnavailable.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 3), _id(1, 4));
     }
 
     function test_phaseBoundary_skippingTheLastRoundOfThePhaseFails() public {
         MockAggregator f = _phaseFeed();
         // (1,2) -> (2,1) skips round (1,3)
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 2), _id(2, 1));
     }
 
@@ -281,20 +292,20 @@ contract ChainlinkAnchorTest is Test {
         MockAggregator f = _phaseFeed();
         // phase 1 actually continues to round 4 (and it is after expiry), so (1,3) is not its last round
         f.set(_id(1, 4), 125e8, EXPIRY + 100);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 3), _id(2, 1));
     }
 
     function test_phaseBoundary_nextRoundMustBeFirstOfNewPhase() public {
         MockAggregator f = _phaseFeed();
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 3), _id(2, 2));
     }
 
     function test_phaseBoundary_cannotJumpTwoPhases() public {
         MockAggregator f = _phaseFeed();
         f.push(_id(3, 1), 150e8, EXPIRY + 1600);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 3), _id(3, 1));
     }
 
@@ -314,7 +325,7 @@ contract ChainlinkAnchorTest is Test {
     function test_sameIdDifferentPhaseIsNotSuccessor() public {
         MockAggregator f = _phaseFeed();
         f.push(_id(2, 3), 145e8, EXPIRY + 1600);
-        vm.expectRevert(SettlementAnchorInvalid.selector);
+        vm.expectRevert(SettlementAnchorNotImmediateSuccessor.selector);
         h.priceAtExpiry(f, 8, EXPIRY, MAX_AGE, _id(1, 3), _id(2, 3));
     }
 

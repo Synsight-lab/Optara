@@ -64,12 +64,12 @@ Then vectors for these cases:
 ### Anchoring (the highest-value group)
 
 - **Settling immediately and settling days later give the identical price**, even if the feed moved a lot in between.
-- A proof whose `chainlinkRoundId` has `updatedAt > expiry` reverts (`SettlementAnchorInvalid`).
+- A proof whose `chainlinkRoundId` has `updatedAt > expiry` reverts (`SettlementAnchorRoundAfterExpiry`).
 - A proof naming an **earlier** round whose real successor also has `updatedAt <= expiry` reverts.
 - A proof whose supplied successor is not the immediate successor (it skips a round) reverts, even if that successor has `updatedAt > expiry`.
 - A round with `updatedAt == expiry` is the round in force, and its successor is the proof's successor.
 - A proof across a **phase boundary** succeeds with the correct successor, and fails if the code derives the successor as `roundId + 1`.
-- Rounds that do not exist revert as `SettlementAnchorInvalid`, not with an unexplained error.
+- A round that does not exist reverts as `SettlementAnchorRoundUnavailable` (for the round in force) or `SettlementAnchorSuccessorUnavailable` (for its successor), not with an unexplained error.
 - A round in force older than `maxChainlinkAgeAtExpiry` at expiry reverts (`SettlementAnchorTooStale`). The result does not change with the time `settle` is called.
 - **A slow but healthy feed settles.** With an hour between updates, the series still settles once the successor round exists, at the price of the round in force.
 - `settle` reverts while no successor round exists, the series stays unsettled, and the same call succeeds later at the same price.
