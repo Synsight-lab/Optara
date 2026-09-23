@@ -79,55 +79,44 @@ contract VaultTest is VaultBase {
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.underlying = address(0);
-        vm.expectRevert(ZeroAddress.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(ZeroAddress.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.quote = address(0);
-        vm.expectRevert(ZeroAddress.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(ZeroAddress.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.chainlinkFeed = address(0);
-        vm.expectRevert(ZeroAddress.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(ZeroAddress.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.quote = address(mon); // same asset on both sides
-        vm.expectRevert(AssetNotAllowed.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(AssetNotAllowed.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 0, 0); // zero strike
-        vm.expectRevert(InvalidStrike.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidStrike.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.expiry = uint64(block.timestamp); // not in the future
-        vm.expectRevert(InvalidExpiry.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidExpiry.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.contractSize = 0;
-        vm.expectRevert(InvalidContractSize.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidContractSize.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.minOptionAmount = 0;
-        vm.expectRevert(InvalidMinOptionAmount.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidMinOptionAmount.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.optionDecimals = 19;
-        vm.expectRevert(InvalidDecimals.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidDecimals.selector, c, 0, 0);
     }
 
     function test_constructor_revertsAboveFeeCaps() public {
         SeriesConfig memory c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
-        vm.expectRevert(FeeExceedsCap.selector);
-        _deployWith(c, MAX_MINT_FEE_BPS + 1, 0);
-        vm.expectRevert(FeeExceedsCap.selector);
-        _deployWith(c, 0, MAX_EXERCISE_FEE_BPS + 1);
+        _expectInitializeRevert(FeeExceedsCap.selector, c, MAX_MINT_FEE_BPS + 1, 0);
+        _expectInitializeRevert(FeeExceedsCap.selector, c, 0, MAX_EXERCISE_FEE_BPS + 1);
         // exactly at the caps is fine
         _deployWith(c, MAX_MINT_FEE_BPS, MAX_EXERCISE_FEE_BPS);
     }
@@ -147,14 +136,12 @@ contract VaultTest is VaultBase {
     function test_constructor_revertsOnBadFeed() public {
         SeriesConfig memory c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         c.maxChainlinkAgeAtExpiry = 0;
-        vm.expectRevert(InvalidOracleConfig.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidOracleConfig.selector, c, 0, 0);
 
         c = _config(OptionType.CALL, address(mon), address(usdc), 10e18, 0);
         MockAggregator bad = new MockAggregator(19); // decimals above 18
         c.chainlinkFeed = address(bad);
-        vm.expectRevert(InvalidOracleConfig.selector);
-        _deployWith(c, 0, 0);
+        _expectInitializeRevert(InvalidOracleConfig.selector, c, 0, 0);
     }
 
     // ================================================================== mint

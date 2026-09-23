@@ -25,8 +25,8 @@ Trading changes who owns an option token. It never changes how much collateral t
 | Contract | Job |
 |---|---|
 | `OptionSeriesFactory` | Lets anyone create a series within fixed limits, is the canonical registry, holds the two roles, allowlisted assets, the approved feed for each pair, default fees and the fee recipient. |
-| `OptionSeriesVault` | One per series. It is the option ERC-20 and holds the collateral. Mint, settle, redeem, claim, sweep fees, plus an optional keeper batch payout (`payout`). |
-| `VaultDeployer` | Holds the vault's creation code so the factory stays under the contract size limit. Only the factory can use it. |
+| `OptionSeriesVault` | One per series. It is the option ERC-20 and holds the collateral. Mint, settle, redeem, claim, sweep fees, plus an optional keeper batch payout (`payout`). Deployed as an EIP-1167 clone, not a plain deployment - see `contracts.md`. |
+| `VaultDeployer` | Deploys the one vault implementation, then clones it for every series (EIP-1167). Only the factory can use it. |
 | `PremiumExecutionGuard` | Read-only helper that checks a proposed buy or sell against oracle-based bounds and buyer limits. |
 
 Plus two small libraries: `OptionMath` (rounding and rate formulas) and `ChainlinkAnchor` (proof verification and reference reads).
@@ -37,7 +37,7 @@ Nothing in these contracts calls Kuru.
 
 - Fully collateralized. No leverage, margin, borrowing, liquidation or early exercise.
 - Calls are collateralized in the underlying. Puts are collateralized in the quote asset.
-- One immutable ERC-20 option token per series, deployed by the factory.
+- One ERC-20 option token per series, deployed by the factory as an EIP-1167 clone. Its parameters are fixed at initialization; there is no setter.
 - The settlement price comes only from the series' Chainlink feed, pinned to expiry and proven on chain. It never comes from Kuru.
 - Settlement happens once. Its result never changes.
 - `writerResidualRate` is always computed as `collateralPerOption - buyerPayoutRate`.
@@ -59,8 +59,6 @@ These were in the larger design and are not needed for a safe V1:
 | Second oracle (Pyth), quorum, deviation and confidence checks | One oracle is simpler. Caps in the guarded launch limit the exposure. Corroboration is a V2 option. |
 | OracleRouter and oracle adapters | The vault reads Chainlink directly through a library. |
 | Separate registry and `ProtocolConfig` contracts | Folded into the factory. |
-| EIP-1167 clones and initializers | Vaults are plain `new` deployments, so constructor arguments and `immutable` work. |
-| KuruMarketAdapter and on-chain Kuru parameters | Kuru is an ERC-20 venue. The contracts never call it. |
 | Pause on settle, redeem or transfer | Only minting can be paused, so no role can block users' money. |
 | Creator role and user-chosen series parameters | Users choose only six things. The factory fixes contract size, minimum amount, cap, age window, fees and the generated name. |
 | Depth, spread and price-impact checks on chain | These need Kuru order-book reads. The frontend does them. |

@@ -158,7 +158,7 @@ buyerPayoutRate + writerResidualRate == collateralPerOption            exactly, 
 totalSupply == totalShortAmount before settlement
 sum(writerShortBalance) == totalUnclaimedShortAmount
 the settlement result is write-once
-fee rates and series parameters are immutable
+fee rates and series parameters never change after initialization
 totalBuyerPayoutClaimed + totalWriterResidualClaimed + collateralLocked == total collateral ever locked
 no account can receive more than the formula allows
 writerShortBalance never underflows

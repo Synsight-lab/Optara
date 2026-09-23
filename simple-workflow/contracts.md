@@ -6,7 +6,7 @@ This file specifies `OptionSeriesFactory` and `OptionSeriesVault`. The oracle li
 
 ```text
 A value that must be fixed or derived is never a function argument.
-The contract computes it or reads it from its own immutable state.
+The contract computes it or reads it from its own fixed state.
 ```
 
 Series identity, collateral asset, scales, `collateralPerOption` and fee rates are computed or snapshotted at creation. A caller can never choose them.
@@ -224,12 +224,13 @@ Stores an optional pointer from a `seriesId` to its official Kuru market. It is 
 
 Because series are now permissionless, `ADMIN` should set this only for series that have a market worth linking. The pointer is convenience, never required.
 
-### `VaultDeployer` and contract size
+### `VaultDeployer` and EIP-1167 clones
 
-The vault's creation code is about 16 KB. Embedding it in the factory pushed the factory past the 24,576-byte contract size limit (25,039 bytes), so vaults are deployed through a small separate contract, `VaultDeployer`, that holds the creation code. Measured sizes: factory 9,133 bytes, vault 12,268 bytes, deployer 17,670 bytes, guard 5,092 bytes.
+Every series is an [EIP-1167](https://eips.ethereum.org/EIPS/eip-1167) minimal proxy clone of ONE `OptionSeriesVault` implementation, not a full deployment. `VaultDeployer` deploys that one implementation in its own constructor, then produces every series with OpenZeppelin's `Clones.clone(implementation)` followed by `initialize(...)` on the fresh clone, in the same call. This keeps deployment cheap (a clone is 45 bytes) and keeps the factory itself far under the 24,576-byte contract size limit, the same reason `VaultDeployer` existed originally, before clones, when it held the vault's full ~16 KB creation code for every deployment. Measured sizes: factory 9,133 bytes, vault implementation 13,875 bytes (deployed once), deployer 1,406 bytes runtime, guard 5,092 bytes.
 
 ```solidity
 contract VaultDeployer {
+    address public immutable implementation;                             // the one OptionSeriesVault every series clones
     address public factory;
     function bind() external;                                            // first caller becomes the factory, once
     function deploy(bytes32 seriesId, SeriesConfig calldata c, FeeConfig calldata fees)
@@ -238,26 +239,33 @@ contract VaultDeployer {
 ```
 
 - The factory's constructor takes `(admin, deployer)`. It calls `deployer.bind()` and then checks `deployer.factory() == address(this)`. If anyone binds the deployer first, the factory deployment reverts (`AlreadyBound`) instead of silently using a deployer someone else controls.
-- `deploy` reverts with `Unauthorized` for any caller other than the bound factory. The deployer holds no funds and no other state.
-- The vault is constructed with the **factory** address, not the deployer's, so roles and the fee recipient are read from the factory.
-- `createSeries` is `nonReentrant`: it makes external calls while the vault is constructed, so a hostile token or feed cannot re-enter before the registry is written.
+- `deploy` reverts with `Unauthorized` for any caller other than the bound factory. The deployer holds no funds and no other state besides `implementation`.
+- `deploy` clones and initializes the vault with the **factory** address, not the deployer's, so roles and the fee recipient are read from the factory.
+- Cloning and initializing happen in the same call, with no external call in between, so a clone can never be observed or initialized by anyone before `deploy` initializes it itself.
+- `createSeries` is `nonReentrant`: it makes external calls while the vault is cloned and initialized, so a hostile token or feed cannot re-enter before the registry is written.
 
 ## `OptionSeriesVault`
 
-One per series. It is the ERC-20 option token and the holder of collateral. Built on `ERC20`, `ReentrancyGuard`.
+One per series. It is the ERC-20 option token and the holder of collateral. Built on OpenZeppelin's upgradeable `ERC20Upgradeable`, `ReentrancyGuardUpgradeable` and `Initializable` — not because the vault itself is ever upgraded (it never is), but because those are the clone-safe base contracts: a clone shares its implementation's code, so state that a plain contract would set in its constructor has to be regular storage, set once through an initializer, instead.
 
-### Constructor
+### Constructor and `initialize`
 
 ```solidity
-constructor(
+constructor() {
+    _disableInitializers();
+}
+
+function initialize(
     address factory_,
     bytes32 seriesId_,
     SeriesConfig memory p,
     FeeConfig memory fees
-) ERC20(p.name, p.symbol)
+) external initializer
 ```
 
-It derives and stores as `immutable`:
+The constructor runs only once, on the single implementation contract `VaultDeployer` deploys with `new`. It permanently blocks `initialize` on that implementation (`_disableInitializers`), so nobody can initialize the shared logic contract itself and mistake it for a real series. A clone never runs a constructor — only `initialize`, and only once: OpenZeppelin's `initializer` modifier reverts on a second call, on any clone, for any caller.
+
+`initialize` derives and stores in regular storage (not `immutable` — see below):
 
 - `collateralAsset` (underlying for a call, quote for a put).
 - `optionScale`, `uqScale` (from the two assets' `decimals()`), `collateralPerOption`.
@@ -266,7 +274,7 @@ It derives and stores as `immutable`:
 
 It reverts if any input is invalid. The check `requiredCollateral(minOptionAmount) == 0` (`InvalidMinOptionAmount`) is purely defensive: `requiredCollateral` rounds **up** and every input is nonzero, so it is always at least one unit and a tiny strike cannot make it zero. `decimals()` is overridden to return `optionDecimals`.
 
-Because vaults are plain deployments, every series parameter is an `immutable` and there is no initializer and no setter.
+**Why not `immutable`.** An `immutable` value is baked into a contract's own bytecode at construction. A clone has no bytecode of its own — every call delegatecalls into the shared implementation — so every clone would read the *implementation's* immutables, identically and wrongly, instead of its own series' values. Every field that would have been `immutable` in a plain deployment is therefore regular storage instead, set exactly once by `initialize`. The security property does not change: nothing in this contract ever writes these fields again, and there is no setter — only the *mechanism* changed, from a compiler-enforced constant to a function that can run exactly once, enforced by `Initializable`.
 
 ### Storage
 
@@ -560,7 +568,7 @@ Two protocol fees, nothing else.
 | Mint fee | `mint` | writer, **on top of** collateral | `mintFeeBps` | up |
 | Exercise fee | `redeem`, in-the-money only | holder, carved from the gross payout | `exerciseFeeBps` | down |
 
-- Rates are copied from `factory.defaultFeeConfig()` when a series is created and are `immutable` for its life. A later change to the defaults reaches only later series.
+- Rates are copied from `factory.defaultFeeConfig()` when a series is created and fixed for its life by `initialize`, with no setter. A later change to the defaults reaches only later series.
 - Caps are compile-time constants: 100 bps each.
 - Fees accrue into `accruedFees` and are swept on demand. There is no transfer to a fee recipient inside mint, redeem or claim, so a bad recipient can never brick those paths.
 - No fee on writer residual claims.

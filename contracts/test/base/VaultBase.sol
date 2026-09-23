@@ -10,6 +10,7 @@ import {OptionType, FeeConfig, SeriesConfig, SettlementProof, ADMIN_ROLE, PAUSER
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockAggregator} from "../mocks/MockAggregator.sol";
 import {MockFactory} from "../mocks/MockFactory.sol";
+import {CloneHelper} from "./CloneHelper.sol";
 
 interface IMintable {
     function mint(address to, uint256 amount) external;
@@ -24,6 +25,7 @@ abstract contract VaultBase is Test {
     MockAggregator internal feed;
     MockFactory internal factory;
     OptionSeriesVault internal vault;
+    address internal vaultImplementation; // one implementation, cloned for every series in these tests
 
     address internal admin = makeAddr("admin");
     address internal pauser = makeAddr("pauser");
@@ -50,6 +52,7 @@ abstract contract VaultBase is Test {
         factory.setRole(ADMIN_ROLE, admin, true);
         factory.setRole(PAUSER_ROLE, pauser, true);
         factory.setFeeRecipient(feeRecipient);
+        vaultImplementation = CloneHelper.deployImplementation();
 
         vault = _deploy(OptionType.CALL, address(mon), address(usdc), 10e18, 10, 25, 0);
     }
@@ -82,7 +85,8 @@ abstract contract VaultBase is Test {
         internal
         returns (OptionSeriesVault)
     {
-        return new OptionSeriesVault(
+        return CloneHelper.deployVaultClone(
+            vaultImplementation,
             address(factory),
             keccak256(abi.encode("series", seriesCounter)),
             c,
@@ -100,6 +104,22 @@ abstract contract VaultBase is Test {
         uint256 cap
     ) internal returns (OptionSeriesVault) {
         return _deployWith(_config(t, u, q, strike, cap), mintFeeBps, exerciseFeeBps);
+    }
+
+    /// Clones first (never reverts), THEN arms `vm.expectRevert(selector)` and calls `initialize` - so the
+    /// expectation watches `initialize` itself rather than the clone's own CREATE. See CloneHelper.sol.
+    function _expectInitializeRevert(bytes4 selector, SeriesConfig memory c, uint16 mintFeeBps, uint16 exerciseFeeBps)
+        internal
+    {
+        OptionSeriesVault v = CloneHelper.cloneUninitialized(vaultImplementation);
+        seriesCounter++;
+        vm.expectRevert(selector);
+        v.initialize(
+            address(factory),
+            keccak256(abi.encode("series", seriesCounter)),
+            c,
+            FeeConfig({mintFeeBps: mintFeeBps, exerciseFeeBps: exerciseFeeBps})
+        );
     }
 
     // ------------------------------------------------------------------ actions

@@ -12,7 +12,7 @@ Everything is normalized to `PRICE_SCALE = 1e18`: the human price of 1 whole und
 normalizedPrice = uint256(answer) * 10 ** (18 - feedDecimals)
 ```
 
-`feedDecimals` is read once from `feed.decimals()` when the vault is built, must be at most 18, and is stored as an `immutable`. Converting a price into token amounts is done with `UQ_SCALE` in `math.md`, never inside the oracle library.
+`feedDecimals` is read once from `feed.decimals()` when the vault is initialized, must be at most 18, and is stored in regular storage, fixed for the vault's life (not `immutable` - every series vault is an EIP-1167 clone; see `contracts.md`). Converting a price into token amounts is done with `UQ_SCALE` in `math.md`, never inside the oracle library.
 
 Only **direct** feeds for the series' pair are supported. A price composed from two feeds (for example MON/USD divided by USDC/USD) is not supported in V1, because it would need two independently proven rounds. If a pair has no direct Chainlink feed, it cannot be launched.
 

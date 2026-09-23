@@ -34,7 +34,7 @@ OPTION_SCALE = 10 ** optionDecimals
 UQ_SCALE     = PRICE_SCALE * 10**underlyingDecimals / 10**quoteDecimals
 ```
 
-Both asset decimals and `optionDecimals` are at most 18, so `UQ_SCALE` is an exact integer of at least 1. All three scales are computed once in the vault constructor and stored as `immutable`.
+Both asset decimals and `optionDecimals` are at most 18, so `UQ_SCALE` is an exact integer of at least 1. All three scales are computed once, in the vault's `initialize` function, and stored in regular storage, never recomputed or changed after. (Not `immutable`: every series vault is an EIP-1167 clone of one shared implementation, so per-series values can't live in the implementation's own bytecode the way an `immutable` would - see `contracts.md`.)
 
 **What the V1 factory fixes.** Users cannot choose the contract size or the option decimals. The factory always sets `optionDecimals = 18` and `C = 10 ** underlyingDecimals`, so one option is exactly one whole underlying token. The formulas here are general and the math library must handle any `C`, but vault and factory tests use the fixed values. Vector 6 covers them for a low-decimal underlying.
 

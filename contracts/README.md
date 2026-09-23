@@ -9,8 +9,9 @@ Fully collateralized European call and put options on Monad. Each series is one 
 ```
 src/
   OptionSeriesFactory.sol      anyone creates a series; the registry; the two roles; settings
-  OptionSeriesVault.sol        one per series: the option ERC-20 and the collateral
-  VaultDeployer.sol            holds the vault's creation code (keeps the factory under the size limit)
+  OptionSeriesVault.sol        one per series: the option ERC-20 and the collateral. Clone-and-initialize, not
+                                a plain deployment - see "Deployment: EIP-1167 clones" below
+  VaultDeployer.sol            deploys the one vault implementation, then clones it per series
   PremiumExecutionGuard.sol    read-only advisory checks for a buy or sell
   libraries/OptionMath.sol     every formula that decides who gets what
   libraries/ChainlinkAnchor.sol  the round in force at expiry, and the reference read
@@ -27,13 +28,18 @@ Requires [Foundry](https://book.getfoundry.sh/). Dependencies are not committed:
 cd contracts
 forge install --no-git foundry-rs/forge-std
 forge install --no-git OpenZeppelin/openzeppelin-contracts@v5.1.0
+forge install --no-git OpenZeppelin/openzeppelin-contracts-upgradeable@v5.1.0
 forge build
 ```
+
+## Deployment: EIP-1167 clones
+
+`OptionSeriesVault` is deployed once as an implementation and then reused: every series is an [EIP-1167](https://eips.ethereum.org/EIPS/eip-1167) minimal proxy clone of that one implementation (via OpenZeppelin's `Clones`), initialized instead of constructed. `VaultDeployer` deploys the implementation in its own constructor and clones it on every `deploy` call. This is why the vault's fields are regular storage, set once by `initialize`, instead of `immutable`: `immutable` values live in the implementation's own bytecode, which every clone shares, so a per-series `immutable` would be identical, and wrong, on every clone. The security properties this pattern needs - the implementation itself can never be initialized (`_disableInitializers()` in its constructor), a clone can never be initialized twice, and two clones never share state - are tested directly in `VaultDeployer.t.sol`, not just assumed.
 
 ## Test
 
 ```bash
-forge test                              # 286 tests, about 6 s
+forge test                              # 294 tests, about 6 s
 FOUNDRY_PROFILE=ci forge test           # 10,000 fuzz runs, 1,024 invariant runs at depth 128
 forge coverage --report summary --ir-minimum --no-match-test test_deployment_factoryFitsTheContractSizeLimit
 slither . --filter-paths "lib|test|script"
@@ -52,8 +58,9 @@ slither . --filter-paths "lib|test|script"
 | `Factory.t.sol` | Permissionless creation, the approved feed per pair, expiry slot, strike step, duplicates revert, generated names, roles, freeze |
 | `Guard.t.sol` | Exact-integer bounds by hand, rounding toward rejection, totals not per-option, fee-inclusive limits, empty range |
 | `VaultInvariant.t.sol` | 10 invariants on a call vault and on a put vault under random sequences of every action |
+| `VaultDeployer.t.sol` | The clone-and-initialize pattern itself: the implementation can never be initialized (by anyone), a clone can never be initialized twice, two clones never share storage, `deploy` produces a real 45-byte EIP-1167 proxy, and the existing bind/authorization checks |
 
-Results at the time of writing: 286 tests pass at default and at CI settings. Line coverage is 97 to 100% on every contract in `src/`.
+Results at the time of writing: 294 tests pass at default and at CI settings. Line coverage is 97 to 100% on every contract in `src/`.
 
 ### Mutation checks
 
@@ -68,6 +75,7 @@ Tests are only useful if they fail when the code is wrong. These deliberate bugs
 - the phase-boundary branch forgetting to require `aggNext == 1`: two named tests, two fuzz tests, and one existing anchor test fail
 - the phase-boundary branch skipping the round-in-force probe entirely and always returning `true`: three named tests, two anchor tests, and a fuzz test fail
 - removing the `_tryRound` hardening (returned round id and `answeredInRound` checks): both dedicated hardening tests fail
+- removing `_disableInitializers()` from the implementation's constructor (both "implementation can never be initialized" tests fail)
 
 ### Static analysis
 
@@ -78,9 +86,11 @@ Slither reports two findings, both reviewed as false positives: the "reentrancy"
 | Contract | Runtime bytes |
 |---|---|
 | OptionSeriesFactory | 9,133 |
-| OptionSeriesVault | 12,268 |
-| VaultDeployer | 17,670 |
+| OptionSeriesVault (the implementation) | 13,875 |
+| VaultDeployer | 1,406 |
 | PremiumExecutionGuard | 5,092 |
+
+Every deployed series vault is a 45-byte EIP-1167 clone, not a copy of the 13,875-byte implementation - the size limit was never really about `OptionSeriesVault` itself, since it's deployed exactly once. `VaultDeployer`'s own runtime size dropped from 17,670 to 1,406 bytes now that it only ever deploys the implementation once, in its constructor, and clones it after that; its *deployment* (initcode) is still large (~15.6 KB) because that one-time implementation deployment still needs the vault's full creation code, but that cost is paid once, not per series.
 
 ## Status
 

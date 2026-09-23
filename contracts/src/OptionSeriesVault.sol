@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {
     OptionType,
@@ -56,7 +57,14 @@ import {IOptionSeriesFactory} from "./interfaces/IOptionSeriesFactory.sol";
 ///  - Protocol fees never come out of the collateral that backs claims: `accruedFees` is a separate balance.
 ///  - No role can move collateral, change the series, or stop settle / redeem / claim / payout / transfers.
 ///    The only switch is a freeze on MINTING.
-contract OptionSeriesVault is ERC20, ReentrancyGuard {
+///
+/// Deployment: every series is an EIP-1167 minimal proxy clone of ONE implementation (deployed and cloned
+/// by `VaultDeployer`), not a full contract deployment. A clone delegatecalls into shared code, so nothing
+/// per-series can live in `immutable`/bytecode the way it could in a directly-deployed contract: `immutable`
+/// values are baked into the implementation's OWN bytecode and would be identical, and wrong, on every clone.
+/// Every field below is therefore regular storage, set exactly once by `initialize`, with the same effect a
+/// constructor had before: no function ever writes these again, and there is no setter.
+contract OptionSeriesVault is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @dev `payout` refuses to start an account with less gas than this left. Each account runs inside a
@@ -66,28 +74,30 @@ contract OptionSeriesVault is ERC20, ReentrancyGuard {
     ///      above the worst case for one account (a redeem and a claim, cold storage, a proxy token transfer).
     uint256 private constant PAYOUT_MIN_GAS = 250_000;
 
-    // ------------------------------------------------------------------ fixed at creation
+    // ------------------------------------------------------------------ fixed at initialization
+    // Regular storage, not `immutable` (this contract is only ever run through a clone - see above).
+    // Written once by `initialize` and never again: no function in this contract writes any of them.
 
-    IOptionSeriesFactory public immutable factory;
-    bytes32 public immutable seriesId;
-    OptionType public immutable optionType;
-    address public immutable underlying;
-    address public immutable quote;
-    address public immutable collateralAsset; // underlying for a CALL, quote for a PUT
-    uint256 public immutable strikePrice; // PRICE_SCALE
-    uint64 public immutable expiry;
-    uint256 public immutable contractSize; // underlying raw units per ONE WHOLE option
-    uint8 public immutable optionDecimals;
-    uint256 public immutable minOptionAmount; // mint only
-    uint256 public immutable maxTotalShortAmount; // 0 = uncapped
-    address public immutable chainlinkFeed;
-    uint8 public immutable feedDecimals;
-    uint32 public immutable maxChainlinkAgeAtExpiry;
-    uint256 public immutable optionScale; // 10 ** optionDecimals
-    uint256 public immutable uqScale; // PRICE_SCALE * 10**underlyingDecimals / 10**quoteDecimals
-    uint256 public immutable collateralPerOption; // maximum liability of one whole option
-    uint16 public immutable mintFeeBps;
-    uint16 public immutable exerciseFeeBps;
+    IOptionSeriesFactory public factory;
+    bytes32 public seriesId;
+    OptionType public optionType;
+    address public underlying;
+    address public quote;
+    address public collateralAsset; // underlying for a CALL, quote for a PUT
+    uint256 public strikePrice; // PRICE_SCALE
+    uint64 public expiry;
+    uint256 public contractSize; // underlying raw units per ONE WHOLE option
+    uint8 public optionDecimals;
+    uint256 public minOptionAmount; // mint only
+    uint256 public maxTotalShortAmount; // 0 = uncapped
+    address public chainlinkFeed;
+    uint8 public feedDecimals;
+    uint32 public maxChainlinkAgeAtExpiry;
+    uint256 public optionScale; // 10 ** optionDecimals
+    uint256 public uqScale; // PRICE_SCALE * 10**underlyingDecimals / 10**quoteDecimals
+    uint256 public collateralPerOption; // maximum liability of one whole option
+    uint16 public mintFeeBps;
+    uint16 public exerciseFeeBps;
 
     // ------------------------------------------------------------------ state
 
@@ -125,12 +135,25 @@ contract OptionSeriesVault is ERC20, ReentrancyGuard {
 
     // ------------------------------------------------------------------ construction
 
+    /// @dev Runs only on the ONE implementation contract `VaultDeployer` deploys with `new` (never on a
+    ///      clone - clones never execute their target's constructor, only its runtime code). It permanently
+    ///      blocks `initialize` on the implementation itself, so nobody can initialize the shared logic
+    ///      contract and mistake it, or trick someone else into mistaking it, for a real series.
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @notice Initializes a fresh clone as one series. Callable exactly once per clone - see `initializer`.
     /// @dev The factory validates policy (allowlists, expiry window, feed approval). The vault validates
     ///      everything its own arithmetic depends on and derives every scale itself, so it never trusts the
     ///      factory for a derived value.
-    constructor(address factory_, bytes32 seriesId_, SeriesConfig memory p, FeeConfig memory fees)
-        ERC20(p.name, p.symbol)
+    function initialize(address factory_, bytes32 seriesId_, SeriesConfig memory p, FeeConfig memory fees)
+        external
+        initializer
     {
+        __ERC20_init(p.name, p.symbol);
+        __ReentrancyGuard_init();
+
         if (factory_ == address(0) || p.underlying == address(0) || p.quote == address(0) || p.chainlinkFeed == address(0))
         {
             revert ZeroAddress();

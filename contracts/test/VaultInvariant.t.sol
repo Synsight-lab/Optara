@@ -18,6 +18,7 @@ import {
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
 import {MockFactory} from "./mocks/MockFactory.sol";
+import {CloneHelper} from "./base/CloneHelper.sol";
 
 /// @notice Drives random sequences of every vault action from a small set of externally owned actors and keeps
 ///         ghost totals so the invariant tests can check exact conservation.
@@ -192,6 +193,7 @@ abstract contract VaultInvariantBase is Test {
     MockERC20 internal collateral;
     MockFactory internal factory;
     address internal feeRecipient = makeAddr("feeRecipient");
+    address internal vaultImplementation; // one implementation, cloned for every series in these tests
 
     function _deployVault(MockFactory factory_, MockAggregator feed_, uint64 expiry_) internal virtual returns (OptionSeriesVault);
 
@@ -201,6 +203,7 @@ abstract contract VaultInvariantBase is Test {
         address admin = makeAddr("admin");
         address pauser = makeAddr("pauser");
 
+        vaultImplementation = CloneHelper.deployImplementation();
         factory = new MockFactory();
         factory.setRole(ADMIN_ROLE, admin, true);
         factory.setRole(PAUSER_ROLE, pauser, true);
@@ -345,7 +348,7 @@ contract VaultInvariantCall is VaultInvariantBase {
             name: "Optara Option",
             symbol: "OPT"
         });
-        return new OptionSeriesVault(address(factory_), keccak256("call"), c, FeeConfig(10, 25));
+        return CloneHelper.deployVaultClone(vaultImplementation, address(factory_), keccak256("call"), c, FeeConfig(10, 25));
     }
 }
 
@@ -377,6 +380,6 @@ contract VaultInvariantPut is VaultInvariantBase {
             name: "Optara Option",
             symbol: "OPT"
         });
-        return new OptionSeriesVault(address(factory_), keccak256("put"), c, FeeConfig(10, 25));
+        return CloneHelper.deployVaultClone(vaultImplementation, address(factory_), keccak256("put"), c, FeeConfig(10, 25));
     }
 }
