@@ -4,7 +4,7 @@
 **Protocol:** Optara  
 **Integration:** Kuru on Monad  
 **Target:** V2 solvency-first MVP  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; Kuru-facing assumptions verified against current public Kuru SDK/repositories on 2026-09-24
 
@@ -612,7 +612,7 @@ A writer may close before expiry:
 1. buy the exact same series long on Kuru
 2. obtain custody of that token
 3. transfer/approve it to Optara
-4. call closeShort(seriesId, quantity)
+4. call closeShort(seriesId, quantity, EXTERNAL)
 5. Optara burns the long
 6. Optara reduces same-series short quantity
 7. RiskEngine recalculates margin
@@ -1199,7 +1199,10 @@ collect buyer settlement stablecoin
 -> transfer long to buyer
 ```
 
-Safe ordering matters.
+Safe ordering matters. Such a router needs the writer's explicit account
+authorization bound to chain, contract, series, quantity, premium, maximum fee,
+deadline and nonce; an ERC-20 allowance is not enough (`USER_FLOWS.md` section 37).
+It is not an MVP workflow.
 
 The protocol must not mint an unsecured long based on premium expected later.
 
@@ -1373,6 +1376,11 @@ Buyer should understand:
 payout above cap does not grow further
 ```
 
+Before acquisition the frontend MUST also disclose the settlement-liveness risk
+(`PROTOCOL_SPEC.md` section 41): if every approved oracle source permanently fails,
+an unmatched long can remain unresolved indefinitely, and expiry is not a guaranteed
+payout date.
+
 ---
 
 # 53. Close UX
@@ -1410,6 +1418,10 @@ Display:
 ```text
 awaiting final oracle price
 ```
+
+If the escalation deadline passes without finalization, display `ORACLE_STALLED`
+separately from ordinary waiting, with the observation rule and the available
+recovery actions (`STATE_MACHINE.md` section 101).
 
 After finalization:
 
@@ -1640,3 +1652,16 @@ This is the main modularity benefit of the SDK architecture.
 > **Kuru trades the Optara long claim; Optara clears the obligation.**
 
 The two systems must remain composable but accounting-independent.
+
+---
+
+## 60. Primary-sale and expiry recovery constraints
+
+Use already-minted inventory with venue-enforced atomic payment/delivery for MVP
+sales. A multi-transaction SDK workflow MUST NOT ask the buyer to prepay an
+untrusted writer before issuance; `USER_FLOWS.md` section 37 governs optional routers.
+If buy-to-close crosses expiry before the Optara close transaction, the SDK MUST
+refresh state: use authorized `cancelUnfinalizedShort` if unfinalized, or redemption
+and full account-group sync if finalized. Never report a close from a venue fill.
+The SDK MUST show partial workflow completion and retain/recover actual assets
+without pretending separately confirmed transactions can be rolled back.

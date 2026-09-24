@@ -3,7 +3,7 @@
 **Document type:** Normative protocol fee and external-cost specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; exact production fee parameters are deployment configuration
 
@@ -73,7 +73,7 @@ Kuru trading fees remain external.
 
 Oracle provider update fees remain external/provider-specific.
 
-The protocol MAY later enable the issuance-fee mechanism defined in this document without changing the option payoff model.
+The protocol MAY later enable the issuance-fee mechanism defined in this document without changing the option payoff model. Because canonical V2 cores are immutable (`ACCESS_CONTROL.md` section 40), "later enable" means one of two things: the fee code ships in the core with the rate set to zero, or it arrives in a new core version that takes new risk only.
 
 ---
 
@@ -369,35 +369,24 @@ with:
 0 <= F_bps <= MAX_ISSUANCE_FEE_BPS
 ```
 
-Then in normalized precision:
+Use the exact gross maximum-payoff numerator (`MATH.md` section 24), with no
+intermediate WAD value:
 
 ```text
-GrossMaxPayoutWad
-=
-C * CS * Q
+Nmax = maxPayoutWad * contractSizeWad * quantityWad
+D_A  = 10^(54 - settlementAssetDecimals)
 ```
 
-with the WAD scaling defined in `MATH.md`.
-
-Fee:
-
-```text
-IssuanceFeeWad
-=
-ceil(
-    GrossMaxPayoutWad
-    * F_bps
-    / 10_000
-)
-```
-
-Then convert to the series settlement stablecoin native units conservatively upward:
+Fee, rounded up once, in native settlement-token units:
 
 ```text
 IssuanceFeeNative
 =
-toNativeUp(IssuanceFeeWad)
+ceilDiv(Nmax * F_bps, D_A * 10_000)
 ```
+
+computed with full-precision checked arithmetic (`Nmax * F_bps` must not overflow;
+use a 512-bit `mulDiv` if the bounded domain does not already guarantee it).
 
 ---
 
@@ -443,7 +432,6 @@ The fee is not part of:
 WorstCaseLoss
 RequiredMargin
 SafetyBuffer
-RoundingGuard
 ```
 
 and it MUST NOT reduce any of them.
@@ -627,6 +615,11 @@ If governance increases the fee above the user's accepted amount before executio
 transaction reverts
 ```
 
+Because canonical V2 cores are immutable, this parameter must be part of the
+`write()` signature from the first deployment of any core whose fee rate can ever be
+raised above zero. A core deployed without fee code keeps `write(seriesId, quantity,
+recipient)` and can never charge an issuance fee; fees then require a new core version.
+
 ---
 
 ## 25. SDK fee preview
@@ -720,6 +713,8 @@ OutstandingExternalSettledClaims(A)
 RoundingReserve(A)
 +
 ProtocolOwnedBalance(A)
++
+UnallocatedSurplus(A)
 ```
 
 This identity must hold independently per settlement asset.
@@ -756,7 +751,7 @@ ProtocolOwnedBalance(A) = 0
 
 and no treasury fee-withdrawal path is required for the initial deployment.
 
-If issuance fees are activated, access-control and deployment configuration must explicitly enable the fee-collection path.
+If issuance fees are activated, access-control and deployment configuration must explicitly enable the fee-collection path. That path must already exist in the deployed core; it cannot be added to an existing core.
 
 ---
 
@@ -1332,3 +1327,11 @@ so only the exact margin requirement is economically relevant.
 For core V2, the cleanest launch configuration is fee-free.
 
 If protocol revenue is enabled later, an explicit same-settlement-asset issuance fee is the preferred native mechanism.
+
+---
+
+## 70. Restricted outflows
+
+The fee formula is defined in section 15. The fee-free MVP has no treasury outflow path.
+Unallocated token surplus and rounding reserve are not fees and cannot be collected.
+All optional future treasury outflows obey the asset-wide incident gate.

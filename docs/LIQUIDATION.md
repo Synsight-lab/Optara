@@ -3,7 +3,7 @@
 **Document type:** Normative liquidation, forced-risk-reduction, and emergency close-out specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -220,10 +220,13 @@ unsupported token behavior
 corrupted custody state
 severe contract exploit
 invalid oracle infrastructure
-migration required after a critical incident
+critical defect in an immutable core
 ```
 
-Emergency close-out is not an ordinary user-risk mechanism.
+Emergency close-out is not an ordinary user-risk mechanism. In canonical V2 it does
+**not** mean forcibly closing, transferring or re-pricing positions: no such function
+exists. It consists only of asset-wide containment (section 101) and, if backing was
+lost, verified-shortfall resolution (section 102).
 
 ---
 
@@ -295,8 +298,7 @@ If she has no locked hedge, core V2 requires approximately:
 
 ```text
 5 USDT
-+ safety buffer
-+ rounding guard
++ safety buffer (zero in the MVP)
 ```
 
 before the write succeeds.
@@ -343,7 +345,7 @@ may reduce exact worst-case loss.
 ### 6.3 Close the short
 
 ```text
-closeShort(seriesId, quantity)
+closeShort(seriesId, quantity, source)
 ```
 
 consumes matching same-series long tokens and reduces short quantity.
@@ -628,13 +630,16 @@ risk-increasing adapter actions -> blocked
 Subject to the nature of the incident, the protocol SHOULD keep available:
 
 ```text
-deposit exact settlement stablecoin
+cure deposit (up to the account's deficit) or recapitalize() (section 101)
 lock compatible long
-close short with exact matching long
-synchronize valid matured group
+close short with exact matching long (EXTERNAL or LOCKED source)
+cancel an expired-unfinalized short
+synchronize valid finalized group
 ```
 
-These actions cannot normally worsen the account's contractual risk.
+These actions cannot normally worsen the account's contractual risk. Ordinary
+deposits into a restricted asset are not accepted, because a later shortfall
+resolution would dilute them.
 
 ---
 
@@ -699,7 +704,8 @@ SafeEffectiveCash
 RequiredMargin
 ```
 
-by depositing more collateral.
+by a cure deposit of the missing amount. A cure deposit is accepted even while the
+asset is restricted, because it only restores what the account already owes.
 
 ---
 
@@ -813,7 +819,7 @@ but the core contracts should not depend on Kuru execution for solvency.
 
 ## 28. Emergency close-out is not ordinary liquidation
 
-An emergency close-out is allowed only under an explicitly declared incident process.
+Emergency handling is allowed only under an explicitly declared incident process.
 
 Possible incident categories include:
 
@@ -822,12 +828,13 @@ critical protocol exploit
 accounting corruption
 broken settlement token behavior
 custody compromise
-unsafe upgrade
 irrecoverable oracle configuration issue
-migration after critical vulnerability
+critical defect in an immutable core
 ```
 
-It is not triggered merely because an underlying price moved.
+It is not triggered merely because an underlying price moved. Its only on-chain
+tools are the pauses, asset restriction (section 101) and verified-shortfall
+resolution (section 102); canonical V2 cannot force-close or migrate positions.
 
 ---
 
@@ -844,10 +851,14 @@ RISK_PAUSED
   |
   +--> RECOVERED
   |
-  +--> ASSET_RESTRICTED
-  |
-  +--> MIGRATION_REQUIRED
+  +--> ASSET_RESTRICTED (section 101)
+          |
+          +--> RECOVERED        backing proven intact / recapitalized
+          |
+          +--> ASSET_WIND_DOWN  verified-shortfall resolution (section 102)
 ```
+
+Canonical V2 cores are immutable, so there is no in-place migration state.
 
 A deployment MAY use more granular scopes.
 
@@ -1030,7 +1041,9 @@ required physical backing
 
 this is a protocol insolvency incident, not a user liquidation event.
 
-Do not attempt to disguise it by liquidating healthy users.
+Do not attempt to disguise it by liquidating healthy users. Restrict the asset
+(section 101); if the shortfall is confirmed and not recapitalized, resolve it with the
+uniform recovery ratio (section 102).
 
 ---
 
@@ -1140,7 +1153,8 @@ It must not be treated as an expected liquidation path.
 
 ## 45. Required response to negative settlement result
 
-The affected settlement asset or protocol scope SHOULD enter emergency mode.
+The sync reverts (it never partially applies). The affected settlement asset MUST then
+be restricted through the separate containment transaction (section 101).
 
 The implementation MUST NOT:
 
@@ -1152,7 +1166,8 @@ take unrelated user collateral
 borrow another stablecoin automatically
 ```
 
-The incident requires explicit recovery/reconciliation logic.
+The incident is handled by reconciliation, recapitalization, or verified-shortfall
+resolution (section 102); nothing else is authorized.
 
 ---
 
@@ -1169,7 +1184,11 @@ insurance fund exhaustion
 
 as ordinary settlement mechanisms.
 
-If the protocol later introduces any of these, they require their own governance and economic specification.
+The one exception is section 102: after a verified loss of backing, a single uniform
+recovery ratio replaces what would otherwise be an implicit first-come-first-served
+loss in pooled custody. It is an incident procedure, not an ordinary mechanism.
+
+If the protocol later introduces any other of these, they require their own governance and economic specification.
 
 ---
 
@@ -1177,24 +1196,29 @@ If the protocol later introduces any of these, they require their own governance
 
 ## 47. Restricted account state
 
-The implementation MAY expose a restricted state for an account when an invariant breach is detected.
+The implementation MAY additionally mark the deficient account(s) as restricted for
+monitoring. An account-only restriction MUST NOT be the response to a confirmed
+solvency deficit: in pooled custody that requires the asset-wide restriction of
+section 101, which puts every account in that asset into the restricted view.
 
 While restricted:
 
 ```text
 write                -> blocked
 withdraw             -> blocked
-unlockLong           -> blocked if risk-increasing
+unlockLong           -> blocked (asset restriction blocks every hedge unlock)
+redeem               -> blocked
+ordinary deposit     -> blocked (cure deposit only)
 risk-increasing adapter operations -> blocked
 ```
 
 Potentially allowed:
 
 ```text
-deposit
+cure deposit (up to the account's deficit)
 lock compatible long
 close exact short
-sync trusted matured groups
+sync trusted finalized groups
 ```
 
 ---
@@ -1298,7 +1322,7 @@ liquidate(account)
 
 when market prices move.
 
-This role SHOULD NOT exist in the MVP unless it is only an emergency/migration tool with tightly specified permissions.
+This role MUST NOT exist in canonical V2.
 
 ---
 
@@ -1361,17 +1385,17 @@ Any such fee must not change the immutable buyer payout unless it was explicitly
 
 Recommended baseline:
 
-| Action | Normal | Risk pause | Oracle settlement incident | Vault/token incident |
+| Action | Normal | Risk pause | Oracle settlement incident | Asset restricted (§101) |
 |---|---|---|---|---|
-| Deposit pair stablecoin | Yes | Yes if token safe | Yes if token safe | Maybe |
+| Deposit pair stablecoin | Yes | Yes if token safe | Yes if token safe | Cure deposit / recapitalize only (No after wind-down) |
 | Write new short | Yes | No | Usually No | No |
-| Lock compatible long | Yes | Yes | Yes if token path safe | Maybe |
+| Lock compatible long | Yes | Yes | Yes if token path safe | Yes |
 | Unlock hedge | Yes if safe | Usually No | Usually No | No |
-| Close same-series short | Yes | Yes if safe | Yes if safe | Maybe |
-| Withdraw free collateral | Yes | Restricted | Restricted | No/Restricted |
-| Finalize risk group | After expiry | Yes if oracle trusted | No | Depends |
-| Sync matured group | Yes | Yes if settlement trusted | No until valid finalization | Depends |
-| Redeem long | After settlement | Yes if settlement/custody trusted | No until valid finalization | Depends |
+| Close same-series short / cancel unfinalized short | Yes | Yes if safe | Yes if safe | Yes |
+| Withdraw free collateral | Yes | Restricted | Restricted | No (rho_A after wind-down) |
+| Finalize risk group | After expiry | Yes if oracle trusted | No | Yes if oracle trusted |
+| Sync finalized group | Yes | Yes if settlement trusted | No until valid finalization | Yes (internal, unscaled) |
+| Redeem long | After settlement | Yes if settlement/custody trusted | No until valid finalization | No (rho_A after wind-down) |
 
 The exact deployment pause implementation may be more granular.
 
@@ -1801,13 +1825,14 @@ If any emergency close-out function exists, its name, authorization, scope, and 
 Examples:
 
 ```text
-restrictAccount(...)
+checkAndRestrict(account, asset)   // section 101
+restrictAsset(asset, reason)       // section 101, guardian
+resolveShortfall(asset, rho)       // section 102, governance + timelock
 pauseRisk(...)
 disablePairForNewRisk(...)
-emergencyMigrate(...)
 ```
 
-only if their behavior is separately specified.
+No emergency migration of existing obligations exists in canonical V2.
 
 ---
 
@@ -1843,8 +1868,9 @@ negative effective balance
 vault/accounting mismatch
 unexpected stablecoin balance change
 risk-engine preview/execution mismatch
-failed matured-group synchronization
+failed finalized-group synchronization
 oracle finalization failure
+ORACLE_STALLED groups
 ```
 
 Any of these warrants investigation.
@@ -1857,10 +1883,12 @@ If emergency controls are implemented, emit events such as:
 
 ```text
 RiskPaused(scope, reasonCode)
-AccountRestricted(account, asset, reasonCode)
+AssetRestricted(asset, account, evidence)
+AssetRestrictionCleared(asset, reconciliationRef)
+Recapitalized(asset, amount, from)
+ShortfallResolved(asset, rho, reconciliationRef)
 PairDisabledForNewRisk(pairId, reasonCode)
 OracleConfigSuspended(configId, reasonCode)
-EmergencyModeCleared(scope)
 ```
 
 Events must not be the on-chain source of truth for health.
@@ -2061,8 +2089,8 @@ INVARIANT / INFRASTRUCTURE FAILURE DETECTED
       health restored      unresolved
           |                   |
           v                   v
-      clear restriction   scoped emergency /
-                          migration / recovery
+      clear restriction   verified-shortfall
+                          resolution (section 102)
 ```
 
 At no point should ordinary emergency handling automatically:
@@ -2094,3 +2122,74 @@ normal market-risk management
 ```
 
 A future version may choose undercollateralized leverage and true liquidations, but that is a different risk architecture and must be specified, implemented, tested, and audited separately.
+
+---
+
+## 101. Persistent incident containment
+
+A reverting financial call rolls back all state changes and events in that call.
+It MUST NOT be described as persisting a restriction. Failure of a proposed unsafe
+write/withdrawal is an ordinary rejection, not proof that existing state is broken.
+
+Provide a separate `checkAndRestrict(account, asset)` transaction which validates
+known account/asset identities, inspects bounded canonical CURRENT state (including
+all pending finalized deltas and unfinalized reservations), and records a restriction
+only on a reproducible existing-state deficit. It MUST return successfully after
+setting the restriction and emitting its event. It MUST NOT mutate positions,
+settle debt, invoke arbitrary caller-selected adapters, or transfer assets.
+Successful healthy checks do not restrict; invalid input reverts. Read failures or
+an off-chain global reconciliation alarm require the authorized guardian's separate
+`restrictAsset(asset, reason)` transaction, not an untrusted caller assertion.
+
+A confirmed solvency deficit MUST restrict the whole affected settlement asset's
+new writes, withdrawals, external redemptions, internal redeem-to-margin credits,
+fee/surplus outflows, and hedge unlocks. Restricting only the deficient writer is
+insufficient in pooled custody. Every relevant entry point checks the same canonical
+restriction flag. Preserve only independently safe actions: cure deposits (into an
+account below its requirement, up to its deficit), `recapitalize(asset, amount)`
+(adds to unallocated surplus, credits no account), hedge locks, closes and
+cancellations, finalization and sync. Ordinary deposits are blocked because a later
+shortfall ratio would dilute them. Detection is not atomic with a previously reverted call;
+monitoring/guardian latency remains an incident risk, not a guaranteed circuit breaker.
+
+Governance clears a restriction only after documented reconciliation shows that
+backing is intact (for example, the alarm was a monitoring fault, or recapitalization
+restored the shortfall). If backing was actually lost, the restriction cannot simply
+be cleared; section 102 defines the only exit. No automatic payout haircut,
+cross-asset substitution, or seizure of healthy users is authorized.
+
+---
+
+## 102. Verified-shortfall resolution
+
+A restriction with lost backing must not freeze a settlement asset forever, and it
+must not be resolved first-come-first-served. The only exit is a single, uniform
+recovery ratio for that asset on that core version (`MATH.md` section 119).
+
+Procedure:
+
+1. The asset is already restricted under section 101, so no outflow has occurred since
+   the deficit was confirmed.
+2. Governance publishes a reconciliation snapshot: `TotalClaims_A`, `AvailableAssets_A`,
+   the resulting `Shortfall_A` and `rho_A`, and the evidence (state reads, events,
+   independent recomputation of the shadow identity in `MATH.md` sections 64 and 118).
+3. Rounding reserve and unallocated surplus absorb the deficit first. If recapitalization
+   or those balances cover it, `rho_A = 1` and the restriction is cleared without a haircut.
+4. Otherwise `resolveShortfall(asset, rho_A)` is queued behind the governance timelock
+   so anyone can check the published numbers before it takes effect. The contract
+   requires an active restriction and `0 < rho_A < 1`; `rho_A` can be set only once.
+5. On execution the asset enters WIND_DOWN on that core:
+   - deposits of that asset and all new risk in it are permanently disabled;
+   - every external transfer of that asset (withdrawal, redemption) pays
+     `floor(rho_A * amount)` while debiting the full ledger or claim amount;
+   - internal movements (writer sync, locked-long credits, `redeemToMargin`) stay unscaled;
+   - finalization, sync, cancellation and redemption otherwise work normally, so
+     unfinalized groups can still complete.
+
+Properties: every claimant of the asset receives the same ratio regardless of order;
+healthy claimants of other assets and other cores are untouched; no series term,
+settlement price or cap changes. Recovered funds are distributed by a separately
+specified claims process, not by changing `rho_A`.
+
+This is an incident mechanism for a proven invariant failure. It is not a
+market-risk tool and is never triggered by price movement.

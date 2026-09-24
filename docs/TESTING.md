@@ -3,9 +3,11 @@
 **Document type:** Normative testing strategy, quality gate, and coverage specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Required implementation/testing specification
+
+> Canonical V2 uses immutable versioned financial cores (`ACCESS_CONTROL.md` sections 40–45). Conditional upgrade guidance/tests below apply only to a separately specified future variant; V2 instead tests sealed peers, fixed code, and non-reassignable internal authority.
 
 ---
 
@@ -480,13 +482,17 @@ SolidityWorstCase
 ExactReferenceWorstCase
 ```
 
-and, subject to documented rounding:
+and, because core V2 uses exact numerators with a single upward rounding, the two
+must be exactly equal in native units:
 
 ```text
-SolidityWorstCase
-<=
-ExactReferenceWorstCase + maximum rounding guard
+SolidityRequiredNative
+==
+ceilDiv(ExactReferenceWorstCaseNumerator, D_A)
 ```
+
+Also assert that the integer settlement debit at any sampled price, including interior
+prices, never exceeds that value (INV-ROUND-06).
 
 ---
 
@@ -1185,10 +1191,11 @@ Unaffected asset remains usable.
 Test:
 
 ```text
-restricted
--> deposit / valid hedge / close
+asset restricted
+-> ordinary deposit reverts; cure deposit / recapitalize / valid hedge / close succeed
 -> health restored
--> restriction cleared according to policy
+-> governance clears the restriction after reconciliation
+   (or, if backing was lost, resolveShortfall -> ASSET_WIND_DOWN)
 ```
 
 ---
@@ -1646,3 +1653,24 @@ Which test proves this accounting equation?
 for every documented behavior.
 
 A green coverage badge without those answers is not sufficient.
+
+---
+
+## 128. Design-regression release gate
+
+The regression catalog in `TEST_CASES.md` Appendix F is mandatory in addition to
+coverage percentages. Every newly named invariant must map to executable assertions.
+The exact-rational oracle must remain independent of the Solidity implementation.
+Test writer fragmentation AND holder aggregation, not only splitting redemption.
+Include interior settlement prices, mixed contract sizes, maximum products/sums,
+donation transfers, and arbitrary redemption/sync/cancellation interleavings.
+
+Add stateful handlers for direct donation, unfinalized cancellation, oracle-stalled
+recovery, successful persistent containment, verified-shortfall resolution, LOCKED-source
+close/cancellation, group exposure release at finalization, and aggregate-cap changes. Do not count
+reverting proposed unsafe actions as existing-account insolvency. Assert that a
+confirmed asset restriction gates redemption as well as writer withdrawals.
+
+`python3 test-vectors/design_regressions.py` is an independent specification-level
+arithmetic check. Passing it is not contract, oracle-adapter, authorization or gas
+validation. All Appendix F integration/state tests still require implemented contracts.

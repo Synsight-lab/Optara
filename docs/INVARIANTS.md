@@ -3,7 +3,7 @@
 **Document type:** Normative safety, accounting, and mathematical invariants  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -570,20 +570,20 @@ K
 The candidate set is:
 
 ```text
-Critical(g)
+Critical(a,g)
     = {0}
-      union {K_i, K_i+C_i for calls}
-      union {K_j-C_j, K_j for puts}
+      union {K_i, K_i+C_i for calls held by a in g}
+      union {K_j-C_j, K_j for puts held by a in g}
 ```
 
 Then:
 
 ```text
 W_{a,g}
-    = max_{S in Critical(g)} Loss_{a,g}(S)
+    = max_{S in Critical(a,g)} Loss_{a,g}(S)
 ```
 
-provided all group positions are included.
+provided all of the account's positions in the group are included.
 
 The RiskEngine must not use an arbitrary sampled grid that can miss the true maximum.
 
@@ -687,25 +687,19 @@ For group `g`:
 
 ```text
 M_{a,g}
-    = W_{a,g}
-      + SafetyBuffer_g
-      + RoundingGuard_g
+    = ceilDiv(WorstLossNumerator_{a,g}, D_A)
+      + SafetyBufferNative_g
 ```
 
-where:
-
-```text
-SafetyBuffer_g >= 0
-RoundingGuard_g >= 0
-```
-
-A safety buffer may be zero in the solvency-first MVP if arithmetic underestimation is otherwise impossible.
+where `SafetyBufferNative_g >= 0` uses the group's snapshotted buffer parameters
+(`MATH.md` section 25). There is no rounding-guard term: exact numerators leave no
+intermediate truncation to guard against. The MVP buffer is zero.
 
 ---
 
 ## INV-MARGIN-02 — Required margin by settlement asset
 
-Let `G_a(A)` be account `a`'s active risk groups settled in stablecoin `A`.
+Let `G_a(A)` be account `a`'s active or expired-unfinalized risk groups settled in stablecoin `A`.
 
 ```text
 RM_{a,A}
@@ -734,7 +728,7 @@ This applies to at least:
 write
 withdraw
 unlockLong
-risk-increasing migration/adapter operation
+risk-increasing router/adapter operation
 ```
 
 If the inequality would fail, the transaction must revert.
@@ -769,7 +763,7 @@ to cross-collateralize stablecoins.
 
 ## INV-MARGIN-05 — Free collateral
 
-After all matured groups relevant to asset `A` are synchronized:
+After all finalized groups relevant to asset `A` are synchronized:
 
 ```text
 FreeCollateral_{a,A}
@@ -801,7 +795,7 @@ For requested withdrawal `X`:
 0 <= X <= FreeCollateral_{a,A}
 ```
 
-must hold after required matured-group synchronization.
+must hold after required finalized-group synchronization.
 
 Equivalently:
 
@@ -887,12 +881,18 @@ For each series `i`, after every completed transaction:
 
 ```text
 OptionTokenBalanceOf(OptaraHedgeCustody, i)
-    = Σ_accounts lockedLongQty[account][i]
+    >= Σ_accounts lockedLongQty[account][i]
 ```
 
 unless the architecture explicitly uses multiple authorized custody contracts, in which case the left side is the sum across those contracts.
 
-No synthetic locked-long accounting entry may exist without real token custody.
+Define `UnallocatedLongSurplus_i = actualCustody_i - sum(lockedLongQty_i)`.
+Direct transfers may increase this surplus without invoking `lockLong`. They MUST
+NOT credit an account, change risk, cause a pause, or prevent valid withdrawals,
+unlocks, synchronization or redemption. `lockLong` credits only its authenticated
+transfer amount, not a pre-existing balance surplus. Multiple custody addresses
+must each be reconciled before aggregation. Core V2 has no arbitrary rescue/burn
+path for unallocated canonical long tokens; donations may remain unclaimed.
 
 ---
 
@@ -909,6 +909,10 @@ used to close a short
 redeemed externally
 counted as a hedge for another account
 ```
+
+A locked unit may *become* a short-close input only through an explicit `LOCKED`
+source close or cancellation by its own account. That transition removes it from
+`lockedLongQty` and burns it in the same operation, so it never serves both roles.
 
 ---
 
@@ -965,9 +969,9 @@ CumulativeLongMinted_i
 
 ---
 
-## INV-SUPPLY-02 — Pre-expiry close consumes equal long and short quantity
+## INV-SUPPLY-02 — Close and cancellation consume equal long and short quantity
 
-For every valid pre-expiry close `Q`:
+For every valid active close or expired-unfinalized cancellation `Q`:
 
 ```text
 ΔLongSupply_i = -Q
@@ -980,9 +984,10 @@ Economically similar but different series cannot close each other.
 
 ---
 
-## INV-SUPPLY-03 — Active pre-expiry equality
+## INV-SUPPLY-03 — Pre-finalization equality
 
-Before settlement redemption/expiry synchronization creates asynchronous state:
+Until the group is finalized (only closes and unfinalized cancellations burn, and both
+reduce short quantity equally):
 
 ```text
 CurrentLongSupply_i
@@ -999,7 +1004,7 @@ For series `i`, define:
 
 ```text
 M_i = cumulative quantity minted by writes
-C_i = cumulative quantity burned in pre-expiry closes
+C_i = cumulative quantity burned in active closes or expired-unfinalized cancellations
 R_i = cumulative quantity burned by external redemption
 H_i = cumulative locked-long quantity consumed during account settlement
 L_i = current outstanding long supply
@@ -1235,7 +1240,7 @@ The protocol must not debit short legs first and credit margin-recognized longs 
 
 ## INV-SETTLE-02 — Finalized group cannot make a previously valid core account negative
 
-Ignoring unexpected token/oracle failure and applying the specified conservative rounding guard, a correctly margined core-V2 account must satisfy:
+Ignoring unexpected token/oracle failure, and given exact-numerator arithmetic (the integer net debit never exceeds the posted group margin, INV-ROUND-06), a correctly margined core-V2 account must satisfy:
 
 ```text
 B'_{a,A} >= 0
@@ -1280,7 +1285,7 @@ Synchronization changes representation from pending economic effect to realized 
 
 ## INV-SETTLE-05 — Settlement-value conservation before rounding
 
-For each finalized series `i`, after excluding quantity closed pre-expiry:
+For each finalized series `i`, after excluding quantity consumed by matching close/cancellation:
 
 ```text
 TotalShortLiability_i
@@ -1337,15 +1342,15 @@ It must not become an uncovered claim.
 For settled series `i`, redeem quantity `Q`:
 
 ```text
-RedeemEconomicValue
-    = phi_i^* * CS_i * Q
+RedeemNumerator
+    = phiWad_i^* * contractSizeWad_i * quantityWad
 ```
 
-External transfer:
+External transfer (single downward rounding):
 
 ```text
 RedeemNative
-    = toNativeDown(RedeemEconomicValue)
+    = floorDiv(RedeemNumerator, D_A)
 ```
 
 ---
@@ -1432,7 +1437,7 @@ No opposite rounding direction may be introduced in a way that creates an uncove
 
 The fixed-point RiskEngine must never return less than the exact real-number contractual worst-case loss after native conversion.
 
-If intermediate truncation can understate loss, the implementation must add a provable `RoundingGuard`.
+Core V2 forbids intermediate payoff truncation and uses exact numerator sums under `MATH.md` section 24. Any future approximation requires a separately reviewed specification and settlement-conservation proof.
 
 ---
 
@@ -1441,17 +1446,17 @@ If intermediate truncation can understate loss, the implementation must add a pr
 For a finalized account group:
 
 ```text
-DeltaWad = LockedLongWad - ShortWad
+DeltaNumerator = LockedLongNumerator - ShortNumerator
 ```
 
 Then:
 
 ```text
-DeltaWad > 0 -> credit = toNativeDown(DeltaWad)
-DeltaWad < 0 -> debit  = toNativeUp(-DeltaWad)
+DeltaNumerator > 0 -> credit = floorDiv(DeltaNumerator, D_A)
+DeltaNumerator < 0 -> debit  = ceilDiv(-DeltaNumerator, D_A)
 ```
 
-The implementation should not convert each leg independently before netting if that changes the specified economic result.
+The implementation MUST NOT convert or round any leg independently before netting.
 
 ---
 
@@ -1514,6 +1519,9 @@ subject to safe ERC-20 transfer semantics.
 
 A transfer must not occur without the corresponding ledger debit and safety check.
 
+Exception: after verified-shortfall resolution (`LIQUIDATION.md` section 102), the
+ledger is debited `X` while the transfer is `floor(rho_A * X)` (INV-CONTAIN-03).
+
 ---
 
 ## INV-VAULT-04 — Global pooled-custody identity
@@ -1541,6 +1549,7 @@ VB_A
       + OutstandingExternalSettledClaims_A
       + RoundingReserve_A
       + ProtocolOwnedVaultBalance_A
+      + UnallocatedSurplus_A
 ```
 
 For the fee-free MVP:
@@ -1565,7 +1574,8 @@ and:
 
 ```text
 OutstandingExternalSettledClaims_A'
-    = OutstandingExternalSettledClaims_A - R
+    = OutstandingExternalSettledClaims_A - exactValueOfBurnedQuantity
+RoundingReserve_A' = RoundingReserve_A + exactValueOfBurnedQuantity - R
 ```
 
 The pooled identity must remain unchanged.
@@ -1689,7 +1699,7 @@ Once:
 S_g^*
 ```
 
-is finalized, governance, pauser, keeper, or upgrade operator must not replace it through an ordinary privileged function.
+is finalized, governance, pauser or keeper must not replace it. Canonical V2 has no upgrade path that could.
 
 ---
 
@@ -1963,7 +1973,8 @@ for `A != B`.
 Verify:
 
 ```text
-sum lockedLongQty == Optara escrow token balance
+sum lockedLongQty <= Optara escrow token balance
+escrow balance = assigned locked quantity + unallocated surplus
 ```
 
 per series after every completed operation.
@@ -1981,13 +1992,13 @@ All invalid paths must fail.
 
 ## E. Supply conservation properties
 
-Before expiry:
+Before finalization:
 
 ```text
 longSupply == aggregateOpenShortQty
 ```
 
-After expiry, test the cumulative identities:
+After finalization, test the cumulative identities:
 
 ```text
 M = C + R + H + L
@@ -2049,6 +2060,7 @@ EffectiveCashClaims_A
 + OutstandingExternalSettledClaims_A
 + RoundingReserve_A
 + ProtocolOwnedVaultBalance_A
++ UnallocatedSurplus_A
 ```
 
 for every supported asset independently.
@@ -2146,11 +2158,10 @@ max(
 ```text
 RM_{a,A}
 =
-Σ_{g settled in A}
+Σ_{g settled in A, active or expired-unfinalized}
 (
-    W_{a,g}
-    + SafetyBuffer_g
-    + RoundingGuard_g
+    ceilDiv(WorstLossNumerator_{a,g}, D_A)
+    + SafetyBufferNative_g
 )
 ```
 
@@ -2177,7 +2188,7 @@ lockedLongQty
 <= actual Optara-controlled long-token quantity
 ```
 
-with equality to assigned escrow balances after completed transitions.
+with any unassigned actual token surplus tracked separately after completed transitions.
 
 ### 7. Atomic matured settlement
 
@@ -2245,6 +2256,8 @@ OutstandingExternalSettledClaims_A
 RoundingReserve_A
 +
 ProtocolOwnedVaultBalance_A
++
+UnallocatedSurplus_A
 ```
 
 ### 13. Core solvency theorem
@@ -2281,3 +2294,53 @@ For core Optara V2, the priority order is:
 ```
 
 The first five properties are not negotiable.
+
+---
+
+## Review invariants — exact arithmetic and surplus
+
+- INV-ROUND-06: actual integer group debit <= its pre-funded native margin at every
+  supported settlement price, including interior prices and mixed contract sizes.
+- INV-ROUND-07: arbitrary fragmentation of writers and aggregation of external
+  holders cannot make aggregate net debits smaller than net credits plus payouts.
+- INV-VAULT-07: donations only increase unallocated surplus; they never credit
+  user cash or hedge quantity and cannot trigger an accounting-mismatch pause.
+- INV-VAULT-08: exact burned claim value = payout + newly created rounding residual.
+  Derive residuals independently; do not use reserve as a balancing plug.
+
+`MATH.md` sections 24, 54 and 118 define numerator arithmetic and shadow accounting.
+Any earlier WAD or real-number formula is conceptual, not permission to truncate.
+
+---
+
+## Additional recovery, containment, sale, and version invariants
+
+- INV-RECOVERY-01: expiry or oracle-stalled status never removes an unfinalized
+  group's worst-case reservation; safe free cash remains withdrawable.
+- INV-RECOVERY-02: unfinalized cancellation burns exactly the owned short reduction,
+  pays no settlement cash, and cannot execute after finalization. A `LOCKED`-source
+  close or cancellation reduces short and locked quantity equally and leaves
+  `NetLiability(S)` unchanged at every price.
+- INV-CONTAIN-01: rejected financial calls leave no persistent restriction; a
+  separate successful verified containment call does persist it.
+- INV-CONTAIN-02: an asset solvency restriction gates all specified outgoing value
+  paths, not just the deficient writer, without rewriting account balances. While
+  restricted, only cure deposits (up to the depositing account's deficit) credit an
+  account; `recapitalize` only increases unallocated surplus.
+- INV-CONTAIN-03: after a verified-shortfall resolution, every external outflow of
+  that asset on that core pays the same ratio `rho_A`; total outflows never exceed
+  `AvailableAssets_A`; `rho_A` is set once, only while restricted, and only in (0,1).
+- INV-CAP-01: every mint respects all aggregate scope caps regardless of accounts;
+  transfers and locks do not release capacity. Each exposure unit is released exactly
+  once: by a pre-finalization burn, or by the O(1) group release at finalization
+  (pair/oracle/asset scopes). Wider-scope counters always equal the sum of the
+  per-group counters of unreleased groups.
+- INV-SALE-01: an advertised safe primary sale cannot commit buyer payment without
+  delivery of the agreed canonical long quantity.
+- INV-VERSION-01: existing obligations have no implementation, peer, oracle-binding,
+  or internal-role reassignment path; future versions cannot mutate them.
+- INV-POLICY-01: future limit reductions never prevent processing valid existing
+  states; group buffers and numeric domains cannot change retroactively.
+
+Unfinalized cancellations are included in cumulative paired-close quantity `C_i`
+throughout the supply identities. No new quantity identity is required.

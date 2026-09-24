@@ -3,9 +3,11 @@
 **Document type:** Normative build, release, deployment, configuration, verification, and rollout specification  
 **Protocol:** Optara  
 **Target:** Monad V2 solvency-first MVP  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Deployment runbook; exact chain addresses and production parameters must be verified at deployment time
+
+> Canonical V2 uses immutable versioned financial cores (`ACCESS_CONTROL.md` sections 40–45). Conditional upgrade guidance/tests below apply only to a separately specified future variant; V2 instead tests sealed peers, fixed code, and non-reassignable internal authority.
 
 ---
 
@@ -122,6 +124,8 @@ approved underlyings
 approved pairs
 oracle providers/config IDs
 position limits
+aggregate exposure caps (series, pair, oracle config, asset)
+oracle maxFinalizationDelay and fallback eligibility
 safety buffer
 fee config
 series-creation policy
@@ -665,12 +669,13 @@ based on worst-case gas tests.
 Configure approved:
 
 ```text
-bufferBps
-fixedBuffer
-rounding guard
+bufferBps (default for new groups; snapshotted per group)
+fixedBufferNative (default for new groups; snapshotted per group)
 ```
 
-Canonical MVP may use zero safety buffer only if arithmetic is proven conservative.
+The canonical MVP uses a zero safety buffer. This is safe because margin uses exact
+payoff numerators rounded up once (`MATH.md` sections 24–26); there is no separate
+rounding-guard parameter to configure.
 
 ---
 
@@ -1024,7 +1029,7 @@ Recommended phases:
 ```text
 Phase 0: deployed, risk paused
 Phase 1: small set of assets/pairs
-Phase 2: low position limits
+Phase 2: low aggregate gross exposure caps plus bounded per-account position counts
 Phase 3: enable official Kuru markets
 Phase 4: raise limits after monitoring
 ```
@@ -1051,8 +1056,9 @@ oracle finalization failures
 negative effective cash
 pause changes
 role changes
-upgrade events
-position-limit pressure
+asset restriction / recapitalization / shortfall resolution
+ORACLE_STALLED groups
+position-limit and aggregate exposure-cap pressure
 ```
 
 ---
@@ -1425,3 +1431,29 @@ specification
 ```
 
 The deployment is complete only when the deployed system—not merely the source code—matches the protocol specification.
+
+---
+
+## 104. Economic exposure and policy activation gates
+
+Before enabling risk, publish finite series/pair/oracle/asset gross exposure caps
+from `PROTOCOL_SPEC.md` section 42, with native-unit human-readable equivalents.
+Manifest/schema and smoke tests MUST include these caps. Missing, zero, overflowing,
+or placeholder limits keep new risk disabled. Multi-account tests MUST demonstrate
+that account splitting cannot exceed a shared cap. Tests MUST also show that finalization releases a
+group's exposure from pair/oracle/asset caps, so abandoned zero-payoff tokens do not
+consume them. Raising limits follows timelocked
+governance; lowering below current exposure does not obstruct exit/settlement.
+
+Group buffer snapshots, quantity granularity, arithmetic bounds, oracle signed
+offsets, historical retrieval/retention, fallback eligibility, and the oracle-stalled
+recovery policy MUST be verified. Do not publish a guaranteed oracle settlement
+deadline. Provider/feed addresses and numeric parameters still require explicit
+production verification; this specification does not invent them.
+
+The `resolveShortfall` path (`LIQUIDATION.md` section 102) MUST be deployed behind the
+governance timelock and covered by EMR-005..007 before activation.
+
+Core V2 uses immutable versioned financial deployments under `ACCESS_CONTROL.md`
+section 40. Existing series and token claims remain on their original core. A new
+version takes new risk; there is no forced migration of open obligations.

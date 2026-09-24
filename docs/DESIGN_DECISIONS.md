@@ -3,7 +3,7 @@
 **Document type:** Architecture Decision Record / canonical design-rationale specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Canonical design decisions for the current V2 architecture
 
@@ -520,7 +520,7 @@ Avoids approximate economic equivalence becoming accounting equivalence.
 Long is burned/consumed when used for:
 
 ```text
-pre-expiry short close
+active short close or expired-unfinalized cancellation
 locked-long settlement credit
 external redemption
 ```
@@ -875,6 +875,8 @@ OutstandingExternalSettledClaims(A)
 RoundingReserve(A)
 +
 ProtocolOwnedBalance(A)
++
+UnallocatedSurplus(A)
 ```
 
 ### Rationale
@@ -950,6 +952,13 @@ One healthy user's collateral is not used to repair another account's deficit.
 ### Rationale
 
 A core-V2 deficit indicates invariant/implementation failure, not expected market behavior.
+
+### Incident exception
+
+If backing is verifiably lost, the asset is restricted and then resolved with one
+uniform recovery ratio (`LIQUIDATION.md` section 102, `MATH.md` section 119).
+This is chosen over indefinite freezing (claims never resolve) and over
+first-come-first-served redemption (early redeemers take everything).
 
 ---
 
@@ -1359,34 +1368,16 @@ Must use same payout semantics and cannot cross stablecoins.
 
 ---
 
-# DD-067 — Upgradeability remains deployment decision
+# DD-067 — Immutable versioned financial core
 
-**Status:** Deferred.
+**Status:** Accepted for canonical core V2.
 
-### Upgradeable advantages
-
-```text
-bug repair
-adapter evolution
-migration convenience
-```
-
-### Risks
-
-```text
-governance trust
-storage collision
-upgrade compromise
-economic reinterpretation
-```
-
-If upgradeable, use:
-
-```text
-multisig
-timelock
-storage-layout testing
-```
+Existing obligations pin the complete financial implementation and internal authority
+paths under `ACCESS_CONTROL.md` sections 40–45. New implementations take new risk
+through new versioned deployments; no forced migration or arbitrary emergency upgrade
+is permitted. This preserves settlement semantics but means critical defects may
+require scoped containment and separately designed recovery. Timelock notice is
+not a guaranteed user exit. Upgradeable variants require a separate trust specification.
 
 ---
 
@@ -1571,6 +1562,59 @@ keeper approval
 ```
 
 after settlement.
+
+---
+
+# DD-080A — Exact payoff numerators, one rounding point
+
+**Status:** Accepted (v0.3).
+
+Payoffs are kept as exact integers `phi * CS * Q` and rounded once per group total
+or per redemption (`MATH.md` section 24). Per-leg rounding could let a settlement
+debit at an interior price exceed the posted margin by one native unit.
+
+---
+
+# DD-080B — Oracle stall: reserve and allow matched exits, never invent a price
+
+**Status:** Accepted (v0.3).
+
+Unfinalized groups stay reserved; `ORACLE_STALLED` is a flag, not a price.
+Cancellation with an identical long, safe unlock and free-cash withdrawal remain
+available (`PROTOCOL_SPEC.md` section 41). Permanent failure of every source can
+leave unmatched claims unresolved; this is disclosed rather than hidden behind an
+arbitrary fallback price.
+
+---
+
+# DD-080C — Asset-wide containment, uniform shortfall resolution
+
+**Status:** Accepted (v0.3).
+
+A confirmed deficit restricts every outflow of that asset. If backing was lost, one
+timelocked recovery ratio applies to every claimant (`LIQUIDATION.md` sections 101–102).
+Rejected: writer-only freeze (pooled redemptions drain first) and indefinite freeze.
+
+---
+
+# DD-080D — Aggregate exposure caps released at finalization
+
+**Status:** Accepted (v0.3).
+
+Gross exposure caps bound total issuance across accounts. A group's exposure leaves
+pair/oracle/asset scopes when the group finalizes, so abandoned zero-payoff tokens
+cannot permanently consume capacity (`PROTOCOL_SPEC.md` section 42).
+
+---
+
+# DD-080E — Explicit LOCKED-source close
+
+**Status:** Accepted (v0.3).
+
+A writer may close (or cancel while unfinalized) using its own locked hedge of the
+identical series, but only by naming the `LOCKED` source. Removing identical short
+and long legs together is risk-neutral, so this cannot fail a margin check, while an
+unlock-then-close sequence could. A hedge is never consumed implicitly.
 
 ---
 

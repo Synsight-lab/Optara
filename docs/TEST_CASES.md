@@ -3,9 +3,11 @@
 **Document type:** Normative test-case catalog  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Required test inventory for full-system implementation
+
+> Canonical V2 uses immutable versioned financial cores (`ACCESS_CONTROL.md` sections 40–45). Conditional upgrade guidance/tests below apply only to a separately specified future variant; V2 instead tests sealed peers, fixed code, and non-reassignable internal authority.
 
 ---
 
@@ -461,6 +463,12 @@ If constructible under capped terms.
 
 ## LCK-010 — Same token cannot be locked twice
 
+## LCK-011 — Lock in an expired (non-ACTIVE) series reverts
+
+## LCK-012 — Lock credits only the amount transferred in the call, never pre-existing custody surplus
+
+## LCK-013 — Lock beyond position-count or numerator bounds reverts before custody changes
+
 ---
 
 # Part XI — Unlock long
@@ -512,6 +520,10 @@ If constructible under capped terms.
 ## CLS-013 — Kuru fill alone changes nothing
 
 ## CLS-014 — Bought long then actual close succeeds
+
+## CLS-015 — LOCKED-source close consumes own identical locked hedge; margin unchanged or lower; custody and lockedLongQty fall equally
+
+## CLS-016 — Close never consumes a locked hedge unless LOCKED is named; LOCKED with insufficient lockedLongQty or another account's hedge reverts
 
 ---
 
@@ -715,7 +727,7 @@ For equivalent initial/final claim set, resulting economic state must match modu
 
 ## SUP-001 — Cumulative minted equals cumulative short created
 
-## SUP-002 — Pre-expiry supply equals open short qty
+## SUP-002 — Pre-finalization supply equals open short qty
 
 ## SUP-003 — Lock does not change long supply
 
@@ -897,6 +909,12 @@ If immutable deployment, mark this section N/A with rationale.
 
 ## KUR-012 — Kuru balance excluded from Optara margin preview
 
+## KUR-013 — Buyer flow shows the settlement-liveness disclosure before acquisition
+
+## KUR-014 — Expiry view distinguishes awaiting-price, ORACLE_STALLED and finalized states
+
+## KUR-015 — Buy-to-close that crosses expiry switches to cancelUnfinalizedShort or redemption + sync, never reports a close from a fill
+
 ---
 
 # Part XXVII — SDK package
@@ -921,7 +939,7 @@ If immutable deployment, mark this section N/A with rationale.
 
 ## SDK-010 — unlock calldata exact
 
-## SDK-011 — close calldata exact
+## SDK-011 — close calldata exact, including the EXTERNAL/LOCKED source
 
 ## SDK-012 — redeem calldata exact
 
@@ -940,6 +958,12 @@ If immutable deployment, mark this section N/A with rationale.
 ## SDK-019 — settlement asset read from series, not global USDC
 
 ## SDK-020 — event decoding exact
+
+## SDK-021 — cancelUnfinalizedShort, recapitalize and checkAndRestrict builders exact
+
+## SDK-022 — previews reflect asset restriction / wind-down (restricted actions shown as unavailable; wind-down payouts scaled by rho_A)
+
+## SDK-023 — maxFeeNative passed on write when the deployed core has fee code
 
 ---
 
@@ -973,7 +997,7 @@ If immutable deployment, mark this section N/A with rationale.
 
 ## STM-002 — ACTIVE -> EXPIRED_UNSETTLED
 
-## STM-003 — EXPIRED_UNSETTLED -> FINALIZED
+## STM-003 — EXPIRED_UNSETTLED -> SETTLED (group FINALIZED)
 
 ## STM-004 — FINALIZED cannot return ACTIVE
 
@@ -1095,9 +1119,9 @@ Each must preserve accounting and prevent double effect.
 
 ## INV-002 — Long mint equals short creation cumulative
 
-## INV-003 — Pre-expiry supply equals open short quantity
+## INV-003 — Pre-finalization supply equals open short quantity
 
-## INV-004 — Locked custody equals locked accounting
+## INV-004 — Locked custody covers assigned accounting plus unallocated surplus
 
 ## INV-005 — No double long consumption
 
@@ -1257,7 +1281,7 @@ Every invariant listed below must remain mapped to at least one implemented test
 |---|---|
 | INV-HEDGE-01 | LCK-008, LCK-009, KUR-012 |
 | INV-HEDGE-02 | LCK-002, LCK-003, INV-004 |
-| INV-HEDGE-03 | LCK-010, SYN-010, INV-005 |
+| INV-HEDGE-03 | LCK-010, SYN-010, INV-005, CLS-015, CLS-016 |
 | INV-HEDGE-04 | ULK-002, ULK-003 |
 | INV-HEDGE-05 | SYN-010, SUP-007, INV-005 |
 
@@ -1266,7 +1290,7 @@ Every invariant listed below must remain mapped to at least one implemented test
 | Invariant | Required test IDs |
 |---|---|
 | INV-SUPPLY-01 | WRT-012, WRT-013, SUP-001 |
-| INV-SUPPLY-02 | CLS-009, CLS-010, SUP-005 |
+| INV-SUPPLY-02 | CLS-009, CLS-010, CLS-015, SUP-005, REC-002 |
 | INV-SUPPLY-03 | SUP-002, SUP-003, SUP-004 |
 | INV-SUPPLY-04 | SUP-008 |
 | INV-SUPPLY-05 | SUP-009 |
@@ -1401,7 +1425,7 @@ Every invariant listed below must remain mapped to at least one implemented test
 | AC-INV-07 | ACL-006, PAU-009 |
 | AC-INV-08 | ACL-004, ACL-005, SYN-014 |
 | AC-INV-09 | ACL-015 |
-| AC-INV-10 | ACL-003, UPG-001 through UPG-010 |
+| AC-INV-10 | ACL-003, VER-001, VER-002 (UPG-* are N/A for canonical immutable V2) |
 
 ---
 
@@ -1562,3 +1586,56 @@ integration/package/deployment tests passing
 ```
 
 If any item is missing, "100% coverage" is not complete protocol coverage.
+
+---
+
+## Appendix F — Design-review regression cases and traceability
+
+These cases are mandatory. They refine broad earlier tests; N/A is permitted only
+for explicitly deferred router functionality, not core invariants.
+
+| Test ID | Required assertion / scenario | Invariants |
+|---|---|---|
+| FIX-015 | 18-decimal asset, per-whole payoff `WAD+1`, two half-option writers, one whole redeemer: rounded writer debits cover redemption and residuals exactly | INV-ROUND-07, INV-SETTLE-06 |
+| FIX-016 | Same call K=10 WAD, C=2 WAD: short CS=1,Q=1, locked CS=0.5,Q=2; S=11 WAD+1: margin=0 and net debit=0 for 6 and 18 decimals | INV-ROUND-06, INV-SETTLE-02 |
+| FIX-017 | Exact payoff numerators at interior prices never exceed critical-point margin; compare independent rational arithmetic | INV-ROUND-06 |
+| FIX-018 | Product/sum at supported bounds succeeds; bound+1 fails before custody/issuance, including zero-net-risk hedge quantity | INV-RISK-06 |
+| FIX-019 | Burn a fractional claim with zero native payout; exact remaining claim and new rounding residual reconcile independently | INV-VAULT-08 |
+| DON-001 | Direct one-unit option donation does not credit locked quantity or block lock/unlock/sync | INV-HEDGE-02, INV-VAULT-07 |
+| DON-002 | Direct stablecoin donation increases only surplus; no user credit, rescue withdrawal or false restriction | INV-VAULT-07 |
+| SAL-001 | Pre-minted inventory purchase atomically exchanges payment and exact token quantity | INV-SALE-01 |
+| SAL-002 | SDK refuses to advertise prepaid separate issuance as a safe sale | INV-SALE-01 |
+| SAL-003 | If future issuance router exists: write/transfer failure rolls back payment; nonce, expiry, recipient, chain and writer authorization enforced | INV-SALE-01 |
+| REC-001 | Expired-unfinalized margin remains reserved; unrelated free cash withdraws; encumbered cash cannot withdraw | INV-RECOVERY-01 |
+| REC-002 | Owner cancellation burns matching external long and short, updates cumulative C and gross caps, pays no option cash | INV-RECOVERY-02, INV-CAP-01 |
+| REC-003 | Wrong series/owner/quantity and finalized cancellation revert atomically | INV-RECOVERY-02 |
+| REC-004 | Cancel/finalize races follow transaction ordering without double consumption | INV-RECOVERY-02 |
+| REC-005 | Safe unfinalized unlock succeeds; unsafe unlock fails; finalized hedge only settles atomically | INV-RECOVERY-01, INV-HEDGE-04 |
+| REC-006 | Escalation deadline flags stalled state without changing claims; authentic late historical report may finalize | INV-RECOVERY-01 |
+| REC-007 | All sources permanently unavailable: no invented price or debt release; UI discloses unresolved claims | INV-RECOVERY-01 |
+| ORN-013 | Negative/zero/positive offsets; reject negative resulting time, overflow, inverted interval and finalization before observation end | INV-ORACLE-05 |
+| FIN-013 | Omitted primary bytes do not prove failure; all eligible submissions obey a unique selection/fallback rule | INV-ORACLE-04, INV-ORACLE-05 |
+| EMR-001 | A rejected unsafe financial call persists neither flag nor event | INV-CONTAIN-01 |
+| EMR-002 | Separate verified existing-state deficit check commits asset restriction; healthy/invalid checks and donations cannot grief-pause | INV-CONTAIN-01 |
+| EMR-003 | Asset restriction blocks write, withdraw, redeem, redeemToMargin, treasury outflow and unlock across all accounts; unrelated asset operates | INV-CONTAIN-02 |
+| EMR-004 | Guardian restrict/unrestrict authorization, evidence and events; no balances/terms changed by restriction | INV-CONTAIN-02 |
+| EMR-005 | resolveShortfall rejects: unrestricted asset, rho >= 1, rho = 0, second call, non-governance caller, missing timelock | INV-CONTAIN-03 |
+| EMR-006 | After resolution, withdrawals and redemptions in any order pay floor(rho * amount); total outflows <= vault balance; claimants of other assets/cores untouched | INV-CONTAIN-03 |
+| EMR-007 | Reserve + surplus covering the deficit yields rho = 1 and clears the restriction without a haircut; deposits blocked after wind-down | INV-CONTAIN-03 |
+| EMR-008 | While restricted: ordinary deposit reverts; cure deposit accepted only up to the account's deficit; recapitalize adds to surplus and credits no account | INV-CONTAIN-02, INV-VAULT-07 |
+| CAP-001 | Multiple accounts each below account limits cannot collectively mint over series/pair/oracle/asset cap | INV-CAP-01 |
+| CAP-002 | Transfer/lock/short-only sync do not release gross capacity; each valid burn does once | INV-CAP-01 |
+| CAP-003 | Lower cap below outstanding exposure blocks writes but allows exits/settlement; timelocked increases only | INV-CAP-01, INV-POLICY-01 |
+| CAP-004 | Finalization releases the group's exposure from pair/oracle/asset counters in O(1); abandoned zero-payoff tokens do not consume those caps; later burns touch only series/group counters; wider counters equal sum of unreleased groups | INV-CAP-01 |
+| CAP-005 | Expired-unfinalized and ORACLE_STALLED groups keep consuming pair/asset capacity until finalized | INV-CAP-01 |
+| VER-001 | No proxy/beacon/peer/registry/role-admin route can replace existing financial logic or custody authority | INV-VERSION-01 |
+| VER-002 | New core/version IDs do not collide or redirect old series; old claims settle on old core | INV-VERSION-01 |
+| POL-001 | Lower count limits do not prevent old account processing; buffers/granularity/math domains cannot mutate for existing groups | INV-POLICY-01 |
+| SYN-015 | Any convenience series selector processes the complete risk group, never an isolated spread leg | INV-SETTLE-01 |
+| REC-008 | cancelUnfinalizedShort with LOCKED source consumes own identical hedge only when named; EXTERNAL source never touches locked quantity | INV-RECOVERY-02 |
+
+Additional previously missing mappings: `SM-INV-11` maps to WRT-018/SDK-017;
+`KI-INV-11` maps to KUR-010/CLS-013; INV-ROUND-06/07, INV-VAULT-07/08 and all
+recovery/containment/cap/sale/version/policy invariants map to the rows above.
+The release registry MUST include these mappings and generated deployment tests,
+not merely the earlier Appendix A tables.

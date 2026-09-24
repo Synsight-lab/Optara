@@ -3,7 +3,7 @@
 **Document type:** Normative protocol mathematics
 **Protocol:** Optara
 **Target:** V2 solvency-first MVP on Monad
-**Version:** 0.2.0-draft
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24
 **Status:** Engineering specification; not production-audited
 
@@ -661,14 +661,18 @@ K_i
 
 where core V2 guarantees `C_i <= K_i` for puts.
 
-The complete candidate set for risk group `g` is:
+The complete candidate set for account `a` in risk group `g` is built from that
+account's own positions (shorts and locked longs) in the group, never from every
+series that exists in the group protocol-wide:
 
 ```text
-Critical(g)
+Critical(a,g)
     = {0}
-      union {K_i, K_i + C_i for every call i in g}
-      union {K_j - C_j, K_j for every put j in g}
+      union {K_i, K_i + C_i for every call i held by a in g}
+      union {K_j - C_j, K_j for every put j held by a in g}
 ```
+
+This keeps evaluation bounded by the per-account position limits.
 
 Duplicate prices may be removed.
 
@@ -682,7 +686,8 @@ W_{a,g} = 0
 
 ## 23. Exact worst-case algorithm
 
-Conceptually:
+Conceptually (the executable integer form is section 92; `Payoff_i` here means the
+exact numerator of section 24, never a truncated per-leg value):
 
 ```text
 worst = 0
@@ -717,20 +722,46 @@ A later implementation may use a sorted slope-sweep algorithm to approach `O(n l
 
 ---
 
-## 24. Fixed-point implementation requirement for exact risk
+## 24. Exact arithmetic requirement
 
-The real-number equations above are normative.
+Core V2 MUST retain the exact payoff numerator through portfolio aggregation.
+For WAD-scaled inputs define:
 
-The Solidity RiskEngine MUST return a value that is **greater than or equal to** the exact mathematical worst-case loss after conversion to settlement-token units.
+```text
+N_i(S,Q) = phiWad_i(S) * contractSizeWad_i * quantityWad
+D_A      = 10^(54 - settlementAssetDecimals)
+exactNativePayoff_i = N_i / D_A
+```
 
-An implementation may achieve this by either:
+Core V2 supports settlement decimals `0 <= d <= 18` and option quantities with
+18 decimals. `N_i` is an integer; `N_i / D_A` is a rational value, not an integer
+intermediate. Do not divide between the three multiplications.
 
-1. exact/full-precision rational evaluation; or
-2. conservative fixed-point evaluation plus a formally bounded rounding guard.
+At each critical price, sum short numerators and locked-long numerators separately,
+then subtract. Let `WorstLossNumerator` be the largest nonnegative difference.
 
-It MUST NOT use downward rounding in a way that can make required margin smaller than the true contractual worst-case loss.
+```text
+BaseMarginNative = ceilDiv(WorstLossNumerator, D_A)
+GroupMarginNative = BaseMarginNative + SafetyBufferNative
+```
 
-If per-leg fixed-point rounding is used during risk evaluation, the implementation MUST prove and add a worst-case rounding-error bound before converting the group margin to native stablecoin units.
+The breakpoint proof applies to these exact numerators. It does NOT apply to
+per-leg truncated payoff functions, which can have interior rounding steps.
+The same exact numerator MUST feed settlement. Core V2 uses no intermediate
+rounding approximation, so no rounding-guard term exists (section 26).
+
+Implementations MUST enforce arithmetic bounds before accepting positions:
+each product and each account/group sum of maximum short or locked-long payoff
+numerators MUST fit `int256.max`. Compute/check products using division-based
+bounds before multiplication; validate both unsigned sums before signed subtraction.
+Bounds apply to locks as well as writes, even when a portfolio has zero net risk.
+Series quantities and aggregate exposure counters MUST also have checked bounds.
+A mathematically valid but unrepresentable input reverts before custody or issuance
+is committed. Parameter changes MUST NOT make existing states unrepresentable.
+
+Using a multiword exact implementation instead requires an explicit specification
+revision and equivalent overflow and gas proofs. Silent truncation, saturation,
+and chained rounded `mulDiv` calls are forbidden.
 
 ---
 
@@ -742,57 +773,60 @@ Core economic solvency comes from exact worst-case loss.
 
 An optional explicit safety buffer may be added for implementation/operational conservatism.
 
-For group `g`, define:
+Each risk group snapshots two immutable parameters when the group is created:
 
 ```text
-bufferBps_g >= 0
-fixedBuffer_g >= 0
+bufferBps_g       >= 0
+fixedBufferNative_g >= 0   // native settlement-token units
 ```
 
-A recommended deterministic policy is:
+Governance may change the defaults only for groups created afterward. Existing
+groups keep their snapshot, so a policy change can never push an existing account
+below its requirement.
+
+The executable policy is computed in native units on the base margin from section 24:
 
 ```text
-if W_g == 0:
-    SafetyBuffer_g = 0
+if BaseMarginNative == 0:
+    SafetyBufferNative = 0
 else:
-    SafetyBuffer_g
-        = ceil(W_g * bufferBps_g / 10_000)
-          + fixedBuffer_g
+    SafetyBufferNative
+        = ceilDiv(BaseMarginNative * bufferBps_g, 10_000)   // checked multiplication
+          + fixedBufferNative_g
 ```
 
-The solvency-first MVP may configure:
+The solvency-first MVP configures:
 
 ```text
 bufferBps_g = 0
-fixedBuffer_g = 0
+fixedBufferNative_g = 0
 ```
 
-provided fixed-point rounding is independently handled conservatively.
-
-A safety buffer is not a substitute for correct payoff or margin math.
+This is safe because section 24 makes the base margin exact. A safety buffer is not
+a substitute for correct payoff or margin math.
 
 ---
 
 ## 26. Group required margin
 
-Before conversion to native token units:
+In native settlement-token units:
 
 ```text
-GroupMargin_{a,g}
-    = W_{a,g}
-      + SafetyBuffer_g
-      + RoundingGuard_g
+GroupMarginNative_{a,g}
+    = ceilDiv(WorstLossNumerator_{a,g}, D_A)
+      + SafetyBufferNative_g
 ```
 
-where `RoundingGuard_g` is zero if the implementation proves exact arithmetic, otherwise it is a formally derived upper bound on numerical underestimation.
-
-The final native settlement-token requirement MUST round upward.
+The only rounding is the single upward conversion of the exact worst-case numerator
+(section 24). Core V2 has no separate rounding-guard term because no intermediate
+value is truncated. A future approximate engine would require a separately reviewed
+proof and specification change.
 
 ---
 
 ## 27. Required margin per settlement stablecoin
 
-Let `G(A)` be the account's active risk groups whose settlement asset is `A`.
+Let `G(A)` be the account's active or expired-unfinalized risk groups whose settlement asset is `A`.
 
 Then:
 
@@ -875,7 +909,7 @@ A collateral-decreasing operation MUST revert if this inequality would fail.
 
 ## 30. Free collateral
 
-After all required matured groups are synchronized:
+After all finalized groups affecting `A` are synchronized (expired-unfinalized groups stay reserved at their worst case):
 
 ```text
 FreeCollateral_{a,A}
@@ -905,7 +939,7 @@ then the account is mathematically invalid under core V2 and must not be allowed
 
 ## 31. Additional collateral required
 
-After required synchronization of any matured groups affecting the asset, for a proposed post-action portfolio:
+After required synchronization of any finalized groups affecting the asset, for a proposed post-action portfolio:
 
 ```text
 AdditionalCollateralNeeded_{a,A}
@@ -999,7 +1033,21 @@ with:
 0 < ΔQ <= q_i^-
 ```
 
-The matching long quantity is burned.
+The matching long quantity is burned. The caller explicitly chooses its source:
+
+```text
+EXTERNAL: ΔQ long tokens transferred in by the caller
+LOCKED:   ΔQ of the caller's own lockedLongQty in the identical series
+          (q_i^+' = q_i^+ - ΔQ, burned from Optara custody)
+```
+
+A LOCKED-source close removes `ΔQ` of a short leg and `ΔQ` of an identical long leg,
+so `NetLiability(S)` is unchanged at every `S` and the requirement cannot rise.
+It never happens implicitly: a locked hedge is consumed only when the caller names
+the LOCKED source.
+
+The same arithmetic applies to `cancelUnfinalizedShort` while a group is expired
+but unfinalized (`PROTOCOL_SPEC.md` section 41). Neither operation pays option cash.
 
 Required margin is then recalculated from the reduced portfolio.
 
@@ -1066,7 +1114,7 @@ For requested withdrawal `X` native units of settlement asset `A`:
 B_{a,A}' = B_{a,A} - X
 ```
 
-After mandatory synchronization of relevant matured risk groups, withdrawal is valid only if:
+After mandatory synchronization of every finalized risk group affecting `A` (expired-unfinalized groups remain reserved), withdrawal is valid only if:
 
 ```text
 B_{a,A}' >= RequiredMargin_{a,A}
@@ -1326,16 +1374,19 @@ subject to deterministic rounding.
 For settled series `i` and redeem quantity `Q`:
 
 ```text
-RedeemEconomicValue
-    = phi_i^* * CS_i * Q
+RedeemNumerator
+    = phiWad_i^* * contractSizeWad_i * quantityWad
 ```
 
-The external token transfer is:
+The external token transfer rounds once, down:
 
 ```text
 RedeemNative
-    = toNativeDown(RedeemEconomicValue)
+    = floorDiv(RedeemNumerator, D_A)
 ```
+
+The exact value `RedeemNumerator / D_A` minus `RedeemNative` becomes rounding
+residual (section 118).
 
 The redeemed option-token quantity MUST be burned.
 
@@ -1384,29 +1435,24 @@ only when that addition cannot overflow; production Solidity should use an overf
 
 ---
 
-## 50. Normalized total payoff
+## 50. Exact total payoff
 
-With all fields WAD-scaled:
-
-```text
-PayoffWad
-    = phiWad * contractSizeWad * quantityWad / WAD^2
-```
-
-The mathematical expression is normative.
-
-Recommended settlement computation:
+The authoritative representation is the integer numerator from section 24:
 
 ```text
-longPayoffWad
-    = mulDivDown(
-        mulDivDown(phiWad, contractSizeWad, WAD),
-        quantityWad,
-        WAD
-      )
+N = phiWad * contractSizeWad * quantityWad
+exactPayoffWad = N / WAD^2        // rational notation only
+exactNativePayoff = N / D_A       // rational notation only
+externalPayoutNative = floorDiv(N, D_A)
 ```
 
-For risk calculations, the implementation MUST avoid any downward bias that can understate loss. It may use higher precision or conservative upward bounds.
+Only the final transfer/accounting boundary rounds. Never materialize
+`exactPayoffWad` as a truncated integer before computing a writer debit or a
+portfolio net result. In particular, the former chained `mulDivDown` settlement
+recipe is forbidden: it can undercharge fragmented writers and reduce hedge credit.
+
+A cached payoff per option MUST retain numerator/scale information sufficient to
+reproduce this expression exactly; a rounded per-option WAD cache is insufficient.
 
 ---
 
@@ -1435,9 +1481,9 @@ toNativeDown(xWad,d) = floor(xWad / scale)
 toNativeUp(xWad,d)   = ceil(xWad / scale)
 ```
 
-Approved settlement assets with unusual decimal counts require explicit adapter tests.
-
-For MVP simplicity, settlement assets with `d <= 18` are strongly preferred.
+Core V2 MUST enforce `0 <= d <= 18`. These WAD conversion helpers are valid for
+values already exactly represented as WAD; they MUST NOT truncate the exact payoff
+numerator. Payoffs use `N / D_A` directly as specified in section 24.
 
 ---
 
@@ -1459,7 +1505,8 @@ toWad(nativeAmount,d)
 
 The canonical cash ledger SHOULD remain in native token units so internal balances reconcile exactly with ERC-20 custody.
 
-The RiskEngine may calculate normalized WAD requirements and convert the final required margin upward to native units for comparison against the cash ledger.
+The RiskEngine MUST compare its exact-numerator requirement rounded upward once
+to the native-unit cash ledger.
 
 ---
 
@@ -1479,27 +1526,28 @@ This means rounding may create small protocol dust but must never create an unco
 
 ---
 
-## 54. Group-net rounding at maturity
+## 54. Exact group-net rounding at maturity
 
-Matured positions in a risk group SHOULD be netted in normalized precision before converting to native settlement-token units.
-
-Compute:
+Compute complete account/group sums without intermediate division:
 
 ```text
-DeltaWad = LockedLongWad - ShortWad
+ShortN = sum(phiWad * contractSizeWad * shortQuantityWad)
+LongN  = sum(phiWad * contractSizeWad * lockedQuantityWad)
+DeltaN = LongN - ShortN
+
+DeltaN > 0: creditNative = floorDiv(DeltaN, D_A)
+DeltaN < 0: debitNative  = ceilDiv(-DeltaN, D_A)
+DeltaN = 0: no cash change
 ```
 
-Then:
+All legs MUST be included before rounding. `ceilDiv(n,d)` must avoid addition
+overflow, for example `n / d + (n % d != 0 ? 1 : 0)`.
+The rounded debit is at most `BaseMarginNative` because the exact net liability
+at the final price is at most the exact worst-case numerator.
 
-```text
-if DeltaWad > 0:
-    accountCreditNative = toNativeDown(DeltaWad)
-
-if DeltaWad < 0:
-    accountDebitNative = toNativeUp(-DeltaWad)
-```
-
-This is preferable to separately converting every leg to native units before netting because it minimizes rounding distortion while preserving solvency.
+For conservation, count only actual net negative account deltas as writer debits
+and actual net positive account deltas as internal credits. Do not count gross
+hedge values again after they have already reduced a net debit.
 
 ---
 
@@ -1541,16 +1589,16 @@ for every series `i`.
 
 ---
 
-## 57. Pre-expiry close conservation
+## 57. Close and cancellation conservation
 
-Closing quantity `Q` consumes the same-series long token and short obligation:
+Closing (active) or cancelling (expired-unfinalized) quantity `Q` consumes the same-series long token and short obligation:
 
 ```text
 -Q long token supply
 -Q open short quantity
 ```
 
-Before expiry, ignoring no other burn path:
+Until the group is finalized (the only burn paths are close and cancellation):
 
 ```text
 CurrentLongSupply_i
@@ -1569,7 +1617,7 @@ Let:
 
 ```text
 M_i = cumulative quantity minted by writes
-C_i = cumulative quantity burned in pre-expiry closes
+C_i = cumulative quantity burned in active closes or expired-unfinalized cancellations
 R_i = cumulative quantity burned by external long redemption
 H_i = cumulative locked-long quantity burned/consumed during account settlement
 L_i = current outstanding long-token supply
@@ -1602,7 +1650,7 @@ and:
 M_i - C_i = R_i + H_i = S_i
 ```
 
-subject only to valid protocol migration/emergency procedures explicitly outside normal settlement.
+Quantities are never rewritten by any emergency procedure; verified-shortfall resolution (section 119) scales payouts, not quantities.
 
 ---
 
@@ -1617,7 +1665,7 @@ TotalShortLiability_i
     = TotalLongClaim_i
 ```
 
-before rounding and after excluding quantities already closed pre-expiry.
+before rounding and after excluding quantities already consumed by matching close/cancellation.
 
 Across a risk group:
 
@@ -1725,7 +1773,7 @@ the account must be treated as owing:
 
 before any withdrawal is considered.
 
-The protocol therefore synchronizes matured groups before withdrawal rather than trusting stale raw cash balances.
+The protocol therefore synchronizes finalized groups before withdrawal rather than trusting stale raw cash balances.
 
 ---
 
@@ -1754,6 +1802,7 @@ VaultBalance_A
       + OutstandingExternalSettledClaims_A
       + RoundingReserve_A
       + ProtocolOwnedVaultBalance_A
+      + UnallocatedSurplus_A
 ```
 
 For the fee-free MVP:
@@ -1769,7 +1818,8 @@ After an external redemption of `R` units:
 ```text
 VaultBalance_A' = VaultBalance_A - R
 OutstandingExternalSettledClaims_A'
-    = OutstandingExternalSettledClaims_A - R
+    = OutstandingExternalSettledClaims_A - exactValueOfBurnedQuantity
+RoundingReserve_A' = RoundingReserve_A + exactValueOfBurnedQuantity - R
 ```
 
 so the identity remains unchanged.
@@ -1777,6 +1827,11 @@ so the identity remains unchanged.
 After a writer synchronizes, raw account state moves toward the already-defined effective state; synchronization must not create a second economic debit for a claim already reflected in the pooled accounting.
 
 This is primarily an invariant-testing identity. Production contracts need not iterate across all accounts to calculate it on-chain.
+
+The identity describes a healthy asset. A confirmed deficit breaks it by definition;
+the asset is then restricted and, if backing was lost, resolved under section 119,
+after which outflows are scaled by `rho_A` and the identity is replaced by
+`total future outflows <= VaultBalance_A`.
 
 ---
 
@@ -2129,25 +2184,14 @@ RequiredMargin_{a,A} >= 0
 
 ---
 
-## 75. Margin monotonicity for added naked shorts
+## 75. Margin monotonicity for added shorts
 
-Adding a short position without adding collateral or a hedge MUST NOT reduce the exact contractual loss merely because of arithmetic sign mistakes.
-
-More precisely, a newly added short may economically offset another short in rare mixed call/put shapes only if the actual payoff algebra proves it; the implementation must not assume monotonicity by position label.
-
-Therefore the canonical invariant is:
-
-```text
-RequiredMarginPost = recompute(full portfolio)
-```
-
-not an unsafe local heuristic such as:
-
-```text
-RequiredMargin += maxPayout(newShort)
-```
-
-unless used only as a conservative upper bound.
+With all other positions unchanged, every additional short adds a nonnegative
+payoff at every price. Therefore `W_afterWrite >= W_beforeWrite`. A short call
+and short put can have a combined maximum smaller than the SUM of their separate
+maxima, but adding either cannot decrease the existing portfolio maximum.
+A monotone safety-buffer policy preserves this ordering. Recompute the complete
+portfolio; do not confuse diversification versus a sum with decreasing risk.
 
 ---
 
@@ -2359,25 +2403,25 @@ function payoffPerUnderlying(series, S):
 
 ---
 
-## 90. Total economic payoff
+## 90. Exact payoff numerator
 
 ```text
-function totalPayoff(series, S, quantity):
-    p = payoffPerUnderlying(series, S)
-    return p * series.contractSize * quantity
+function exactPayoffNumerator(series, S, quantityWad):
+    phiWad = payoffPerUnderlying(series, S)
+    return checkedProduct(phiWad, series.contractSizeWad, quantityWad)
 ```
 
-Production code must apply fixed-point scaling and explicit rounding.
+No division occurs here. Section 24 bounds products and complete account/group sums.
 
 ---
 
 ## 91. Critical-point builder
 
 ```text
-function criticalPoints(group):
+function criticalPoints(accountGroupPositions):
     points = {0}
 
-    for series in group.activeSeries:
+    for series in accountGroupPositions:   // the account's shorts and locked longs only
         if series.type == CALL:
             points.add(series.strike)
             points.add(series.strike + series.maxPayout)
@@ -2390,45 +2434,33 @@ function criticalPoints(group):
 
 ---
 
-## 92. Worst-case group loss
+## 92. Worst-case group loss numerator
 
 ```text
-function worstCaseLoss(account, group):
-    worst = 0
-
-    for S in criticalPoints(group):
-        shorts = 0
-        longs  = 0
-
-        for series in account.shortSeries(group):
-            shorts += totalPayoff(series, S, shortQty[series])
-
-        for series in account.lockedLongSeries(group):
-            longs += totalPayoff(series, S, lockedLongQty[series])
-
-        loss = max(shorts - longs, 0)
-        worst = max(worst, loss)
-
-    return conservativeUpperBound(worst)
+function worstCaseLossNumerator(account, group):
+    worstN = 0
+    for S in criticalPoints(completeAccountGroupPositions):
+        shortN = sum(exactPayoffNumerator(i, S, shortQty[i]))
+        longN = sum(exactPayoffNumerator(i, S, lockedLongQty[i]))
+        worstN = max(worstN, max(shortN - longN, 0)) // checked signed subtraction
+    return worstN
 ```
-
-`conservativeUpperBound` includes any proven fixed-point rounding guard required by the implementation.
-
----
 
 ## 93. Required margin by asset
 
 ```text
-function requiredMargin(account, settlementAsset):
-    total = 0
-
-    for group in account.activeGroups(settlementAsset):
-        W = worstCaseLoss(account, group)
-        buffer = safetyBuffer(group, W)
-        total += toNativeUp(W + buffer + roundingGuard(group))
-
-    return total
+function requiredMargin(account, asset):
+    require(all finalized groups affecting asset already synchronized)
+    D = 10^(54 - assetDecimals)
+    totalNative = 0
+    for group in completeActiveAndUnfinalizedGroups(account, asset):
+        base = ceilDiv(worstCaseLossNumerator(account, group), D)
+        totalNative += base + safetyBufferNative(group, base)
+    return totalNative
 ```
+
+Views may simulate finalized group deltas without mutation, but execution MUST use
+the same effective state. Unfinalized groups retain their complete reservation.
 
 ---
 
@@ -2481,30 +2513,24 @@ require(postBalance >= required)
 
 ```text
 function syncRiskGroup(account, group):
-    require(group.finalized)
-
-    shortWad = 0
-    longWad  = 0
-
-    for each short series i in group:
-        shortWad += settlementPayoff(i, shortQty[i])
-
-    for each locked long series j in group:
-        longWad += settlementPayoff(j, lockedLongQty[j])
-
-    if shortWad >= longWad:
-        debitNative = toNativeUp(shortWad - longWad)
-        require(cashBalance[account][asset] >= debitNative)
-        cashBalance[account][asset] -= debitNative
+    require(group.finalized && !settlementExecutionPaused(group.asset))
+    S = group.settlementPrice
+    ShortN = sum(exactPayoffNumerator(i, S, shortQty[i]))
+    LongN  = sum(exactPayoffNumerator(i, S, lockedLongQty[i]))
+    D = 10^(54 - assetDecimals)
+    if ShortN >= LongN:
+        debit = ceilDiv(ShortN - LongN, D)
+        require(cashBalance[account][asset] >= debit)
+        cashBalance[account][asset] -= debit
     else:
-        creditNative = toNativeDown(longWad - shortWad)
-        cashBalance[account][asset] += creditNative
-
+        cashBalance[account][asset] += floorDiv(LongN - ShortN, D)
     burn all consumed locked-long quantities
     clear all group short and locked-long quantities
+    update indexes, quantity totals, and pending-settlement records
 ```
 
-The production implementation must also update aggregate quantities, indexes, settlement accounting, and rounding reserve.
+The whole operation is atomic. A failed sync does not persist emergency state;
+see the separate containment transaction in `LIQUIDATION.md`.
 
 ---
 
@@ -2586,7 +2612,7 @@ Invariant/fuzz tests MUST verify:
 ```text
 cumulative long mint == cumulative short creation
 
-pre-expiry current long supply == aggregate open short quantity
+pre-finalization current long supply == aggregate open short quantity
 
 minted quantity
 == closed + redeemed + locked-consumed + current long supply
@@ -2669,7 +2695,7 @@ W_g = max_{S>=0} Loss_g(S)
 ## 111. Group margin
 
 ```text
-M_g = W_g + SafetyBuffer_g + RoundingGuard_g
+M_g = ceilDiv(WorstLossNumerator_g, D_A) + SafetyBufferNative_g   // native units
 ```
 
 ## 112. Margin by settlement asset
@@ -2728,3 +2754,58 @@ An engineer or AI agent implementing Optara V2 must preserve the following hiera
 The defining mathematical property of Optara V2 is therefore:
 
 > **Every supported short portfolio has a finite, exactly computable contractual worst-case loss, and Optara requires that loss to be covered in the same stablecoin in which the option promises settlement.**
+
+---
+
+## 118. Pooled conservation rules
+
+The safety-buffer rule is defined in section 25 (native units, snapshotted per group).
+
+For pooled accounting, `EffectiveCashClaims` includes each finalized-unsynced
+account/group delta already rounded by section 54. `OutstandingExternalSettledClaims`
+is the EXACT rational native value of remaining external longs, not the sum of
+wallet-by-wallet floors. Transfers do not change that value.
+On redemption of exact value `x` paying `r=floor(x)`, decrease external claims by
+`x`, decrease physical custody by `r`, and increase rounding reserve by `x-r`.
+Pending account rounding is included once on finalization in the conceptual shadow
+model; sync realizes the same delta and MUST NOT charge or reserve it twice.
+RoundingReserve may be fractional in the rational shadow model; native cash ledgers
+are always integers. No global account iteration is required on-chain.
+
+Add `UnallocatedSurplus_A` to the vault identity for direct token donations.
+Neither surplus nor rounding reserve is withdrawable by governance in core V2.
+The reserve MUST be independently derived from rounding residuals, never defined
+as the unexplained difference needed to make an invariant pass.
+
+---
+
+## 119. Verified-shortfall recovery ratio
+
+This section applies only after a confirmed asset-wide restriction
+(`LIQUIDATION.md` sections 101–102). It never applies to ordinary operation.
+
+At a published reconciliation snapshot for settlement asset `A` on one core version:
+
+```text
+TotalClaims_A    = EffectiveCashClaims_A + OutstandingExternalSettledClaims_A
+AvailableAssets_A = VaultBalance_A        // includes RoundingReserve_A and UnallocatedSurplus_A
+Shortfall_A      = max(TotalClaims_A - AvailableAssets_A, 0)
+rho_A            = min(1, AvailableAssets_A / TotalClaims_A)
+```
+
+Rounding reserve and unallocated surplus absorb a deficit first. If
+`Shortfall_A = 0` then `rho_A = 1` and the restriction is simply cleared.
+
+After resolution, every external transfer of `A` out of that core pays
+`floor(rho_A * amount)` while the ledger or claim is reduced by the full `amount`.
+Internal ledger movements (writer sync, locked-long credits, `redeemToMargin`) stay
+unscaled, because they only move value between claims that are all scaled on exit.
+Deposits of `A` into that core and all new risk in `A` are permanently disabled.
+
+Why this conserves value: sync and finalization only move value between writer cash
+and external claims, so `TotalClaims_A` is unchanged by them. The total paid out is
+therefore at most `rho_A * TotalClaims_A <= AvailableAssets_A`. Every claimant in `A`
+receives the same ratio regardless of redemption order.
+
+`rho_A` is fixed once set. Recovered funds are distributed by a separately specified
+claims process, never by retroactively changing `rho_A`.

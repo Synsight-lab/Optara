@@ -3,7 +3,7 @@
 **Document type:** Normative protocol behavior specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -263,6 +263,8 @@ SETTLED
 - no position may be treated as if it already has a final payout;
 - transfer of long tokens MAY remain allowed;
 - risk-increasing manipulation of the expired position MUST NOT be possible;
+- the group stays in the required-margin sum at its full worst case;
+- `cancelUnfinalizedShort`, safe `unlockLong` and free-cash withdrawal remain available (section 41);
 - oracle finalization may occur according to the precommitted rule.
 
 ### SETTLED
@@ -324,9 +326,17 @@ Cross-stablecoin collateral is a future multi-collateral feature and requires ex
 1. `amount > 0`;
 2. `settlementAsset` is approved;
 3. the asset satisfies supported ERC-20 behavior assumptions;
-4. the received amount is exactly accountable.
+4. the received amount is exactly accountable;
+5. the asset is not in `ASSET_WIND_DOWN`; while the asset is `ASSET_RESTRICTED`, only a cure deposit is accepted (below).
 
-Core V2 SHOULD reject fee-on-transfer, rebasing, callback-heavy, or otherwise non-standard settlement tokens unless specifically adapted.
+The MVP MUST reject fee-on-transfer, rebasing, callback-heavy, or otherwise non-standard settlement tokens (`DESIGN_DECISIONS.md` DD-040).
+
+While an asset is restricted, an ordinary deposit would be exposed to a later
+shortfall ratio (`LIQUIDATION.md` section 102). Therefore only a **cure deposit** is
+accepted: into an account whose effective balance in that asset is below its
+requirement, and at most up to that deficit. Anyone else who wants to restore
+backing uses `recapitalize(asset, amount)`, which adds to `UnallocatedSurplus_A`
+and credits no account.
 
 ### Effects
 
@@ -336,7 +346,7 @@ After a successful transfer:
 cashBalance[msg.sender][settlementAsset] += receivedAmount
 ```
 
-The ledger MUST use the actual received amount if the token-adapter layer supports tokens with nontrivial transfer behavior; however the recommended MVP is to allow only exact-transfer stablecoins.
+Because only exact-transfer stablecoins are approved, `receivedAmount == amount`; the deposit reverts otherwise.
 
 ### Postcondition
 
@@ -358,10 +368,16 @@ The function MUST verify:
 
 1. the series exists;
 2. the series is `ACTIVE`;
-3. `quantity > 0` and respects quantity granularity;
-4. `recipient != address(0)`;
-5. writing the new short does not exceed account/series/risk-group limits;
-6. the post-write account remains sufficiently margined in the series' settlement stablecoin.
+3. new risk is enabled for the pair, oracle config and settlement asset, and the asset is not restricted or in wind-down;
+4. `quantity > 0` and respects quantity granularity;
+5. `recipient != address(0)`;
+6. writing the new short does not exceed account/series/risk-group position limits;
+7. the new exposure does not exceed any aggregate exposure cap (section 42);
+8. every finalized group affecting the asset is synchronized first (`MATH.md` section 93);
+9. the post-write account remains sufficiently margined in the series' settlement stablecoin.
+
+If the deployed core contains the optional issuance-fee mechanism, `write()` also
+takes `maxFeeNative` and reverts if the computed fee exceeds it (`FEES.md` section 24).
 
 ### Simulation
 
@@ -381,6 +397,7 @@ If sufficiently margined:
 ```text
 shortQty[writer][seriesId] += quantity
 aggregateOpenShortQty[seriesId] += quantity
+increase series/group/pair/oracle/asset exposure counters by C*CS*quantity
 mint optionToken(seriesId) quantity to recipient
 ```
 
@@ -462,8 +479,12 @@ lockLong(seriesId, quantity)
 
 1. the caller owns or has approved the required long tokens;
 2. `quantity > 0`;
-3. the series is compatible with at least one risk group in the account or locking is otherwise allowed as dormant collateral;
-4. the token is transferred into Optara custody.
+3. the series is `ACTIVE` (a lock after expiry cannot add hedge recognition);
+4. the resulting account/group position count and numerator bounds (`MATH.md` section 24) are respected;
+5. the token is transferred into Optara custody in this call; only the transferred amount is credited, never a pre-existing custody surplus.
+
+A locked long in a group where the account has no short is allowed; it is still
+indexed, counts toward position limits, and is credited at settlement.
 
 ### Effects
 
@@ -506,7 +527,7 @@ postUnlockCashBalance(asset)
 
 for the affected settlement asset.
 
-If the option has matured, the relevant matured risk group MUST be settled before an unlock can occur.
+If the group is finalized, it MUST be settled before any hedge release. Expired-unfinalized unlock uses the full post-removal worst-case check in section 41.
 
 A settled locked long MUST NOT be both credited during account settlement and later unlocked for external redemption.
 
@@ -519,25 +540,33 @@ A writer closes a short by returning an equal quantity of the **same series' lon
 Conceptual function:
 
 ```text
-closeShort(seriesId, quantity)
+closeShort(seriesId, quantity, source)   // source = EXTERNAL | LOCKED
 ```
 
 ### Preconditions
 
 ```text
+series ACTIVE
 0 < quantity <= shortQty[account][seriesId]
 ```
 
-and Optara must receive or already control `quantity` of the matching long token.
+and the caller explicitly selects where the matching long comes from:
+
+- `EXTERNAL` — the caller transfers `quantity` identical long tokens into Optara in this call;
+- `LOCKED` — `quantity <= lockedLongQty[account][seriesId]`; the caller's own locked hedge in the identical series is consumed.
+
+A locked hedge is never consumed implicitly; only an explicit `LOCKED` source may use it.
+A `LOCKED` close removes one short unit and one identical long unit together, so the
+account's net liability is unchanged at every price and the close cannot fail a margin check.
 
 ### Effects
 
-For an active series:
-
 ```text
-burn quantity long tokens
+burn quantity long tokens (from the caller transfer or from Optara custody)
 shortQty[account][seriesId] -= quantity
 aggregateOpenShortQty[seriesId] -= quantity
+if source == LOCKED: lockedLongQty[account][seriesId] -= quantity
+decrement gross exposure counters (section 42)
 ```
 
 After the close, the RiskEngine recalculates the affected group and any excess margin becomes withdrawable.
@@ -599,7 +628,7 @@ For one settlement stablecoin:
 
 ```text
 requiredMargin(account, asset)
-    = sum(groupRequiredMargin for all active groups using asset)
+    = sum(groupRequiredMargin for all active or expired-unfinalized groups using asset)
 ```
 
 Core V2 recognizes no cross-group offsets.
@@ -659,16 +688,16 @@ A withdrawal is collateral-decreasing and therefore safety-critical.
 ### Preconditions
 
 1. `amount > 0`;
-2. `amount <= cashBalance[account][settlementAsset]` after required matured settlement synchronization;
-3. every matured risk group that can affect the account's claim in that settlement asset is synchronized completely;
+2. `amount <= cashBalance[account][settlementAsset]` after required finalized-group synchronization;
+3. every finalized risk group affecting that asset is synchronized completely, while expired-unfinalized groups retain their full worst-case reservation;
 4. the simulated post-withdraw account satisfies margin requirements;
 5. the vault has sufficient actual balance of the exact settlement asset.
 
 ### Required synchronization
 
-A caller MUST NOT be able to omit a matured short or hedge that would change withdrawable equity.
+A caller MUST NOT be able to omit a finalized short or hedge that would change withdrawable equity.
 
-The implementation MUST therefore use a **complete bounded account position index** or another mechanism that proves all relevant matured positions were processed.
+The implementation MUST therefore use a **complete bounded account position index** or another mechanism that proves all relevant finalized positions were processed.
 
 An unverified caller-supplied partial series list is insufficient for a withdrawal safety check.
 
@@ -681,7 +710,7 @@ transfer exact settlementAsset to recipient
 
 No asset conversion occurs inside the withdrawal flow.
 
-An SDK MAY expose `maxWithdrawable()` or `previewWithdraw()`, but the contract MUST synchronize required matured state and recompute the canonical post-withdraw margin during execution.
+An SDK MAY expose `maxWithdrawable()` or `previewWithdraw()`, but the contract MUST synchronize every finalized group affecting the asset and recompute the canonical post-withdraw margin during execution.
 
 ---
 
@@ -703,7 +732,7 @@ Accordingly:
 - core V2 does not need an insurance fund to cover ordinary option gap risk;
 - a future leveraged mode where `posted margin < exact worst-case loss` requires a separate liquidation and bad-debt specification.
 
-Administrative liquidation may still exist for unsupported-token emergencies or migration, but it is not part of ordinary option-risk management.
+Canonical V2 exposes no administrative liquidation or position close-out. Incidents are handled only by containment (`LIQUIDATION.md` section 101) and, if backing was lost, verified-shortfall resolution (`LIQUIDATION.md` section 102).
 
 ---
 
@@ -795,7 +824,7 @@ MUST:
 9. update group/account indexes;
 10. emit sufficient events for independent reconstruction.
 
-The account's cash after settlement must be non-negative in core V2. A negative result indicates an invariant failure or unsupported token/oracle behavior and MUST revert into an emergency-handling path rather than silently socializing the loss.
+The account's cash after settlement must be non-negative in core V2. A negative result indicates an invariant failure. The operation MUST revert without moving assets; it does not persist a pause. The separate containment transaction in `LIQUIDATION.md` section 101 records and enforces the incident restriction.
 
 ---
 
@@ -814,7 +843,8 @@ redeem(seriesId, quantity, recipient)
 1. the risk group is finalized;
 2. `quantity > 0`;
 3. caller owns or has authorized the specified tokens;
-4. tokens are not locked as a margin hedge in another account.
+4. tokens are not locked as a margin hedge in another account;
+5. the settlement asset is not `ASSET_RESTRICTED` and settlement execution is not paused.
 
 ### Effects
 
@@ -823,6 +853,8 @@ payout = floor(longPayoff(seriesId, quantity))
 burn quantity long tokens
 transfer payout settlementAsset to recipient
 ```
+
+In `ASSET_WIND_DOWN`, the transfer is `floor(rho_A * payout)` (`LIQUIDATION.md` section 102).
 
 A `redeemToMargin()` variant MAY burn the long and credit the payout into the holder's Optara cash balance instead of transferring tokens externally.
 
@@ -840,7 +872,7 @@ Long claims may be paid before every writer has explicitly synchronized because 
 
 The protocol MUST preserve the accounting identity that matured writer obligations remain encumbered until synchronized, even if an external long holder has already redeemed.
 
-A writer withdrawal MUST therefore synchronize all matured risk groups relevant to the requested settlement asset before determining free collateral.
+A writer withdrawal MUST therefore synchronize all finalized risk groups relevant to the requested settlement asset before determining free collateral.
 
 ---
 
@@ -892,12 +924,12 @@ Solvency depends on consistent rounding.
 
 The implementation MUST use shared math code for risk and settlement.
 
-Recommended direction:
+Required direction (`MATH.md` section 53), each applied once to an exact numerator:
 
 ```text
 long-holder payout / credit -> round DOWN
 required margin             -> round UP
-writer matured debit        -> round UP when conversion is required
+writer net matured debit    -> round UP
 ```
 
 This ensures rounding cannot create a deficit.
@@ -940,13 +972,16 @@ Recommended behavior during a risk pause:
 |---|---|
 | Deposit settlement stablecoin | Allowed |
 | Lock compatible long hedge | Allowed |
-| Close active short | Allowed |
+| Close active short (`EXTERNAL` or `LOCKED` source) | Allowed |
+| Cancel expired-unfinalized short | Allowed |
 | Write new short | Blocked |
 | Unlock hedge | Blocked if it increases risk |
 | Withdraw collateral | Blocked or allowed only under full safety checks, depending on incident class |
 | Finalize valid oracle settlement | Allowed unless oracle itself is the incident |
-| Sync matured risk group | Allowed |
+| Sync finalized risk group | Allowed |
 | Redeem settled long | Allowed whenever settlement data is trusted |
+
+A confirmed asset-wide solvency restriction (`LIQUIDATION.md` section 101) is stricter than a risk pause: it also blocks withdrawals, redemptions, hedge unlocks and every other outflow of that asset until it is cleared or resolved under `LIQUIDATION.md` section 102.
 
 Governance MUST NOT use pause powers to rewrite strike, cap, expiry, settlement stablecoin, or finalized settlement price.
 
@@ -958,30 +993,33 @@ An expired group MUST remain `EXPIRED_UNSETTLED` if the precommitted oracle rule
 
 The protocol MUST NOT invent a settlement price merely to unblock users.
 
-Each oracle configuration SHOULD predefine:
+Each oracle configuration MUST predefine:
 
 - primary source;
-- approved fallback source or path;
-- staleness limits;
+- approved fallback source or path, with on-chain eligibility rules;
+- staleness limits relative to the observation;
 - observation window;
 - finality delay;
-- behavior when no valid source exists.
+- a finite `maxFinalizationDelay` escalation deadline (`ORACLE_STALLED`);
+- behavior when no valid source exists (section 41).
 
-Manual governance price selection after observing market outcomes SHOULD be avoided because it introduces discretionary settlement risk.
+Manual governance price selection after observing market outcomes is forbidden. Recovery while a group is unfinalized follows section 41.
 
 ---
 
 ## 31. Access-control rules
 
-Core V2 SHOULD separate at least these permissions:
+Core V2 SHOULD separate at least these permissions (canonical names from `ACCESS_CONTROL.md`):
 
 ```text
-GOVERNANCE_ROLE
-SERIES_CREATOR_ROLE
-ASSET_ADMIN_ROLE
-ORACLE_ADMIN_ROLE
-PAUSE_GUARDIAN_ROLE
+GOVERNANCE_ROLE       approves assets/pairs, clears restrictions, timelocked policy
+CONFIG_ROLE           prospective low/medium-risk settings after governance approval
+SERIES_CREATOR_ROLE   creates factory-validated series
+ORACLE_CONFIG_ROLE    registers/suspends oracle configs for future series
+PAUSER_ROLE           pauses risk paths and restricts an asset (guardian)
 ```
+
+No core `UPGRADER_ROLE` exists in canonical V2.
 
 Rules:
 
@@ -1022,6 +1060,7 @@ OptionWritten
 ShortClosed
 LongLocked
 LongUnlocked
+ShortCancelledUnfinalized
 RiskGroupFinalized
 RiskGroupSynced
 LongRedeemed
@@ -1029,6 +1068,10 @@ AssetApproved / AssetDisabled
 PairApproved / PairDisabled
 OracleConfigApproved / OracleConfigDisabled
 PauseStateChanged
+AssetRestricted / AssetRestrictionCleared
+Recapitalized
+ShortfallResolved
+ExposureLimitChanged
 ```
 
 Events SHOULD include `account`, `seriesId` or `groupId`, `settlementAsset`, quantity, and cash delta where relevant.
@@ -1080,18 +1123,18 @@ One long token unit can produce at most one of:
 
 It cannot perform two of them simultaneously.
 
-### P-6. Pre-expiry issuance conservation
+### P-6. Pre-finalization issuance conservation
 
-Before settlement redemptions create asynchronous accounting:
+Until a group is finalized, every burn path (active close, unfinalized cancellation)
+reduces long supply and open short quantity equally, so:
 
 ```text
 current long supply
-    == aggregate active open short quantity
+    == aggregate open short quantity
 ```
 
-except for quantities already consumed by valid pre-expiry closes.
-
-More generally, cumulative mint/burn and cumulative short create/close accounting must reconcile.
+After finalization, redemption and writer sync happen at different times; the
+cumulative identities in `MATH.md` section 58 apply instead.
 
 ### P-7. Single group settlement price
 
@@ -1113,13 +1156,23 @@ Kuru downtime or Kuru margin balances cannot invalidate Optara's settlement acco
 
 `@optara/math`, `@optara/sdk`, `@optara/kuru`, frontends, indexers, and bots are convenience/reference layers. None may create collateral, close a short, recognize a hedge, authorize a withdrawal, or finalize settlement except through a valid canonical on-chain transition.
 
-### P-11. Immutable option economics
+### P-12. Immutable option economics
 
 No privileged role can mutate an existing series' strike, cap, expiry, type, contract size, settlement asset, or oracle domain.
 
-### P-12. Same-asset withdrawal
+### P-13. Same-asset withdrawal
 
 A withdrawal transfers only the stablecoin whose account balance is reduced.
+
+### P-14. Exact settlement debit bound
+
+For every account group and every valid settlement price, the integer net debit
+(`MATH.md` section 54) is at most the group's pre-funded native margin.
+
+### P-15. Aggregate exposure bound
+
+No write can push any series, pair, oracle-config or settlement-asset exposure
+counter above its configured limit (section 42).
 
 ---
 
@@ -1158,19 +1211,23 @@ An implementation is not conformant unless tests demonstrate at least:
 8. An incompatible long does not reduce margin.
 9. A locked hedge cannot be transferred or redeemed externally.
 10. Unlocking a hedge reverts if the remaining account would be under-margined.
-11. Closing a short consumes the identical series' long token.
+11. Closing a short consumes the identical series' long token, from an external transfer or an explicitly selected own locked hedge.
 12. A Kuru balance is not visible as Optara margin.
-13. A matured hedged risk group settles atomically without a temporary false insolvency.
-14. A user cannot withdraw around unsynchronized matured debt.
+13. A finalized hedged risk group settles atomically without a temporary false insolvency.
+14. A user cannot withdraw around unsynchronized finalized debt.
 15. Long redemption burns the token and cannot be repeated.
-16. RiskEngine and SettlementEngine use identical payoff semantics.
+16. RiskEngine and SettlementEngine use identical exact-numerator payoff semantics.
 17. `@optara/math` matches canonical Solidity payoff/risk results across the supported differential-test domain.
 18. SDK previews cannot bypass stale-state or post-state on-chain checks.
 19. `@optara/kuru` workflows only affect Optara after actual assets reach an Optara entry point.
-17. Different stablecoin decimals do not break payout or margin accounting.
-18. Settlement uses the exact configured pair denomination and does not assume stablecoin parity with USD.
-19. Oracle finalization cannot occur twice.
-20. A sudden underlying-price jump does not create a liability larger than the pre-funded worst-case amount.
+20. Different stablecoin decimals do not break payout or margin accounting.
+21. Settlement uses the exact configured pair denomination and does not assume stablecoin parity with USD.
+22. Oracle finalization cannot occur twice.
+23. A sudden underlying-price jump does not create a liability larger than the pre-funded worst-case amount.
+24. At interior settlement prices, the integer net debit never exceeds the posted margin.
+25. Account splitting cannot exceed an aggregate exposure cap; finalization releases group exposure from wider scopes.
+26. Expired-unfinalized cancellation and safe unlock work while the oracle is stalled.
+27. A confirmed asset restriction blocks all outflows of that asset; shortfall resolution pays every claimant the same ratio.
 
 ---
 
@@ -1187,11 +1244,13 @@ The following values are deployment/configuration parameters rather than undefin
 - minimum/maximum strikes and caps;
 - quantity granularity;
 - maximum active positions/groups per account;
-- optional safety buffer;
+- aggregate exposure caps per series, pair, oracle config and settlement asset;
+- `maxFinalizationDelay` and fallback eligibility per oracle config;
+- safety-buffer defaults for new groups (zero in the MVP);
 - protocol fee parameters;
 - pause-role addresses;
 - series-creator addresses;
-- upgradeability choice.
+- immutable versioned-core bindings and initialization sealing.
 
 An implementation agent MUST NOT invent these values silently. They belong in deployment configuration and governance documentation.
 
@@ -1266,3 +1325,112 @@ The Kuru integration assumptions in this specification are based on the official
 These references support the assumptions that Kuru standard markets are configured with ERC-20 base/quote token addresses and that Kuru trading balances live in Kuru's own margin-account domain. Optara must continue to verify these assumptions against the deployed Kuru contracts and SDK version used at integration time.
 
 Venue-specific interaction code SHOULD be isolated in `@optara/kuru` so Kuru SDK/API changes do not require changes to core Optara risk or settlement contracts.
+
+---
+
+## 41. Expired-unfinalized positions and oracle recovery
+
+Expiry does not release margin. Until finalization, every expired-unfinalized group
+remains in the account's bounded risk index and required-margin sum at its exact
+worst-case requirement. All finalized groups affecting an asset MUST be synchronized
+before cash-spending actions. An unfinalized group is reserved, not synchronized.
+
+While a group is expired but unfinalized, `cancelUnfinalizedShort(seriesId, quantity, source)`
+MUST permit account-authorized cancellation with the same explicit `source` rule as
+`closeShort` (section 16): `EXTERNAL` identical long tokens transferred in by the caller,
+or `LOCKED` from the caller's own locked hedge in the identical series. It atomically
+burns the long, reduces the same short, updates supply and gross exposure counters,
+and validates the complete post-state. It accepts no price, pays no settlement amount,
+and cannot spend another user's long; a locked hedge is consumed only when `LOCKED`
+is named explicitly. A finalized group must use normal settlement; racing cancellation
+and finalization is resolved by transaction ordering.
+
+`unlockLong` MUST permit release of an expired-unfinalized hedge only after the complete
+post-removal margin check. It MUST NOT release a finalized hedge outside atomic
+settlement. Withdrawals of independently proven free collateral remain possible
+with unfinalized groups reserved. These recovery actions remain subject to scoped
+custody/risk pauses and are not early exercise.
+
+Each immutable oracle config MUST define a finite `maxFinalizationDelay`. At its
+expiry-relative deadline an unfinalized group is flagged `ORACLE_STALLED` for
+monitoring and user disclosure; this is a recovery flag, not a settlement price or
+a debt write-off. Deterministic late finalization remains allowed if the exact
+precommitted historical observation/fallback can still be authenticated. Validation
+uses observation-time staleness, not current-time freshness.
+
+If all approved sources permanently fail, unmatched claims remain unresolved and
+backed; there is no universal guaranteed settlement deadline. The protocol MUST
+NOT invent a price, return encumbered writer funds, or promise automatic migration.
+The SDK/frontend MUST disclose this residual liveness risk before acquisition and
+show cancellation/free-collateral recovery paths. The finite delay is an escalation
+deadline, not a promise of final payout. Production activation requires tested
+historical retrieval and precommitted fallback rules.
+
+---
+
+## 42. Aggregate issuance exposure limits
+
+Gas limits per account are not protocol exposure limits. Before activation configure
+finite nonzero maximum gross outstanding claim exposure for each series, pair,
+oracle config and settlement asset. Track exact maximum-payoff numerators:
+
+```text
+ExposureN(scope) = sum(C_i * CS_i * outstandingLongQuantity_i in scope)
+limit test: ExposureN(scope) <= configuredLimitN(scope)
+```
+
+Scopes contain one settlement asset; no cross-stablecoin or USD conversion exists.
+Counters use the same checked product scale as `MATH.md` section 24 and are bounded
+by `int256.max`. A write simulates the increase in EVERY affected scope and reverts
+if any limit is exceeded, irrespective of account, recipient, locked hedges, or
+net margin. Updates are constant in protocol user count. Long transfers/locks do
+not change exposure.
+
+Exposure is also tracked per risk group (`ExposureN(group)`), and the pair,
+oracle-config and settlement-asset counters are sums of the per-group counters of
+**unreleased** groups:
+
+```text
+before finalization:
+    every burn (active close, unfinalized cancellation) decrements
+    series, group, pair, oracle-config and asset counters by C*CS*Q
+
+at finalizeRiskGroup(g), in O(1):
+    pair/oracle/asset counters -= ExposureN(g)
+    mark g released
+
+after finalization:
+    burns (redemption, internal hedge consumption) decrement only the
+    series and group counters
+```
+
+Rationale: once a group is finalized its claims are fixed amounts already backed
+by writer cash, so they no longer represent open, unknown risk. Releasing at
+finalization prevents abandoned zero-payoff tokens (which holders rarely bother to
+burn) from permanently consuming pair- and asset-level issuance capacity. Short sync
+alone does not change any counter. Expired-unfinalized and `ORACLE_STALLED` groups
+keep consuming capacity until finalized, because their outcome is still unknown.
+
+Governance may timelock prospective limit increases; the guardian may lower limits
+to stop issuance. A limit below existing exposure blocks increases, never forces
+burns, changes payoffs, or blocks reductions/settlement. Cross-account issuance MUST
+not bypass these aggregate counters. Lower per-account count limits are gas controls
+and MUST NOT be advertised as an economic loss ceiling.
+
+---
+
+## 43. Conservation, arithmetic bounds, and version identity
+
+The cumulative close quantity `C_i` in supply identities includes BOTH active closes
+and expired-unfinalized cancellations. Each burns and reduces identical series
+quantity. Every unit of exposure is released exactly once: by a pre-finalization
+burn, or by the group release at finalization (section 42). Finalization and
+short-only synchronization do not themselves burn external longs.
+
+Factory validation MUST reject call `strikeWad + maxPayoutWad` overflow and invalid
+signed observation timestamp arithmetic. Position validation MUST enforce exact
+numerator product and complete account/group sum bounds for both shorts and hedges.
+`protocolSeriesDomain` MUST include chain ID and the immutable core/factory version
+identity. A risk group and its tokens cannot silently migrate to a new core.
+A replacement registry can advertise new deployments but cannot redirect existing
+series accounting or settlement authority.

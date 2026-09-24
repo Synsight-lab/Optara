@@ -3,7 +3,7 @@
 **Document type:** Normative margin and risk specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -249,9 +249,10 @@ The greatest positive contractual net liability that can occur across all valid 
 
 Optional deterministic margin added above exact worst-case loss.
 
-## 6.8 Rounding guard
+## 6.8 Exact rounding
 
-A formally bounded addition preventing fixed-point arithmetic from understating true liability.
+Margin is computed from exact integer payoff numerators and rounded up once
+(`MATH.md` section 24). Core V2 therefore has no rounding-guard term.
 
 ---
 
@@ -678,13 +679,15 @@ S = 0
 Therefore:
 
 ```text
-Critical(g)
+Critical(a,g)
     = {0}
-      U {K, K+C for calls}
-      U {K-C, K for puts}
+      U {K, K+C for calls the account holds in g}
+      U {K-C, K for puts the account holds in g}
 ```
 
-Duplicate values may be removed.
+Only the account's own shorts and locked longs in the group contribute points,
+which keeps evaluation bounded by per-account position limits. Duplicate values
+may be removed.
 
 ---
 
@@ -755,66 +758,51 @@ W_g = WorstCaseLoss(a,g)
 Then:
 
 ```text
-GroupRequiredMargin(a,g)
-    = W_g
-      + SafetyBuffer_g
-      + RoundingGuard_g
+GroupRequiredMarginNative(a,g)
+    = ceilDiv(WorstLossNumerator(a,g), D_A)
+      + SafetyBufferNative_g
 ```
 
-The final native settlement-token amount rounds upward.
+The exact worst-case numerator is rounded upward once (`MATH.md` sections 24 and 26).
 
 ---
 
 ## 29. Safety buffer
 
-The safety buffer is optional deterministic conservatism.
+The safety buffer is optional deterministic conservatism. Its parameters
+(`bufferBps_g`, `fixedBufferNative_g`) are snapshotted when the group is created;
+governance changes affect only groups created afterward.
 
-A valid policy is:
+The policy, in native units:
 
 ```text
-if W_g == 0:
-    SafetyBuffer_g = 0
+if BaseMarginNative == 0:
+    SafetyBufferNative_g = 0
 else:
-    SafetyBuffer_g
-        = ceil(W_g * bufferBps_g / 10_000)
-          + fixedBuffer_g
+    SafetyBufferNative_g
+        = ceilDiv(BaseMarginNative * bufferBps_g, 10_000)
+          + fixedBufferNative_g
 ```
 
-The MVP may set:
-
-```text
-bufferBps = 0
-fixedBuffer = 0
-```
-
-if rounding is separately proven safe.
+The MVP sets both parameters to zero, which is safe because the base margin is exact.
 
 A buffer never substitutes for correct risk math.
 
 ---
 
-## 30. Rounding guard
+## 30. Exact arithmetic
 
-The on-chain margin result must satisfy:
-
-```text
-OnchainRequiredMargin
-    >= ExactMathematicalRequiredMargin
-```
-
-If fixed-point evaluation can understate by at most `E`:
-
-```text
-RoundingGuard >= E
-```
-
-If exact/full-precision math proves no understatement, explicit guard may be zero.
+Core V2 MUST use exact payoff numerators under `MATH.md` section 24. No intermediate
+leg rounding is permitted, so there is no rounding-guard term. Margin performs one
+upward native conversion and bounds actual integer settlement debits. A future approximation
+requires a new reviewed specification and a proof covering interior rounding steps,
+settlement debits and cross-account conservation, not only breakpoint values.
 
 ---
 
 ## 31. Required margin by stablecoin
 
-Let `G(a,A)` be all active groups for account `a` settled in asset `A`.
+Let `G(a,A)` be all active or expired-unfinalized groups for account `a` settled in asset `A`.
 
 Then:
 
@@ -863,7 +851,7 @@ If it fails, the operation reverts.
 
 ## 33. Free collateral
 
-After relevant matured groups are synchronized:
+After relevant finalized groups are synchronized (unfinalized groups remain reserved):
 
 ```text
 FreeCollateral(a,A)
@@ -1301,7 +1289,10 @@ ShortQty_i'
     = ShortQty_i - dQ
 ```
 
-and matching long quantity is burned.
+and matching long quantity is burned. The long comes from an explicit source:
+an external transfer by the caller, or (`LOCKED`) the caller's own locked hedge in
+the identical series. A `LOCKED` close removes identical short and long legs together,
+so it never increases risk; a locked hedge is never consumed implicitly.
 
 The RiskEngine then recalculates the account.
 
@@ -1313,7 +1304,7 @@ Any margin reduction becomes free collateral.
 
 Before withdrawing `X` units of settlement asset `A`:
 
-1. synchronize all relevant matured groups;
+1. synchronize all relevant finalized groups;
 2. compute current required margin;
 3. simulate:
 
@@ -1412,7 +1403,7 @@ EffectiveBalance(a,A)
 
 Withdrawal must not rely on stale raw balance.
 
-Therefore relevant matured groups are synchronized before withdrawal and other safety-sensitive actions.
+Therefore relevant finalized groups are synchronized before withdrawal and other safety-sensitive actions.
 
 ---
 
@@ -1496,16 +1487,18 @@ insurance fund for normal gap risk
 
 ## 58. Operational close-out is different
 
-A narrow administrative/migration mechanism may still be needed for:
+Incidents such as these still need handling:
 
 ```text
 broken token
 chain incident
-protocol migration
+critical defect in an immutable core
 oracle-system incident
 ```
 
-That is not ordinary option-risk liquidation.
+Canonical V2 handles them only with pauses, asset restriction and verified-shortfall
+resolution (`LIQUIDATION.md` sections 101–102). No position is force-closed or
+migrated. That is not ordinary option-risk liquidation.
 
 It must not retroactively reduce the holder's contractual payout.
 
@@ -1701,7 +1694,7 @@ Core V2 should prefer predictable exact-transfer stablecoins.
 
 ## 67. Unsupported token behavior
 
-Core V2 should reject or explicitly adapt tokens with:
+The MVP MUST reject tokens with (DD-040):
 
 ```text
 fee-on-transfer
@@ -1904,6 +1897,7 @@ EffectiveAccountCashClaims(A)
 + OutstandingExternalSettledLongClaims(A)
 + RoundingReserve(A)
 + ProtocolOwnedBalance(A)
++ UnallocatedSurplus(A)
 ```
 
 For a fee-free MVP:
@@ -2536,9 +2530,9 @@ maximum active groups per account
 maximum series per group
 minimum quantity increment
 maximum quantity bounds
-safety-buffer policy
-rounding-guard policy
-oracle configurations
+safety-buffer defaults for new groups
+aggregate exposure caps
+oracle configurations (including maxFinalizationDelay)
 expiry schedules
 strike/cap limits
 contract-size conventions
@@ -2591,7 +2585,7 @@ Before the margin/risk system is implementation-complete:
 - [ ] premium is ignored until actual stablecoin deposit;
 - [ ] write previews and execution use the same risk math;
 - [ ] active margin does not depend on current spot;
-- [ ] withdrawals synchronize relevant matured groups;
+- [ ] withdrawals synchronize relevant finalized groups;
 - [ ] matured hedged groups settle atomically;
 - [ ] required margin rounds up;
 - [ ] external long payout rounds down;
@@ -2653,11 +2647,9 @@ max over all critical settlement prices of Loss(S)
 ```text
 GroupMargin
 =
-WorstCaseLoss
+ceilDiv(WorstCaseLossNumerator, D_A)
 +
-SafetyBuffer
-+
-RoundingGuard
+SafetyBufferNative   (snapshotted per group; zero in MVP)
 ```
 
 ## Stablecoin-level requirement
@@ -2709,3 +2701,25 @@ leaving worst-case losses unfunded.
 ```
 
 That principle defines Optara V2 margin and risk.
+
+---
+
+## 120. Arithmetic, unresolved expiry, and prospective policy
+
+`MATH.md` sections 24, 54 and 118 define the executable exact-numerator algorithm.
+No intermediate payoff truncation is permitted. Core V2 restricts settlement decimals
+to 0..18 and validates maximum numerator products/sums for writes and hedge locks.
+No spot feed is needed for this calculation.
+
+"Active groups" in margin sums includes expired-unfinalized groups until cancellation
+or final settlement removes their quantities. Finalized groups are synchronized
+before cash-spending actions. An unresolved oracle does not release margin or block
+independently proven free cash. `PROTOCOL_SPEC.md` section 41 defines cancellation
+and safe unfinalized hedge release.
+
+Buffer policy, quantity granularity, and numerical domains are fixed for existing
+groups/series. Lowering prospective count limits MUST NOT prevent existing portfolios
+from evaluation, close, cancellation, sync or safe withdrawal. New position creation
+is rejected while over the new limit; zero positions are removed from indexes.
+Exact mathematical short risk is monotone; numerical product limits additionally
+bound gross hedge quantities even for zero-risk portfolios.

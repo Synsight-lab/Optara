@@ -3,7 +3,7 @@
 **Document type:** Normative authorization, role, privilege, and administrative-security specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; exact production signers/multisig thresholds remain deployment parameters
 
@@ -491,7 +491,7 @@ future safety buffer
 future creation permissions
 ```
 
-Changes must not retroactively invalidate already valid economic claims without explicit migration policy.
+Changes apply prospectively only. They must never invalidate already valid economic claims or block processing of existing positions (INV-POLICY-01).
 
 ---
 
@@ -666,22 +666,17 @@ If separated from general governance, this role may:
 ```text
 register future oracle configs
 suspend config for new series
-update provider addresses only where config semantics explicitly permit indirection
+register provider addresses for future configurations only; never replace an existing group binding
 ```
 
 ---
 
 ## 38. Existing-series protection
 
-Any mutable provider registry used by existing series must be extremely carefully designed.
-
-Safer rule:
-
-```text
-existing series bind immutable rule/version
-```
-
-If underlying provider contract address can change, the authorization and semantic constraints must be explicit.
+Existing series pin adapter address, immutable rule/version, sources and normalization.
+Optara governance MUST NOT redirect them through a mutable provider registry.
+Provider-owned upgrades remain disclosed external trust assumptions and must be
+covered by source onboarding, monitoring and precommitted failure behavior.
 
 ---
 
@@ -700,73 +695,52 @@ override validation
 
 # Part IX — Upgrade authority
 
-## 40. Upgradeable deployment
+## 40. Core V2 immutable version policy
 
-If core contracts are upgradeable:
+The canonical V2 financial core MUST be an immutable, versioned deployment.
+ClearingHouse, MarginVault, RiskEngine, SettlementEngine, OptionToken logic and the
+oracle adapter/rule bindings for issued series MUST NOT be upgradeable or replaceable
+through proxies, mutable beacons, delegatecall targets, peer setters, role regrants,
+or mutable registries. Internal mint/burn/vault privileges are pinned to canonical
+contracts and cannot be reassigned after activation. Factory changes may affect
+future versioned deployments only. Underlying oracle-provider/token issuer upgrades
+remain explicit external assumptions; Optara does not control them.
 
-```text
-UPGRADER_ROLE
-```
+Governance retains narrowly scoped pauses and prospective new-risk configuration.
+Existing group buffer rules, series economics and settlement code remain fixed.
+A replacement core accepts new obligations while the old core completes its existing
+claims. Migration of free assets is user-authorized; encumbered shorts/hedges cannot
+be forced across cores. A critical immutable-core defect may require containment
+and separately designed recovery; this policy does not promise automatic repair.
 
-is effectively the highest-risk role.
+## 41. Peripheral releases
 
-An upgrader can potentially replace security logic.
+SDKs, frontends, indexers and venue registries may be replaced without changing
+existing claims or gaining custody authority. Users can call the pinned core directly.
 
----
+## 42. Timelock limitations
 
-## 41. Recommended upgrade authority
+A timelock is notice, not a guaranteed exit: writers may have encumbered collateral,
+illiquid buybacks, or unresolved oracle observations. Documentation MUST NOT imply
+that advance notice lets every account exit.
 
-Use:
+## 43. Future upgradeable variants
 
-```text
-governance multisig
-+
-timelock
-```
+An upgradeable financial core is a different, explicitly disclosed trust model and
+requires a separate approved specification. Conditional upgrade tests elsewhere
+apply only to that future variant, not to canonical V2. No core `UPGRADER_ROLE`
+is assigned in the MVP; the manifest records upgrade tests as not applicable and
+instead proves no implementation or peer-replacement path exists.
 
-rather than an EOA.
+## 44. Deployment initialization
 
----
+Bind peers and internal authorities atomically before risk activation. One-time
+configuration MUST become permanently sealed; test takeover and resealing attempts.
 
-## 42. Ordinary upgrade delay
+## 45. Existing obligation protection
 
-Production upgrades SHOULD be delayed sufficiently for:
-
-```text
-public review
-monitoring
-user reaction
-```
-
-Exact delay is a deployment parameter.
-
----
-
-## 43. Emergency upgrade
-
-If an emergency upgrade mechanism exists, it must be separately defined and narrower than arbitrary instant governance where possible.
-
-Emergency upgrade must not become routine.
-
----
-
-## 44. Storage layout authority
-
-Upgrade process must include:
-
-```text
-storage-layout validation
-initializer protection
-implementation compatibility
-```
-
----
-
-## 45. Immutable deployment alternative
-
-If core contracts are immutable, remove upgrader authority entirely.
-
-Prefer replaceable/adaptable peripheral contracts where reasonable.
+No ordinary or emergency role can change an issued claim's implementation, storage
+interpretation, oracle binding, settlement price or internal custody authority.
 
 ---
 
@@ -792,10 +766,10 @@ GOVERNANCE
     +--> ORACLE_CONFIG_ROLE
     +--> PAUSER_ROLE
     +--> optional KEEPER_ROLE
-    +--> UPGRADER_ROLE only if governance design chooses this
+    +--> no core UPGRADER_ROLE in canonical V2
 ```
 
-Internal contract roles should preferably be assigned during deployment and not administered routinely.
+Internal contract roles MUST be assigned and permanently sealed before activation; governance cannot grant or revoke these roles for an active core.
 
 ---
 
@@ -853,14 +827,16 @@ Its powers must remain narrow.
 
 ## 53. Timelock scope
 
-Timelock recommended for:
+Timelock required for:
 
 ```text
-upgrades
 new high-risk asset approvals
-material risk-limit changes
+material risk-limit increases
 governance role changes
+resolveShortfall (LIQUIDATION.md section 102)
 ```
+
+Canonical V2 has no core upgrades to timelock (section 40).
 
 Emergency pause need not be timelocked.
 
@@ -901,9 +877,13 @@ X = forbidden
 | Approve future oracle config | X | X | X | C | G | X |
 | Pause new writes | X | X | X | X | G | E |
 | Unpause | X | X | X | X | G | optional separate role |
+| Restrict asset (verified deficit) | X | P (`checkAndRestrict`) | X | X | G | E (`restrictAsset`) |
+| Clear asset restriction | X | X | X | X | G | X |
+| Resolve verified shortfall | X | X | X | X | G/timelock | X |
+| Recapitalize (donate to surplus) | U | P | X | X | G | X |
 | Rewrite existing series | X | X | X | X | X | X |
 | Rewrite finalized price | X | X | X | X | X | X |
-| Upgrade core | X | X | X | X | G/timelock | X |
+| Upgrade existing V2 core | X | X | X | X | X | X |
 
 Exact implementation may split more narrowly.
 
@@ -993,18 +973,20 @@ Persistent custody should be avoided.
 
 ## 61. Restricted account
 
-A protocol may mark an account or asset scope restricted after invariant failure.
+After a verified invariant failure the affected settlement asset is restricted
+(`LIQUIDATION.md` section 101), by permissionless `checkAndRestrict` on a reproducible
+deficit or by the guardian's `restrictAsset`.
 
-Authority to restrict should be narrowly defined.
-
-Restriction should only:
+Restriction only stops actions:
 
 ```text
-prevent risk increase
-prevent unsafe withdrawal
+new risk
+withdrawals, redemptions and other outflows of the asset
+hedge unlocks
+ordinary deposits (cure deposits and recapitalize remain)
 ```
 
-not seize assets.
+It never seizes, moves or re-prices assets.
 
 ---
 
@@ -1104,6 +1086,10 @@ optionally depositFor(account) if explicitly supported
 
 If `depositFor` exists, it only increases another account's cash; it must not authorize withdrawal later.
 
+While the asset is restricted, `deposit`/`depositFor` accept only a cure deposit into an
+account below its requirement, up to its deficit; `recapitalize(asset, amount)` is
+permissionless and credits no account (`PROTOCOL_SPEC.md` section 10).
+
 ---
 
 ## 69. `withdraw`
@@ -1166,7 +1152,8 @@ account owner / authorized executor
 
 or potentially permissionless if another party voluntarily supplies exact same-series long **without gaining account assets**.
 
-For MVP, account-authorized close is simplest.
+For MVP, account-authorized close is simplest. The `LOCKED` source always requires the
+account owner's authorization, because it consumes that account's hedge.
 
 ---
 
@@ -1460,7 +1447,7 @@ Operational roles cannot grant themselves stronger roles.
 
 ## 98. AC-INV-10 — Upgrade authority explicit
 
-If upgradeability exists, every implementation-changing operation requires the designated upgrade governance path.
+Canonical V2 exposes no financial implementation-changing path. Future upgradeable variants require a separate specification and designated governance path.
 
 ---
 
@@ -1522,9 +1509,11 @@ and ensure only intended canonical contract paths succeed.
 
 ---
 
-## 103. Upgrade tests
+## 103. Version and binding tests
 
-If upgradeable:
+Canonical V2 MUST prove no upgrade, peer-replacement or internal-role reassignment
+path exists after activation (VER-001/002). Only a separately specified future
+upgradeable variant may instead run:
 
 ```text
 unauthorized upgrade reverts
@@ -1583,8 +1572,7 @@ VAULT_OPERATOR
     canonical ClearingHouse / SettlementEngine only
 
 UPGRADER
-    only if upgradeable
-    governance + timelock controlled
+    absent in canonical V2; existing financial code and peer bindings are immutable
 ```
 
 Prefer:
@@ -1631,3 +1619,27 @@ SDKs have no implicit privilege
 ```
 
 The safest privilege is the one the protocol does not need.
+
+---
+
+## 107. Recovery and containment authorization
+
+`closeShort` and `cancelUnfinalizedShort` require the account owner's authorization
+and an identical long from an explicit source: an `EXTERNAL` transfer by the caller or
+the caller's own `LOCKED` hedge. Permissionless keepers cannot redirect value or
+consume another account's hedge.
+Expired-unfinalized `unlockLong` retains owner authorization and complete risk checks.
+`checkAndRestrict(account, asset)` is permissionless only for objectively verified
+existing-state breaches under `LIQUIDATION.md` section 101. Arbitrary user reports,
+failed proposed trades, and token donations cannot persist restrictions.
+`restrictAsset` belongs to the narrow guardian/governance path; it can stop all
+specified outflows but cannot move funds. Only governance may clear that restriction
+after reconciliation. Operational roles cannot replace pinned peers or grant new
+mint/burn/vault authority for existing obligations.
+
+`resolveShortfall(asset, rho)` (`LIQUIDATION.md` section 102) is GOVERNANCE_ROLE only,
+behind the governance timelock, with published reconciliation evidence. The contract
+enforces: the asset is currently restricted, `0 < rho < 1`, and `rho` has never been set
+for that asset on that core. It cannot move funds, change series terms, or target
+individual accounts; it only sets the uniform outflow ratio and disables new deposits
+and risk in that asset.

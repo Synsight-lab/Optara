@@ -319,7 +319,7 @@ Series creation must reject:
 - unapproved settlement asset;
 - unapproved oracle configuration;
 - unsupported underlying;
-- put cap above strike if the protocol adopts `maxPayout <= strike` as a canonicalization rule;
+- put cap above strike (`0 < maxPayout <= strike` is mandatory for puts);
 - duplicate economic series if unique canonical series are required.
 
 ### Series ID
@@ -330,16 +330,19 @@ Example concept:
 
 ```text
 seriesId = keccak256(
+    protocolSeriesDomain,   // includes chain ID and immutable core/factory version
     underlying,
+    settlementAsset,
     type,
     strike,
-    expiry,
     maxPayout,
     contractSize,
-    settlementAsset,
+    expiry,
     oracleConfigId
 )
 ```
+
+The canonical field order is defined in `OPTION_SPEC.md` section 17.
 
 ---
 
@@ -432,14 +435,21 @@ Conceptually:
 
 ```text
 deposit(settlementAsset, amount)
-withdraw(settlementAsset, amount)
+withdraw(settlementAsset, amount, recipient)
 write(seriesId, quantity, recipient)
-closeShort(seriesId, quantity)
+closeShort(seriesId, quantity, source)            // source = EXTERNAL | LOCKED
+cancelUnfinalizedShort(seriesId, quantity, source) // expired-unfinalized only
 lockLong(seriesId, quantity)
-unlockLong(seriesId, quantity)
-syncSeries(account, seriesId)
-syncAccount(account, seriesIds[])
+unlockLong(seriesId, quantity, recipient)
+syncRiskGroup(account, groupId)
+syncAccount(account, groupIds[]) // bounded; completeness validated for withdrawals
+redeem(seriesId, quantity, recipient)             // SettlementEngine
+finalizeRiskGroup(groupId, oracleData)            // SettlementEngine
+checkAndRestrict(account, asset)                  // containment
+recapitalize(asset, amount)                       // adds to unallocated surplus
 ```
+
+Canonical signatures and preconditions are in `PROTOCOL_SPEC.md`.
 
 ### State transition rule
 
@@ -536,11 +546,14 @@ C = maximum payout per unit
 For one risk group:
 
 ```text
-shortLiability(S) = sum(shortQty_i * payoffPerUnit_i(S))
-longCredit(S)     = sum(lockedLongQty_j * payoffPerUnit_j(S))
+shortLiability(S) = sum(phi_i(S) * contractSize_i * shortQty_i)
+longCredit(S)     = sum(phi_j(S) * contractSize_j * lockedLongQty_j)
 
 portfolioLoss(S)  = max(shortLiability(S) - longCredit(S), 0)
 ```
+
+Each term is the exact integer numerator of `MATH.md` section 24. No leg is rounded
+before the group total is converted to native units once.
 
 Then:
 
@@ -597,8 +610,8 @@ Required account margin is conservatively:
 
 ```text
 requiredMargin(account, settlementAsset)
-    = sum(worstCaseLoss(group) + groupBuffer
-          for groups settled in settlementAsset)
+    = sum(ceilDiv(worstCaseLossNumerator(group), D_A) + groupBuffer
+          for active or expired-unfinalized groups settled in settlementAsset)
 ```
 
 No cross-expiry, cross-underlying, or cross-stablecoin offsets are recognized in the core engine.
@@ -741,14 +754,20 @@ A future on-chain router/adapter MAY support atomic buy-to-close or premium-to-m
 
 ```solidity
 interface ISettlementOracle {
-    function settlementPrice(bytes32 oracleConfigId, uint64 expiry)
-        external
-        view
-        returns (uint256 price, uint256 timestamp, bool valid);
+    // Verifies caller-supplied provider data (pull oracles may require an update
+    // fee, hence payable and non-view) against the immutable config's observation
+    // rule and returns the normalized pair price. Reverts on invalid data.
+    function verifySettlementPrice(
+        bytes32 oracleConfigId,
+        uint64 expiry,
+        bytes calldata oracleData
+    ) external payable returns (uint256 priceWad, uint64 observationTimestamp);
 }
 ```
 
-The exact interface may differ.
+The exact interface may differ, but it must accept untrusted caller data and verify
+it on-chain (`ORACLE_AND_SETTLEMENT.md` sections 24, 25 and 32); a view-only lookup
+cannot verify pull-oracle reports.
 
 ### Responsibilities
 
@@ -787,22 +806,26 @@ Option-series terms remain immutable throughout.
 
 ### Finalization
 
-For each series:
+Finalization happens once per risk group, not per series:
 
 ```text
-settlementPrice = finalized oracle price
-payoffPerUnit   = capped payoff function(settlementPrice)
-seriesClaim     = payoffPerUnit * outstandingLongSupply
+settlementPrice[group] = finalized oracle price (written once)
+phi*_i                 = capped payoff per underlying for series i at that price
 ```
 
-Both `settlementPrice` and `payoffPerUnit` become immutable after finalization. `seriesClaim` is reserved/accounted in that series' `settlementAsset`; it must never be backed by a different stablecoin.
+Both values are immutable after finalization. Finalization moves no funds and
+reserves nothing: writer collateral is already in the vault, and claims are realized
+lazily by redemption and account sync. Any cached per-series payoff MUST keep the
+exact `phi*` (not a rounded per-option amount), per `MATH.md` section 50.
+Finalization also releases the group's exposure from pair/oracle/asset caps
+(`PROTOCOL_SPEC.md` section 42).
 
 ### Long redemption
 
 ```text
 holder -> redeem(seriesId, qty)
        -> burn qty long tokens
-       -> transfer qty * payoffPerUnit units of settlementAsset
+       -> transfer floorDiv(phi* * contractSizeWad * qtyWad, D_A) units of settlementAsset
 ```
 
 ### Writer settlement without a global loop
@@ -818,16 +841,16 @@ That would become unbounded.
 
 Instead, use **lazy per-account settlement** or bounded keeper batches.
 
-Recommended baseline: lazy per-account synchronization.
+Recommended baseline: lazy atomic account/risk-group synchronization.
 
-When an account next performs a state-changing action, or when a keeper/user explicitly calls `syncSeries(account, seriesId)`:
+`syncRiskGroup(account, groupId)` enumerates the complete bounded group, computes
+all exact short and locked-long numerators, nets them before one native conversion,
+applies the cash delta, burns consumed hedges, and clears positions/indexes atomically.
+A series convenience selector MUST resolve to this full group operation. It MUST NOT
+settle an individual series independently. Caller-supplied lists cannot omit positions.
+See `MATH.md` sections 24, 54 and 97 for executable arithmetic.
 
-1. read finalized `payoffPerUnit`;
-2. calculate the account's short liability;
-3. realize any locked-long credit for that matured series;
-4. debit/credit the account cash ledger for `series.settlementAsset`;
-5. clear the matured position quantities;
-6. release any now-unused margin.
+---
 
 ### Long redemption before writer sync
 
@@ -835,7 +858,7 @@ The MarginVault can custody multiple approved stablecoins, but accounting is seg
 
 Therefore a writer cannot withdraw collateral that economically belongs to already-finalized long claims merely because their account has not yet been synchronized.
 
-The exact accounting identities for pooled redemption and lazy short synchronization must be specified **per settlement asset** and invariant-tested in `SETTLEMENT.md` and `INVARIANTS.md` before implementation is finalized.
+The exact accounting identities for pooled redemption and lazy short synchronization must be specified **per settlement asset** and invariant-tested in `ORACLE_AND_SETTLEMENT.md`, `MATH.md`, and `INVARIANTS.md` before implementation is finalized.
 
 This is a critical area and should not be improvised during coding.
 
@@ -843,14 +866,13 @@ This is a critical area and should not be improvised during coding.
 
 ## 15. Account synchronization rules
 
-Before these actions, the account MUST synchronize all matured positions relevant to the operation:
-
-- withdrawal;
-- unlocking a matured long hedge;
-- closing/mutating a matured position;
-- risk calculation that would otherwise count expired positions incorrectly.
-
-The implementation should permit bounded explicit series lists to avoid scanning unbounded account history.
+Before any operation that spends account cash or releases protection, synchronize
+all finalized groups relevant to the affected asset. Use the complete bounded
+canonical account index. Explicit batch lists are convenience inputs, not proof
+of completeness.
+Expired but unfinalized groups remain fully reserved under exact worst-case margin.
+Their absence of a final price MUST NOT block withdrawal of independently proven
+free cash; they also MUST NOT be dropped from the required-margin sum.
 
 ---
 
@@ -862,7 +884,7 @@ Withdrawal flow:
 withdraw request
       |
       v
-sync required matured positions
+sync every finalized group affecting the asset
       |
       v
 simulate post-withdraw collateral
@@ -948,46 +970,41 @@ That logic must not be mixed into the core engine by default.
 
 ## 19. Access control
 
-Recommended roles:
+Recommended roles (canonical names and powers are defined in `ACCESS_CONTROL.md`):
 
 ```text
-GOVERNANCE
-    manages approved assets/oracles/fees/limits
+GOVERNANCE_ROLE
+    approves assets/pairs, prospective limits and fees; clears restrictions
 
-PAUSER
-    can stop narrowly scoped risky entry points
+CONFIG_ROLE / ORACLE_CONFIG_ROLE / SERIES_CREATOR_ROLE
+    prospective configuration only
 
-KEEPER (optional)
-    can trigger public settlement/synchronization actions
+PAUSER_ROLE
+    can stop narrowly scoped risky entry points and restrict an asset
 
-FACTORY / MINTER roles
-    internal contract permissions only
+KEEPER_ROLE (optional)
+    finalization/sync are permissionless; a role is needed only if a provider requires it
+
+internal MINTER / BURNER / VAULT_OPERATOR
+    canonical contracts only, sealed before activation
 ```
 
 Governance must never be able to rewrite an existing series' strike, expiry, cap, or settlement price.
 
-Emergency powers should be narrow and timelocked where practical.
+Emergency powers are narrow. Pauses and asset restriction act immediately (they
+only stop actions); clearing a restriction requires governance after reconciliation;
+resolving a shortfall and raising limits go through the governance timelock
+(`ACCESS_CONTROL.md` sections 53 and 107).
 
 ---
 
-## 20. Upgradeability
+## 20. Versioning and immutability
 
-This is a launch decision, not an implementation detail.
-
-If upgradeable:
-
-- separate storage from logic carefully;
-- timelock upgrades;
-- protect immutable economic terms at the data layer;
-- test storage layout migrations;
-- define emergency-upgrade policy.
-
-If immutable:
-
-- use replaceable adapters/factories around immutable core components where possible;
-- include migration tooling for a future protocol version.
-
-The PRD intentionally leaves the final choice open.
+Canonical V2 uses immutable versioned financial cores under `ACCESS_CONTROL.md`
+sections 40–45. There is no upgrade or peer-replacement path for issued obligations.
+Future cores receive new risk; old obligations complete on their original core.
+Peripheral releases do not mutate claim semantics. Timelocks provide notice but
+cannot guarantee exit from collateralized or illiquid positions.
 
 ---
 
@@ -1001,16 +1018,21 @@ CollateralDeposited
 CollateralWithdrawn
 OptionWritten
 ShortClosed
+ShortCancelledUnfinalized
 LongLocked
 LongUnlocked
-SeriesExpired
-SeriesSettled
+RiskGroupFinalized
+RiskGroupSynced
 LongRedeemed
-AccountSeriesSynchronized
 FeeCharged
 ParameterChanged
-Paused / Unpaused
+PauseStateChanged
+AssetRestricted / AssetRestrictionCleared
+ShortfallResolved
 ```
+
+Canonical event names are listed in `PROTOCOL_SPEC.md` section 33. Expiry is
+time-derived and emits no event.
 
 Events should contain enough indexed fields for an external indexer to reconstruct:
 
@@ -1243,18 +1265,17 @@ Build web/indexer on top of the packages, then run end-to-end, invariant, advers
 
 These are not safe to guess during coding:
 
-- production oracle provider;
-- exact expiry settlement-window rule;
+- production oracle provider, expiry settlement-window rule and `maxFinalizationDelay`;
 - series creation permissions;
-- fee model;
-- upgradeability;
-- exact position-count limits;
-- exact safety buffer;
+- exact immutable core deployment bindings;
+- exact position-count limits and aggregate exposure-cap values;
 - exact MVP scope of `@optara/kuru` and whether any future on-chain Kuru router is warranted;
-- exact lazy-settlement accounting implementation;
 - frontend listing process for Kuru option markets.
 
-They must be resolved in the later protocol, oracle, settlement, fee, and deployment specifications.
+The canonical open list is `PRD.md` section 20. Already decided: fee-free MVP
+(`FEES.md`), zero snapshotted safety buffer (`MATH.md` section 25), exact-numerator
+lazy settlement (`MATH.md` sections 24, 54, 118), immutable versioned cores
+(`ACCESS_CONTROL.md` section 40).
 
 ---
 

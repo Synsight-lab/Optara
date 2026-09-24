@@ -3,7 +3,7 @@
 **Document type:** Normative composability, integration-boundary, and external-protocol specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; external integrations are non-authoritative
 
@@ -1938,3 +1938,17 @@ stablecoin isolation
 ```
 
 That boundary is the foundation of safe Optara composability.
+
+---
+
+## 122. Safe sale and recovery composition
+
+SDK sequencing cannot make prepaid OTC sales safe. The MVP exchanges already-minted
+inventory atomically against payment; a future issuance router requires explicit
+writer authorization and whole-transaction rollback as defined in `USER_FLOWS.md`
+section 37. No allowance is a delegated margin-account signature.
+
+Direct ERC-20 transfers into escrow are unallocated surplus, not assigned hedges.
+Integrations may use expired-unfinalized cancellation and safe unlock/withdrawal
+under `PROTOCOL_SPEC.md` section 41. They MUST disclose unresolved oracle risk and
+never describe an escalation timeout as a guaranteed settlement deadline.

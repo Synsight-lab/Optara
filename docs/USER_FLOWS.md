@@ -3,7 +3,7 @@
 **Document type:** Normative product and protocol interaction flows  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; examples are illustrative unless marked normative
 
@@ -522,7 +522,7 @@ because buying on Kuru is not an Optara close.
 Alice obtains custody of the long. `@optara/sdk` may build the close transaction, but the canonical call is:
 
 ```text
-closeShort(seriesId, 1)
+closeShort(seriesId, 1, EXTERNAL)
 ```
 
 Optara:
@@ -1078,7 +1078,7 @@ Alice requests:
 withdraw 8 USDT
 ```
 
-Optara must first synchronize the matured group.
+Optara must first synchronize the finalized group.
 
 After sync:
 
@@ -1167,7 +1167,10 @@ No redemption yet.
 
 No writer settlement yet.
 
-Use only the precommitted fallback process.
+Use only the precommitted fallback process. Meanwhile the recovery actions in
+section 50 remain available (cancellation with an identical long, safe unlock,
+free-cash withdrawal), and the group is flagged `ORACLE_STALLED` after the
+configured escalation deadline.
 
 ---
 
@@ -1270,11 +1273,12 @@ unsupported token behavior
 Protocol response:
 
 ```text
-restrict affected account/scope
-block new risk
-block withdrawals
-preserve safe deposit/hedge-lock/close paths
+restrict the whole settlement asset (checkAndRestrict / restrictAsset)
+block new risk, withdrawals, redemptions and ordinary deposits in that asset
+preserve cure deposits, recapitalization, hedge locks, closes and sync
 investigate/reconcile
+then: clear the restriction if backing is intact, or
+      resolve the verified shortfall with one uniform ratio (LIQUIDATION.md §102)
 ```
 
 Do not liquidate at arbitrary market price.
@@ -1295,7 +1299,7 @@ cash[USDe] = 30
 
 Her account is one logical user but three independent settlement-asset risk ledgers.
 
-A USDT withdrawal only checks groups settled in USDT, after relevant matured synchronization.
+A USDT withdrawal only checks groups settled in USDT, after synchronizing finalized USDT groups.
 
 A USDC deficit cannot be cured by her USDT unless a future explicitly specified cross-collateral feature exists.
 
@@ -1336,40 +1340,31 @@ Kuru quote/base balances do not secure that short.
 
 # Part XX — Primary-sale adapter flow
 
-## 37. Flow AI — SDK-assisted or future atomic primary sale
+## 37. Flow AI — Payment against delivery
 
-The ordinary SDK can orchestrate a safe multi-step primary sale:
-
-```text
-Buyer transfers/pays settlement stablecoin
-        |
-        v
-writer receives/deposits exact stablecoin into Optara
-        |
-        v
-@optara/sdk previews and builds write transaction
-        |
-        v
-ClearingHouse independently verifies post-write margin
-        |
-        v
-write short + mint long to buyer/recipient
-```
-
-The SDK cannot count a promised premium before the stablecoin is actually credited by Optara.
-
-A future on-chain router MAY make the flow atomic if Kuru/venue contracts permit:
+The MVP primary sale uses already minted inventory:
 
 ```text
-receive buyer stablecoin
--> deposit/credit through canonical Optara path
--> canonical write risk check
--> mint/deliver long
+writer funds its account and writes long tokens
+-> writer offers actual inventory on a verified venue / atomic exchange
+-> buyer payment and delivery of the exact long token execute atomically
 ```
 
-If the post-write account remains insufficiently margined, the operation must revert.
+The SDK MUST NOT describe payment to the writer followed by a separate write as a
+safe or trustless sale. If the writer stops, expires, or fails its margin check,
+a previous payment transaction cannot be rolled back by the SDK.
+
+A future primary-sale contract MAY combine buyer payment, an authorized writer
+account deposit/write, and delivery in one transaction. It MUST bind chain,
+contract, writer, buyer/recipient, series, quantity, premium, maximum fee, deadline,
+and nonce to the required user authorization. All legs revert on any failure.
+ERC-20 allowance alone does not authorize writing against someone else's account.
+Until such an account-authorization interface is specified and audited, this router
+is not an MVP workflow. Escrow variants require explicit refunds and cancellation;
+direct prepaid OTC transfers carry counterparty risk and are outside the safe flow.
 
 ---
+
 
 # Part XXI — Covered economic intuition without underlying collateral
 
@@ -1474,8 +1469,10 @@ until the corresponding canonical Optara transaction succeeds.
 ```text
 series not ACTIVE
 pair/new risk disabled
+settlement asset restricted or in wind-down
 quantity invalid
-account limits exceeded
+account position limits exceeded
+aggregate exposure cap exceeded
 cash < post-write required margin
 ```
 
@@ -1485,7 +1482,8 @@ cash < post-write required margin
 
 ```text
 requested quantity not locked
-group matured
+group finalized (use atomic settlement)
+settlement asset restricted
 or
 post-unlock cash < required margin
 ```
@@ -1496,8 +1494,9 @@ post-unlock cash < required margin
 
 ```text
 amount > cash
-matured groups not safely synchronizable
+finalized groups not safely synchronizable (unfinalized groups remain fully reserved)
 post-withdraw cash < required margin
+settlement asset restricted (after wind-down, pays floor(rho_A * amount))
 asset/token path unsafe
 ```
 
@@ -1508,8 +1507,8 @@ asset/token path unsafe
 ```text
 no matching short
 wrong series token
-insufficient long quantity
-series no longer in pre-expiry close state
+insufficient long quantity (EXTERNAL) or insufficient own locked quantity (LOCKED)
+series no longer ACTIVE (use cancelUnfinalizedShort while expired-unfinalized)
 ```
 
 ---
@@ -1521,6 +1520,7 @@ group not finalized
 no actual token custody/approval
 quantity invalid
 token already burned
+settlement asset restricted (after wind-down, pays floor(rho_A * payout))
 settlement transfer unavailable
 ```
 
@@ -1709,3 +1709,16 @@ Every flow should preserve three separations:
 ```
 
 Those separations are fundamental to understanding and implementing Optara correctly.
+
+---
+
+## 50. Oracle-stalled user recovery
+
+If finalization is delayed, display the observation rule, escalation deadline and
+unresolved-claim risk. A writer holding the identical long (in its wallet, or as its
+own locked hedge selected with the `LOCKED` source) may use `cancelUnfinalizedShort`
+until finalization. A user may withdraw proven free cash
+and unlock an unfinalized hedge only after the full post-removal risk check.
+These operations do not require a guessed price. Once finalized, refresh the flow
+to ordinary redemption and atomic group sync. If no approved historical observation
+can ever be recovered, unmatched claims may remain unresolved indefinitely.

@@ -3,9 +3,11 @@
 **Document type:** Normative security architecture and threat-model specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering security specification; not a substitute for independent audit
+
+> Canonical V2 uses immutable versioned financial cores (`ACCESS_CONTROL.md` sections 40–45). Conditional upgrade guidance/tests below apply only to a separately specified future variant; V2 instead tests sealed peers, fixed code, and non-reassignable internal authority.
 
 ---
 
@@ -475,7 +477,8 @@ matching short recording
 Authorized burn paths include:
 
 ```text
-short close
+short close (EXTERNAL or LOCKED source)
+expired-unfinalized cancellation
 external redemption
 locked-long settlement consumption
 ```
@@ -575,7 +578,7 @@ ledger credits 100
 
 protocol becomes insolvent.
 
-MVP SHOULD reject fee-on-transfer settlement assets.
+The MVP MUST reject fee-on-transfer settlement assets (DD-040).
 
 ---
 
@@ -583,7 +586,7 @@ MVP SHOULD reject fee-on-transfer settlement assets.
 
 Rebase can alter vault balance without Optara transaction.
 
-Core V2 SHOULD reject rebasing settlement assets unless separately adapted.
+The MVP MUST reject rebasing settlement assets (DD-040).
 
 ---
 
@@ -911,7 +914,7 @@ Writer withdrawal cannot bypass unsynchronized debt.
 Before transfer:
 
 ```text
-synchronize relevant matured groups
+synchronize relevant finalized groups
 simulate post-withdraw cash
 recompute canonical margin
 require safe state
@@ -1565,11 +1568,16 @@ unexpected OptionToken mint
 unexpected OptionToken burn
 finalization attempt failures
 oracle config suspension
+ORACLE_STALLED groups (escalation deadline passed)
 large role changes
 pause/unpause
-upgrade scheduling/execution
+AssetRestricted / Recapitalized / ShortfallResolved events
+aggregate exposure near caps
 rounding reserve anomalies
 ```
+
+Direct token donations show up as unallocated surplus; they are logged, not treated as
+an accounting mismatch (INV-VAULT-07). Canonical V2 has no upgrade events to watch.
 
 ---
 
@@ -1863,3 +1871,26 @@ The SDK architecture must preserve that design:
 ```
 
 may improve usability and composability, but they must never become shortcuts around the authoritative contracts.
+
+---
+
+## 128. Required review regressions and trust boundaries
+
+The exact numerator algorithm in `MATH.md` replaces intermediate payoff rounding.
+Test fragmented writers, merged redeemers, mixed contract sizes, interior prices,
+and overflow bounds. Donation surplus is neither margin nor an incident.
+
+Primary-sale payment and delivery MUST be atomic; SDK sequencing cannot guarantee
+seller delivery. `PROTOCOL_SPEC.md` section 41 preserves fully reserved unresolved
+expiry and enables safe recovery without changing the payoff. Historical oracle
+availability remains a disclosed settlement-liveness dependency.
+
+`LIQUIDATION.md` section 101 defines persistent separate-transaction containment and
+asset-wide payout gates. A failed financial transaction does not persist a pause.
+Section 102 there defines the only exit when backing was lost: a timelocked,
+evidence-backed uniform recovery ratio, never first-come-first-served payout.
+`PROTOCOL_SPEC.md` section 42 defines Sybil-resistant aggregate issuance caps,
+released per risk group at finalization.
+`ACCESS_CONTROL.md` sections 40–45 require immutable core bindings for existing
+obligations. Earlier conditional upgrade guidance applies only to separately
+specified future variants, not canonical V2.

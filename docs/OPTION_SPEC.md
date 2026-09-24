@@ -3,7 +3,7 @@
 **Document type:** Normative option-product and series specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -171,7 +171,7 @@ quantityWad
 = option-token quantity, where 1 whole option token = 1e18 units
 ```
 
-The ERC-20 settlement asset may have 6, 8, 18, or another approved decimal count. Conversion to native token units occurs only at defined accounting/transfer boundaries.
+The ERC-20 settlement asset may have 6, 8, 18, or another approved decimal count in the range 0..18. Conversion to native token units occurs only at defined accounting/transfer boundaries.
 
 ---
 
@@ -199,7 +199,7 @@ For MVP simplicity, deployments MAY standardize contract size per underlying, bu
 
 ## 9. Quantity
 
-Long option tokens SHOULD use 18 decimals.
+Long option tokens MUST use 18 decimals in core V2.
 
 Therefore:
 
@@ -231,7 +231,7 @@ CallPayoff(S, Q)
     = cappedCallPerUnderlying(S) * CS * Q
 ```
 
-with fixed-point scaling applied between multiplications.
+with exact product numerators retained until the final native-unit conversion; no intermediate division or truncation is permitted.
 
 ### Call regions
 
@@ -291,7 +291,7 @@ The underlying settlement price cannot be negative.
 
 An ordinary cash-settled put with strike `K` already has a natural maximum intrinsic value of `K` when `S = 0`.
 
-Therefore core V2 SHOULD enforce:
+Therefore core V2 MUST enforce:
 
 ```text
 0 < maxPayout <= strike
@@ -299,7 +299,7 @@ Therefore core V2 SHOULD enforce:
 
 for puts.
 
-A put cap greater than its strike is economically redundant and SHOULD be rejected to preserve canonical series identity and simpler risk math.
+A put cap greater than its strike is economically redundant and MUST be rejected: it would break canonical series identity, and the risk engine's `K - C` critical price would be negative.
 
 ---
 
@@ -412,7 +412,7 @@ seriesId = keccak256(
 )
 ```
 
-`protocolSeriesDomain` SHOULD prevent accidental collision with unrelated protocol versions or factories.
+`protocolSeriesDomain` MUST include the chain ID and the immutable core/factory version identity (`PROTOCOL_SPEC.md` section 43), so identical terms on another chain or core version never collide.
 
 The `optionToken` address MUST NOT be an input if it is deterministically deployed from `seriesId`, avoiding circular identity.
 
@@ -486,6 +486,22 @@ settlementAsset
 expiry/finality rule
 ```
 
+### Arithmetic-domain check
+
+```text
+call: strikeWad + maxPayoutWad does not overflow
+strikeWad, maxPayoutWad, contractSizeWad within deployment bounds chosen so that
+    maxPayoutWad * contractSizeWad * maxQuantity (and account/group sums) fit int256
+```
+
+(`MATH.md` section 24, `PROTOCOL_SPEC.md` section 43.)
+
+### Oracle readiness
+
+The referenced `oracleConfigId` must be launch-ready under `ORACLE_AND_SETTLEMENT.md`
+section 119 (implemented adapter, unique observation rule, historical retrieval,
+fallback eligibility, finite `maxFinalizationDelay`).
+
 ### Duplicate check
 
 The economic series identity MUST be unique.
@@ -499,7 +515,7 @@ Each series is represented by one fungible ERC-20 long token.
 Required behavior:
 
 - ERC-20 compatible;
-- 18 decimals recommended;
+- exactly 18 decimals;
 - mint restricted to the Optara clearing/issuance path;
 - burn restricted to valid close or settlement paths, with holder approval where required;
 - exposes or can resolve its `seriesId`;
@@ -546,7 +562,10 @@ Long tokens MAY remain transferable.
 
 Their payout is not yet final.
 
-No holder may redeem until settlement is finalized.
+No holder may redeem until settlement is finalized. A writer may still cancel a short
+against an identical long (`PROTOCOL_SPEC.md` section 41). If no valid observation
+arrives by the escalation deadline the group is flagged `ORACLE_STALLED`; unmatched
+claims can remain unresolved if every approved source permanently fails.
 
 ### After settlement
 
@@ -589,6 +608,10 @@ same quantity
 No approximate economic substitution is allowed.
 
 For example, a `MON/USDT 10C Cap5` long cannot directly close a `MON/USDT 10C Cap4` short.
+
+The long may come from the caller's wallet (`EXTERNAL`) or from the caller's own
+locked hedge in the identical series (`LOCKED`), selected explicitly
+(`PROTOCOL_SPEC.md` section 16).
 
 ---
 
@@ -693,18 +716,20 @@ The same rule applies to every approved stablecoin.
 
 ## 28. Settlement calculation
 
-Recommended normalized process:
+Required process (`MATH.md` sections 24, 47 and 54):
 
 ```text
-1. obtain final settlementPriceWad
-2. compute payoffPerUnderlyingWad
-3. multiply by contractSizeWad
-4. multiply by option quantityWad
-5. convert WAD settlement value to native settlement-token units
-6. round long payout down at the final transfer/credit boundary
+1. obtain the group's final settlementPriceWad
+2. compute phiWad = capped payoff per underlying (exact; no rounding)
+3. N = phiWad * contractSizeWad * quantityWad        // exact integer, no division
+4. D_A = 10^(54 - settlementAssetDecimals)
+5. external redemption: floorDiv(N, D_A)
+   account group: sum all short and locked-long N first, then
+                  debit = ceilDiv(net, D_A) or credit = floorDiv(net, D_A)
 ```
 
-RiskEngine required margin MUST use equivalent economics with conservative upward rounding where necessary.
+No value is divided or rounded between steps 2 and 5. RiskEngine required margin
+uses the same numerators and rounds the worst-case total up once.
 
 The RiskEngine and SettlementEngine MUST share the same payoff math library.
 
@@ -920,7 +945,7 @@ A writer must never be allowed to post less than the mathematically required los
 
 ### Writer matured debit
 
-When a normalized amount must be converted into native token units, debit SHOULD round UP unless the accounting implementation proves a symmetric exact alternative.
+The net group debit MUST round UP, once, from the exact numerator (`MATH.md` section 54).
 
 Any resulting dust MUST be tracked explicitly.
 
@@ -928,14 +953,14 @@ Any resulting dust MUST be tracked explicitly.
 
 ## 37. Long-token supply semantics
 
-During the active pre-expiry phase, writing and closing preserve:
+Until the group is finalized, writing, closing and unfinalized cancellation preserve:
 
 ```text
 new write:
     long supply +Q
     aggregate active short +Q
 
-pre-expiry close:
+close (active) or cancellation (expired-unfinalized):
     long supply -Q
     aggregate active short -Q
 ```
@@ -944,7 +969,7 @@ After settlement, long redemption and writer synchronization may occur at differ
 
 Therefore post-expiry correctness MUST be checked with cumulative settlement accounting rather than assuming `currentLongSupply == currentUnsyncedShortQty` at every instant.
 
-No implementation should use that pre-expiry equality as a post-settlement invariant.
+No implementation should use that pre-finalization equality as a post-settlement invariant.
 
 ---
 
@@ -1142,3 +1167,19 @@ The Kuru market convention described here is based on the official Kuru SDK repo
 - https://github.com/Kuru-Labs/kuru-sdk
 
 Before deployment, integration tests must confirm the exact Kuru market contracts, router addresses, token-deposit behavior, and SDK version used by Optara.
+
+---
+
+## 46. Exact arithmetic and unresolved-expiry cancellation
+
+Option quantities use exactly 18 decimals in core V2. Settlement assets have
+0..18 decimals. `MATH.md` sections 24, 50 and 54 require exact product numerators
+and a single final native conversion; intermediate contract-size/quantity flooring
+is forbidden. Factory/position bounds MUST prove products and aggregate sums fit.
+
+`PROTOCOL_SPEC.md` section 41 adds cancellation of identical longs (external, or the
+caller's own explicitly selected locked hedge) against owned shorts while expired but
+unfinalized. It is not exercise and pays no option
+cash payoff. Finalized claims use normal redemption and group settlement. Unfinalized
+hedges may unlock only with a full post-removal risk check. Immutable core/version
+and oracle bindings remain queryable; unmatched claims retain oracle-liveness risk.

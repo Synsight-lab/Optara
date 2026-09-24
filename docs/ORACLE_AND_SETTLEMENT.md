@@ -3,7 +3,7 @@
 **Document type:** Normative oracle, expiry-finalization, and settlement specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; production oracle parameters remain deployment-specific
 
@@ -206,8 +206,8 @@ struct OracleConfig {
     bytes32 primarySourceId;
     bytes32 secondarySourceId;       // optional / zero if unused
 
-    uint64 observationStartOffset;
-    uint64 observationEndOffset;
+    int64 observationStartOffset;
+    int64 observationEndOffset;
     uint64 minFinalizationDelay;
     uint64 maxFinalizationDelay;
 
@@ -564,25 +564,21 @@ This allows the configured oracle methodology to reach the required finality.
 
 ---
 
-# 19. Maximum settlement delay
+# 19. Settlement escalation deadline
 
-An oracle configuration SHOULD define:
+Every config MUST define a finite `maxFinalizationDelay`, no smaller than its
+earliest eligible finalization delay. At `expiry + maxFinalizationDelay`, derive
+`ORACLE_STALLED` if still unfinalized. Checked timestamp arithmetic is mandatory.
 
-```text
-maxFinalizationDelay
-```
+This is a monitoring/recovery deadline, not a guaranteed payout deadline. Continue
+to accept authentic reports for the exact historical observation under the immutable
+rule, including eligible precommitted fallback reports. Never substitute the current
+spot price. Missing caller data does not establish primary failure.
 
-or another bounded failure policy.
-
-This does not mean Optara invents a price after the delay.
-
-Instead, the config determines:
-
-```text
-primary source valid?
-fallback source valid?
-otherwise remain unsettled / incident path
-```
+Use the recovery policy in `PROTOCOL_SPEC.md` section 41: reserve worst-case margin,
+allow safe free-cash withdrawals and matching long/short cancellation, and preserve
+unmatched claims. Permanent failure of every source can leave unmatched claims
+unresolved indefinitely. This limitation MUST be disclosed before users enter risk.
 
 ---
 
@@ -594,7 +590,7 @@ At minimum validate:
 
 ```text
 source identity
-price > 0
+price > 0 (unless the config explicitly supports zero, section 21)
 expected decimals
 publish/observation time
 observation window
@@ -798,7 +794,9 @@ no redemption yet
 no writer settlement yet
 ```
 
-The long token may remain transferable.
+The long token may remain transferable. The group stays reserved at worst case;
+`cancelUnfinalizedShort`, safe `unlockLong` and free-cash withdrawal remain
+available (`PROTOCOL_SPEC.md` section 41).
 
 ---
 
@@ -868,6 +866,7 @@ At minimum:
 group exists
 timestamp >= expiry
 group not already finalized
+settlement finalization not paused for this group/config
 oracle config valid for existing group
 required finality delay elapsed
 oracle data passes adapter validation
@@ -884,6 +883,7 @@ Atomically:
 settlementPrice[groupId] = S*
 finalizedAt[groupId] = block.timestamp
 groupState = FINALIZED
+release group exposure from pair/oracle/asset caps (PROTOCOL_SPEC.md section 42)
 ```
 
 Series-level payoff may be:
@@ -898,7 +898,8 @@ or:
 cached per series
 ```
 
-provided both approaches are mathematically identical.
+provided both approaches are mathematically identical. A cache must keep the exact
+`phi*` per underlying unit; a rounded per-option amount is forbidden (`MATH.md` section 50).
 
 ---
 
@@ -988,7 +989,10 @@ series settled
 quantity > 0
 caller owns or is authorized for the long
 actual long token not already consumed
+settlement asset not ASSET_RESTRICTED; settlement execution not paused
 ```
+
+In `ASSET_WIND_DOWN` the transfer is `floor(rho_A * payout)` (`LIQUIDATION.md` section 102).
 
 Effects:
 
@@ -1002,19 +1006,9 @@ transfer series settlementAsset
 
 # 40. Redemption rounding
 
-For normalized economic payout:
-
-```text
-payoutWad
-```
-
-external payout uses:
-
-```text
-toNativeDown(payoutWad)
-```
-
-Long-holder payout MUST NOT exceed contractual value because of rounding.
+For exact numerator `N = phiWad * contractSizeWad * quantityWad`, transfer
+`floorDiv(N, D_A)` where `D_A = 10^(54-d)`. No intermediate WAD truncation is allowed.
+This same rational payoff is used in risk and account-group netting.
 
 ---
 
@@ -1104,23 +1098,23 @@ short risk is deterministic
 For account `a`:
 
 ```text
-ShortDebitWad
+ShortDebitNumerator
 =
-sum_i Payoff_i*(shortQty_i)
+sum_i exactPayoffNumerator(i, S*, shortQty_i)
 
-LockedLongCreditWad
+LockedLongCreditNumerator
 =
-sum_j Payoff_j*(lockedLongQty_j)
+sum_j exactPayoffNumerator(j, S*, lockedLongQty_j)
 ```
 
 Define:
 
 ```text
-DeltaWad
+DeltaNumerator
 =
-LockedLongCreditWad
+LockedLongCreditNumerator
 -
-ShortDebitWad
+ShortDebitNumerator
 ```
 
 ---
@@ -1132,25 +1126,25 @@ The account's matured group MUST be settled as one unit.
 If:
 
 ```text
-DeltaWad > 0
+DeltaNumerator > 0
 ```
 
 credit:
 
 ```text
-toNativeDown(DeltaWad)
+floorDiv(DeltaNumerator, D_A)
 ```
 
 If:
 
 ```text
-DeltaWad < 0
+DeltaNumerator < 0
 ```
 
 debit:
 
 ```text
-toNativeUp(-DeltaWad)
+ceilDiv(-DeltaNumerator, D_A)
 ```
 
 ---
@@ -1304,7 +1298,7 @@ all finalized-unsynced groups affecting A
 
 must be synchronized or otherwise provably included in the canonical effective-balance calculation.
 
-Core MVP SHOULD synchronize before withdrawal for simpler correctness.
+Core V2 MUST synchronize before withdrawal (`MATH.md` section 93).
 
 ---
 
@@ -1358,6 +1352,8 @@ OutstandingExternalSettledClaims(A)
 RoundingReserve(A)
 +
 ProtocolOwnedBalance(A)
++
+UnallocatedSurplus(A)
 ```
 
 For fee-free MVP:
@@ -1397,7 +1393,9 @@ VaultBalance(A)' = VaultBalance(A) - R
 
 OutstandingExternalSettledClaims(A)'
 =
-OutstandingExternalSettledClaims(A) - R
+OutstandingExternalSettledClaims(A) - exactValueOfBurnedQuantity
+
+RoundingReserve(A)' = RoundingReserve(A) + exactValueOfBurnedQuantity - R
 ```
 
 The pooled identity remains consistent.
@@ -1445,7 +1443,7 @@ outstandingSettledExternalClaims[asset]
 
 This can improve monitoring and reconciliation.
 
-If cached, counters become invariant-sensitive and must reconcile exactly with claim creation/burn events.
+If cached, counters become invariant-sensitive and must reconcile exactly with claim creation/burn events. Because the external claim is an exact rational value (`MATH.md` section 118), a cached counter must hold numerators, not floored native amounts.
 
 ---
 
@@ -1535,14 +1533,16 @@ RiskGroupSynced(
     account,
     groupId,
     settlementAsset,
-    shortDebitNative,
-    lockedLongCreditNative,
-    netCashDelta,
+    shortDebitNumerator,
+    lockedLongCreditNumerator,
+    netCashDeltaNative,
     caller
 )
 ```
 
-If net is stored signed, use a safe signed representation.
+Only the net delta is converted to native units (`MATH.md` section 54); per-leg
+native amounts do not exist and must not be emitted as if they did. If the net is
+stored signed, use a safe signed representation.
 
 ---
 
@@ -1790,7 +1790,7 @@ For the safest MVP:
 long contractual payout
 ```
 
-SHOULD be fee-free.
+MUST be fee-free in core V2 (`FEES.md` section 8, DD-057).
 
 Oracle provider update fees may be paid separately by finalization caller.
 
@@ -1822,9 +1822,8 @@ Use safe token-transfer patterns and appropriate guards.
 
 # 82. Non-standard settlement tokens
 
-Settlement assets should be limited to exact-accountable ERC-20s.
-
-Unsupported unless explicitly adapted:
+Settlement assets MUST be limited to exact-accountable ERC-20s. The MVP rejects
+the following outright (DD-040):
 
 ```text
 fee-on-transfer
@@ -2077,9 +2076,9 @@ If a group was correctly finalized before an unrelated later oracle incident:
 its stored settlement price remains authoritative
 ```
 
-unless an exploit proves the stored state itself invalid and migration/recovery is required.
-
-Ordinary governance cannot refinalize it.
+No role can refinalize it. Canonical V2 has no refinalization or migration path; if
+an exploit proves stored state invalid, the affected asset is contained under
+`LIQUIDATION.md` sections 101–102.
 
 ---
 
@@ -2154,7 +2153,7 @@ No market price or governance parameter may change it.
 One long unit may be consumed only once through:
 
 ```text
-pre-expiry close
+active close or unfinalized cancellation
 locked-long internal settlement
 external redemption
 ```
@@ -2507,3 +2506,35 @@ The finalizer chooses no favorable outcome.
 The SDK supplies no authority.
 
 The contracts enforce the settlement.
+
+---
+
+## 119. Observation arithmetic and finalization admission
+
+Compute observation bounds in checked signed wide arithmetic, e.g.
+`int256(uint256(expiry)) + int256(offset)`. Require both results nonnegative and
+representable as timestamps, start <= end, and earliest finalization >= observation
+end. Never cast a negative offset to unsigned or rely on wraparound.
+
+A config is not launch-ready merely because its fields are populated. Before any
+issuance, it MUST name an implemented provider adapter, a unique observation
+selection/proof rule, historical report availability/retention, timestamp skew,
+normalization, report availability assumptions, fallback eligibility and priority,
+and executable success/failure vectors. A report omitted by the caller is not
+proof that the primary source failed. Fallback eligibility MUST be checked on-chain
+under its precommitted phase/proof rule; callers cannot choose between valid prices.
+A provider registry or adapter address for existing groups cannot be replaced by
+Optara governance. Provider-owned upgrades remain an explicit external trust risk.
+
+---
+
+## 120. Exact claim accounting
+
+All payoff sums in this document denote exact numerators from `MATH.md` section 24.
+No leg is rounded to WAD or native units before group netting. The denominator is
+`D_A = 10^(54-d)`. External redemption floors once; net account debits ceil once;
+net positive account credits floor once. `MATH.md` section 118 defines exact
+outstanding external claims, pending rounded account deltas, fractional shadow
+rounding reserves, and unsolicited surplus. Those definitions govern the pooled
+identity and replace any informal instruction to reduce an external claim reserve
+by only the amount transferred.

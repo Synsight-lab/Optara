@@ -28,19 +28,19 @@ Optara solves this at the product level by putting a **maximum payout cap** into
 For a call:
 
 ```text
-payoff = min(max(settlementPrice - strike, 0), maxPayout) * quantity
+payoff = min(max(settlementPrice - strike, 0), maxPayout) * contractSize * quantity
 ```
 
 For a put:
 
 ```text
-payoff = min(max(strike - settlementPrice, 0), maxPayout) * quantity
+payoff = min(max(strike - settlementPrice, 0), maxPayout) * contractSize * quantity
 ```
 
 Therefore:
 
 ```text
-0 <= payout <= maxPayout * quantity
+0 <= payout <= maxPayout * contractSize * quantity
 ```
 
 The payout cap is immutable once the option series is created.
@@ -266,7 +266,7 @@ A writer can:
 
 1. buy the same option series token on Kuru;
 2. withdraw/transfer it to Optara;
-3. call `closeShort(seriesId, quantity)`;
+3. call `closeShort(seriesId, quantity, EXTERNAL)`;
 4. Optara burns the returned long token;
 5. Optara reduces the matching short quantity;
 6. the risk engine recalculates margin;
@@ -401,12 +401,12 @@ At minimum, the implementation must preserve these rules:
 1. **Payout cap**
 
    ```text
-   0 <= payout <= maxPayout * quantity
+   0 <= payout <= maxPayout * contractSize * quantity
    ```
 
 2. **Margin sufficiency**
 
-   A write, withdrawal, unlock, or position transfer must not leave an account below required margin.
+   A write, withdrawal, or hedge unlock must not leave an account below required margin. Short positions cannot be transferred at all.
 
 3. **No fake hedges**
 
@@ -486,15 +486,15 @@ optara/
 │   ├── USER_FLOWS.md
 │   ├── STATE_MACHINE.md
 │   ├── KURU_INTEGRATION.md
-│   ├── ORACLE_AND_SETTLEMENT.md        # planned; not created by this revision
-│   ├── COMPOSABILITY.md                # planned
-│   ├── SECURITY.md                     # planned
-│   ├── ACCESS_CONTROL.md               # planned
-│   ├── FEES.md                         # planned
-│   ├── DESIGN_DECISIONS.md             # planned
-│   ├── TESTING.md                      # planned
-│   ├── TEST_CASES.md                   # planned
-│   └── DEPLOYMENT.md                   # planned
+│   ├── ORACLE_AND_SETTLEMENT.md
+│   ├── COMPOSABILITY.md
+│   ├── SECURITY.md
+│   ├── ACCESS_CONTROL.md
+│   ├── FEES.md
+│   ├── DESIGN_DECISIONS.md
+│   ├── TESTING.md
+│   ├── TEST_CASES.md
+│   └── DEPLOYMENT.md
 │
 ├── contracts/
 │   ├── src/
@@ -584,3 +584,17 @@ No production deployment should occur before independent security review and ext
 
 The Kuru integration assumptions in this specification are based on the currently published Kuru SDK behavior: Kuru provides ERC-20 base/quote markets and maintains Kuru-side trading balances separate from Optara. `@optara/kuru` is the isolation layer for those venue-specific workflows. If Kuru interfaces change, the preferred response is to update `@optara/kuru`, not Optara's core risk/settlement contracts. The exact deployed Kuru contracts and SDK version must still be revalidated before deployment.
 
+---
+
+## 18. Canonical safety refinements
+
+The implementation baseline requires exact payoff numerators with no intermediate
+rounding (`MATH.md` sections 24/54), atomic group settlement, atomic buyer payment
+against delivery, donation-tolerant custody accounting, persistent scoped containment,
+and aggregate gross issuance caps (released per risk group at finalization).
+A verified loss of backing is resolved by one uniform, timelocked recovery ratio for
+that asset (`LIQUIDATION.md` section 102). Existing obligations use immutable versioned cores.
+Expired-unfinalized positions remain fully reserved but support safe cancellation
+and free-collateral recovery. Permanent oracle failure may leave unmatched claims
+unresolved; no guaranteed settlement deadline is promised. See `PROTOCOL_SPEC.md`
+sections 41/42 and `ACCESS_CONTROL.md` sections 40–45.

@@ -3,7 +3,7 @@
 **Document type:** Normative lifecycle and state-transition specification  
 **Protocol:** Optara  
 **Target:** V2 solvency-first MVP on Monad  
-**Version:** 0.2.0-draft  
+**Version:** 0.3.0-draft
 **Date:** 2026-09-24  
 **Status:** Engineering specification; not production-audited
 
@@ -130,11 +130,19 @@ For documentation, these gates can be understood as:
 NORMAL
 RISK_PAUSED
 SETTLEMENT_PAUSED
-ASSET_RESTRICTED
-MIGRATION_REQUIRED
+ASSET_RESTRICTED       per asset; all outflows of that asset blocked (LIQUIDATION.md §101)
+ASSET_WIND_DOWN        per asset and core; entered only by verified-shortfall
+                       resolution (LIQUIDATION.md §102); outflows pay rho_A,
+                       deposits and new risk disabled permanently
 ```
 
-These modes may overlap in implementation.
+These modes may overlap in implementation. `ASSET_RESTRICTED` exits either to normal
+operation (governance clears it after reconciliation proves backing intact) or to
+`ASSET_WIND_DOWN`. `ASSET_WIND_DOWN` is terminal for that asset on that core.
+
+Canonical V2 cores are immutable (`ACCESS_CONTROL.md` section 40), so there is no
+in-place migration mode; a replacement core takes new risk while the old core
+completes its existing obligations.
 
 ---
 
@@ -147,11 +155,14 @@ deposit
 write
 lockLong
 unlockLong if safe
-closeShort
+closeShort (EXTERNAL or LOCKED source)
+cancelUnfinalizedShort (expired-unfinalized groups)
 withdraw if safe
 finalize valid expired groups
 sync finalized groups
 redeem
+recapitalize
+checkAndRestrict (succeeds only on a verified deficit)
 ```
 
 ---
@@ -175,6 +186,7 @@ unsafe unlockLong    -> blocked
 deposit              -> allowed if token safe
 lockLong             -> allowed if path safe
 closeShort           -> allowed if path safe
+cancelUnfinalizedShort -> allowed if path safe
 finalize             -> allowed if oracle trusted
 sync                  -> allowed if settlement trusted
 redeem                -> allowed if settlement/custody trusted
@@ -200,15 +212,19 @@ Existing active risk remains bounded if RiskEngine/custody remain correct.
 
 ---
 
-## 8. MIGRATION_REQUIRED
+## 8. ASSET_RESTRICTED and ASSET_WIND_DOWN
 
-Used only for exceptional protocol incidents.
+`ASSET_RESTRICTED` is entered by a successful `checkAndRestrict` or guardian
+`restrictAsset` (`LIQUIDATION.md` section 101). It blocks every outflow of that
+asset plus new risk, hedge unlocks and ordinary deposits, for all accounts. Cure
+deposits, `recapitalize`, locks, closes/cancellations, finalization and sync remain.
 
-No ordinary risk creation.
+`ASSET_WIND_DOWN` is entered only through verified-shortfall resolution
+(`LIQUIDATION.md` section 102). Outflows resume at the uniform ratio `rho_A`;
+deposits and new risk in that asset stay disabled on that core permanently.
 
-Migration behavior must be separately specified.
-
-Existing immutable option economics must not be rewritten.
+Canonical V2 has no in-place migration mode: cores are immutable, and a replacement
+core accepts only new risk. Existing immutable option economics must not be rewritten.
 
 ---
 
@@ -458,7 +474,7 @@ Effects:
 
 ```text
 new writes forbidden
-active short close semantics stop unless explicitly supported as matured sync
+active closeShort stops; cancelUnfinalizedShort remains available under section 101
 settlement awaits oracle finalization
 long tokens may remain transferable
 ```
@@ -475,6 +491,9 @@ Allowed:
 finalize according to immutable oracle rule
 transfer long if ERC-20 remains transferable
 deposit cash
+cancelUnfinalizedShort using an identical long (EXTERNAL or explicit own LOCKED hedge)
+unlock hedge only if the complete post-state is safe
+withdraw proven free cash with unresolved groups reserved
 ```
 
 Must not:
@@ -496,8 +515,9 @@ Effects:
 
 ```text
 settlementPrice fixed
-payoffPerUnderlying fixed
-payoffPerOption derivable/fixed
+payoffPerUnderlying (phi*) fixed
+per-option payoff derivable exactly from phi* (no rounded per-option cache)
+group exposure released from pair/oracle/asset caps
 redemption enabled
 writer groups become synchronizable
 ```
@@ -512,7 +532,7 @@ Allowed:
 
 ```text
 redeem surviving external longs
-sync writer matured groups
+sync writer finalized groups
 transfer long if token design allows
 ```
 
@@ -530,7 +550,9 @@ and
 aggregateUnsyncedShortQty == 0
 ```
 
-Optional state for archival/indexing.
+Optional state for archival/indexing. Abandoned zero-payoff tokens may keep a series
+out of `CLEARED` indefinitely; this has no economic effect (their exposure was already
+released at finalization).
 
 No economic claim remains.
 
@@ -687,7 +709,8 @@ after valid close/unlock.
 
 When group expires.
 
-No ordinary write/close mutation should bypass settlement rules.
+No write or `closeShort` is possible. `cancelUnfinalizedShort` and safe unlock may
+still shrink the position, down to `NO_POSITION` (section 101).
 
 ---
 
@@ -714,7 +737,7 @@ but ledger quantities may not yet be cleared.
 ```text
 compute all short debit
 compute all locked-long credit
-net in normalized precision
+net exact numerators (single rounding)
 apply one stablecoin cash delta
 consume/burn locked longs
 clear matured shorts
@@ -813,6 +836,13 @@ It becomes deterministic settlement debt.
 
 ---
 
+## 45A. MATURED (unfinalized) -> CANCELLED
+
+Via `cancelUnfinalizedShort(seriesId, q, source)` while the group is expired but not
+finalized: matching long burned, short reduced, no cash payoff (section 101).
+
+---
+
 ## 46. MATURED_UNSYNCED -> SETTLED
 
 Through account-level `syncRiskGroup`.
@@ -900,15 +930,19 @@ Token release happens only after successful risk validation.
 
 ---
 
-## 52. EXTERNAL -> CONSUMED_FOR_CLOSE
+## 52. EXTERNAL or LOCKED_IN_OPTARA -> CONSUMED_FOR_CLOSE
 
 Via:
 
 ```text
-closeShort
+closeShort(seriesId, Q, EXTERNAL)             // active
+closeShort(seriesId, Q, LOCKED)               // active, caller's own identical locked hedge
+cancelUnfinalizedShort(seriesId, Q, source)   // expired-unfinalized
 ```
 
-Token burned.
+Token burned. For `LOCKED`, `lockedLongQty` and `shortQty` fall by the same `Q`
+atomically, so net liability is unchanged at every price. A locked hedge is consumed
+only when the caller names the `LOCKED` source.
 
 Terminal.
 
@@ -982,7 +1016,7 @@ RiskEngine recomputes margin.
 
 ## 58. LOCKED_ACTIVE -> UNLOCKED
 
-Only before expiry and only when post-unlock account remains safe.
+Before expiry or while expired-unfinalized, only when the complete post-unlock account remains safe. After finalization, use atomic group settlement.
 
 ---
 
@@ -990,7 +1024,7 @@ Only before expiry and only when post-unlock account remains safe.
 
 When group expires/finalizes.
 
-It must no longer be freely unlockable outside matured settlement logic.
+It may unlock while unfinalized only with a complete worst-case margin check; after finalization, only atomic settlement may consume it.
 
 ---
 
@@ -1049,7 +1083,7 @@ no matured debt
 cash >= requiredMargin
 ```
 
-and all required matured groups are synchronized for safety-sensitive operations.
+and all finalized groups affecting the asset are synchronized for safety-sensitive operations (expired-unfinalized groups stay reserved at worst case).
 
 ---
 
@@ -1069,36 +1103,32 @@ Raw balance alone is not authoritative for free collateral.
 
 ## 66. RESTRICTED
 
-Exceptional state triggered by:
-
-```text
-invariant failure
-unprovable health
-token/custody incident
-risk-engine incident
-```
+Derived view: the account's asset is `ASSET_RESTRICTED` (section 8), entered after a
+confirmed invariant failure, unprovable health, token/custody incident or risk-engine
+incident. Every account in that asset is in this view, not only the deficient one.
 
 Expected blocks:
 
 ```text
 write
 withdraw
-risk-increasing unlock
+redeem / redeemToMargin
+hedge unlock
+ordinary deposit
 ```
 
-Safe cure actions MAY remain.
+Safe actions MAY remain: cure deposit (up to the account's deficit), `recapitalize`,
+hedge lock, close/cancellation, finalization and sync.
 
 ---
 
-## 67. RESTRICTED -> HEALTHY
+## 67. RESTRICTED -> HEALTHY or WIND_DOWN
 
-Requires canonical proof:
+Leaving the restricted view requires the asset restriction to end:
 
-```text
-SafeEffectiveCash >= RequiredMargin
-```
-
-after all necessary reconciliation.
+- governance clears it after reconciliation proves backing intact, or recapitalization
+  restored it, and every account again satisfies `SafeEffectiveCash >= RequiredMargin`; or
+- verified-shortfall resolution moves the asset to `ASSET_WIND_DOWN` (outflows at `rho_A`).
 
 ---
 
@@ -1112,6 +1142,8 @@ Preconditions:
 asset approved/accepted for deposit
 amount > 0
 token path safe
+asset not ASSET_WIND_DOWN
+if asset ASSET_RESTRICTED: cure deposit only (up to the account's deficit)
 ```
 
 Effects:
@@ -1143,8 +1175,8 @@ Source state:
 
 ```text
 series ACTIVE
-account-asset HEALTHY
-new risk enabled
+account-asset HEALTHY (finalized groups synced first)
+new risk enabled; asset not restricted or in wind-down
 ```
 
 Preconditions:
@@ -1154,6 +1186,7 @@ Q > 0
 within quantity limits
 recipient != zero
 position indexes within bounds
+aggregate exposure caps not exceeded (PROTOCOL_SPEC.md section 42)
 ```
 
 Simulation:
@@ -1173,6 +1206,7 @@ Effects:
 
 ```text
 record short
+increase exposure counters
 mint exact long quantity
 update indexes
 ```
@@ -1181,24 +1215,28 @@ update indexes
 
 # Part XIII — Close state transition
 
-## 70. closeShort(seriesId, quantity)
+## 70. closeShort(seriesId, quantity, source)
 
 Source:
 
 ```text
 series ACTIVE
 shortQty >= Q
+source == EXTERNAL: caller transfers Q identical long tokens in
+source == LOCKED:   lockedLongQty[account][seriesId] >= Q
 ```
-
-Requires actual exact-series long custody/transfer.
 
 Effects atomically:
 
 ```text
 burn long Q
 shortQty -= Q
+if LOCKED: lockedLongQty -= Q
+decrement exposure counters
 recompute risk
 ```
+
+The expired-unfinalized counterpart is `cancelUnfinalizedShort` (section 101).
 
 Closing cannot increase exact risk with all else unchanged.
 
@@ -1234,7 +1272,7 @@ No heuristic hedge credit.
 Source:
 
 ```text
-LOCKED_ACTIVE
+LOCKED_ACTIVE or LOCKED_MATURED in an unfinalized group
 ```
 
 Simulation:
@@ -1317,6 +1355,7 @@ Effects:
 settlementPrice fixed once
 group -> FINALIZED_GROUP
 series -> SETTLED
+group exposure released from pair/oracle/asset caps
 ```
 
 No user chooses `S`.
@@ -1373,6 +1412,7 @@ Requires:
 ```text
 Q > 0
 holder/approval valid
+asset not ASSET_RESTRICTED
 ```
 
 Effects:
@@ -1380,7 +1420,7 @@ Effects:
 ```text
 calculate fixed payout
 burn Q
-transfer settlement stablecoin
+transfer settlement stablecoin (floor(rho_A * payout) in ASSET_WIND_DOWN)
 ```
 
 Terminal for burned quantity.
@@ -1425,22 +1465,13 @@ A short only changes through Optara's own state transitions.
 
 ## 79. Detect incident -> restrict
 
-If canonical checks discover:
-
-```text
-cash < requiredMargin
-negative post-sync result
-vault/accounting mismatch
-risk engine inconsistency
-```
-
-the affected scope should transition to:
-
-```text
-RESTRICTED / RISK_PAUSED
-```
-
-rather than ordinary liquidation.
+Ordinary financial calls reject unsafe transitions atomically. Reverting does not
+persist emergency state. `LIQUIDATION.md` section 101 defines the separate successful
+`checkAndRestrict` or guardian `restrictAsset` transaction and its scope.
+Only confirmed existing-state breaches trigger permissionless containment; an
+invalid proposed withdrawal/write or a direct token donation does not.
+A confirmed solvency deficit freezes the affected asset's payout paths as well as
+new risk, preventing a writer-only freeze from leaving pooled redemptions unchecked.
 
 ---
 
@@ -1451,19 +1482,22 @@ Block:
 ```text
 write
 withdraw
-unsafe unlock
+hedge unlock (any, while the asset is restricted)
+redeem / redeemToMargin (confirmed solvency deficit)
+ordinary deposit (confirmed solvency deficit)
 ```
 
 Potentially allow:
 
 ```text
-deposit
+cure deposit / recapitalize
 lock hedge
-close short
+close short / cancel unfinalized short
 trusted sync
 ```
 
-depending on incident class.
+depending on incident class. A confirmed solvency deficit additionally blocks
+redemptions and every other outflow of the asset (`LIQUIDATION.md` section 101).
 
 ---
 
@@ -1497,9 +1531,10 @@ Existing option economics remain immutable.
 |---|---:|---:|---:|
 | Write | Yes | No | No |
 | Transfer long | Yes | May | May |
-| Lock active hedge | Yes | No new active recognition | No |
-| Unlock active hedge | If safe | Use matured rules | No separate unlock after credited settlement |
-| Close short pre-expiry | Yes | No | No |
+| Lock hedge | Yes | No (lock requires ACTIVE) | No |
+| Unlock hedge | If safe | If full post-removal margin is safe | No separate unlock; atomic settlement |
+| closeShort | Yes | No | No |
+| cancelUnfinalizedShort | No | Yes, exact matching long burn | No |
 | Finalize | No | Yes | No |
 | Sync writer group | No | No | Yes |
 | Redeem external long | No | No | Yes |
@@ -1510,13 +1545,14 @@ Existing option economics remain immutable.
 
 | Action | HEALTHY | HAS_MATURED_UNSYNCED | RESTRICTED |
 |---|---:|---:|---:|
-| Deposit | Yes | Yes | Usually yes if safe |
+| Deposit | Yes | Yes | Cure deposit / recapitalize only |
 | Write | Yes | Sync/validate first | No |
 | Withdraw | Yes if free | Must sync first | No |
 | Lock long | Yes | Depends on group | Usually yes if safe |
-| Unlock long | If post-state safe | Matured rules | Usually no |
-| Close short | Yes | Active only | Usually yes if safe |
-| Sync matured | N/A | Yes | Yes if settlement trusted |
+| Unlock long | If post-state safe | Unfinalized: full check; finalized: settle | No |
+| Close short / cancel unfinalized | Yes | Active close / unfinalized cancel | Yes if safe |
+| Sync finalized | N/A | Yes | Yes if settlement trusted |
+| Redeem | Yes (settled series) | Yes (settled series) | No |
 
 ---
 
@@ -1542,7 +1578,9 @@ No transition may reduce:
 lockedLongQty
 ```
 
-before proving post-removal safety.
+before proving post-removal safety, except transitions that remove an equal identical
+short at the same time (`LOCKED`-source close or cancellation) or consume the hedge in
+atomic settlement; both leave net liability unchanged or settled.
 
 ---
 
@@ -1554,7 +1592,7 @@ No write without equal long issuance.
 
 ## 87. SM-INV-04
 
-No pre-expiry short close without equal same-series long consumption.
+No short close or unfinalized cancellation without equal same-series long consumption.
 
 ---
 
@@ -1784,3 +1822,33 @@ explicit custody
 same-stablecoin accounting
 one-way expiry settlement
 ```
+
+---
+
+## 101. Oracle-stalled recovery transitions
+
+An expired-unfinalized group remains margin-bearing and indexed. At the configured
+escalation deadline, derive `ORACLE_STALLED = true` while leaving its economic state
+`EXPIRED_UNSETTLED`. A late authentic historical observation can still finalize it.
+There is no timeout that forgives debt or fixes an invented settlement price.
+
+Allowed additional transitions before finalization:
+
+```text
+MATURED_UNFINALIZED -> smaller quantity / NO_POSITION
+    cancelUnfinalizedShort(source): burn an identical long (EXTERNAL transfer or
+    explicitly selected own LOCKED hedge) and reduce the short
+LOCKED_MATURED (unfinalized only) -> EXTERNAL
+    unlockLong: full post-removal worst-case risk check
+withdraw free collateral
+    synchronize finalized groups; reserve every unfinalized group
+```
+
+Finalized groups allow neither cancellation nor separate hedge unlock. A cancellation
+uses owner authorization, exact custody, burn, full post-state checks, and exposure
+counter updates. It never pays a cash option payoff. `closeShort` itself remains
+active-only.
+
+This recovery policy preserves economics, but unmatched claims can remain unresolved
+indefinitely if every approved source permanently fails. UI states MUST distinguish
+expiry, observation failure, escalation deadline, and actual finalization.
