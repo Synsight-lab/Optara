@@ -1,8 +1,0 @@
-# build output
-out/
-cache/
-broadcast/
-# dependencies: reinstall with the commands in README.md
-lib/
-# local env
-.env
