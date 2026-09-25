@@ -344,7 +344,7 @@ decimal normalization
 staleness rules
 expiry observation rule
 finality rule
-fallback rule
+source-selection/fallback retrieval rule
 rounding
 ```
 

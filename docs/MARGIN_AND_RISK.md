@@ -552,7 +552,7 @@ Two otherwise similar positions may use different:
 settlement timestamps
 observation windows
 oracle providers
-fallback rules
+source-selection/fallback retrieval rules
 price definitions
 ```
 
@@ -1627,7 +1627,7 @@ decimal normalization
 staleness threshold
 expiry observation rule
 finality rule
-fallback rule
+source-selection/fallback retrieval rule
 derived-path formula
 rounding rule
 ```
@@ -1644,7 +1644,8 @@ If no valid final price exists:
 risk group remains EXPIRED_UNSETTLED
 ```
 
-until the precommitted settlement/fallback rule yields a valid result.
+until the precommitted historical source-selection/fallback retrieval rule yields
+a valid result.
 
 Governance should not choose a discretionary price after observing who benefits.
 

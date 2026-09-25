@@ -244,7 +244,7 @@ expiry timestamp interpretation
 finality delay
 staleness rule
 confidence rule if applicable
-fallback rule
+source-selection/fallback retrieval rule
 rounding rule
 rule version
 ```
@@ -2442,7 +2442,7 @@ Before launching an oracle config:
 - [ ] finalization delay fixed;
 - [ ] staleness semantics fixed;
 - [ ] confidence threshold fixed if applicable;
-- [ ] fallback rule fixed;
+- [ ] source-selection/fallback retrieval rule fixed;
 - [ ] provider update fee behavior understood;
 - [ ] chain/provider finality assumptions tested;
 - [ ] failure behavior tested;

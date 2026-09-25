@@ -1614,7 +1614,7 @@ for explicitly deferred router functionality, not core invariants.
 | REC-006 | Escalation deadline flags stalled state without changing claims; authentic late historical report may finalize | INV-RECOVERY-01 |
 | REC-007 | All sources permanently unavailable: no invented price or debt release; UI discloses unresolved claims | INV-RECOVERY-01 |
 | ORN-013 | Negative/zero/positive offsets; reject negative resulting time, overflow, inverted interval and finalization before observation end | INV-ORACLE-05 |
-| FIN-013 | Omitted primary bytes do not prove failure; all eligible submissions obey a unique selection/fallback rule | INV-ORACLE-04, INV-ORACLE-05 |
+| FIN-013 | Omitted primary bytes do not prove failure; all eligible submissions obey a unique source-selection/fallback retrieval rule | INV-ORACLE-04, INV-ORACLE-05 |
 | EMR-001 | A rejected unsafe financial call persists neither flag nor event | INV-CONTAIN-01 |
 | EMR-002 | Separate verified existing-state deficit check commits asset restriction; healthy/invalid checks and donations cannot grief-pause | INV-CONTAIN-01 |
 | EMR-003 | Asset restriction blocks write, withdraw, redeem, redeemToMargin, treasury outflow and unlock across all accounts; unrelated asset operates | INV-CONTAIN-02 |

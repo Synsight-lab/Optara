@@ -777,11 +777,13 @@ No privileged keeper should choose price.
 
 ---
 
-# DD-032 — Precommitted oracle fallback
+# DD-032 — Precommitted oracle source selection
 
 **Status:** Accepted.
 
-Fallback logic is fixed before series creation.
+Any primary, backup or derived historical source-selection logic is fixed before
+series creation. It may authenticate a valid observation; it may not invent a
+substitute settlement price after the fact.
 
 ### Rejected alternative
 
@@ -1597,13 +1599,15 @@ Rejected: writer-only freeze (pooled redemptions drain first) and indefinite fre
 
 ---
 
-# DD-080D — Aggregate exposure caps released at finalization
+# DD-080D — Broad exposure caps released at finalization
 
 **Status:** Accepted (v0.3).
 
 Gross exposure caps bound total issuance across accounts. A group's exposure leaves
-pair/oracle/asset scopes when the group finalizes, so abandoned zero-payoff tokens
-cannot permanently consume capacity (`PROTOCOL_SPEC.md` section 42).
+pair/oracle/asset scopes when the group finalizes, while series/group settlement
+accounting still prevents later burns from releasing the same claim twice. Abandoned
+zero-payoff tokens therefore cannot permanently consume broad capacity
+(`PROTOCOL_SPEC.md` section 42).
 
 ---
 

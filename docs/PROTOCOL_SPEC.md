@@ -1364,7 +1364,7 @@ NOT invent a price, return encumbered writer funds, or promise automatic migrati
 The SDK/frontend MUST disclose this residual liveness risk before acquisition and
 show cancellation/free-collateral recovery paths. The finite delay is an escalation
 deadline, not a promise of final payout. Production activation requires tested
-historical retrieval and precommitted fallback rules.
+historical retrieval and precommitted source-selection/fallback retrieval rules.
 
 ---
 

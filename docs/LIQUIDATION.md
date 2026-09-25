@@ -983,7 +983,8 @@ group remains EXPIRED_UNSETTLED
 
 The group must not be liquidated using an arbitrary substitute price.
 
-Use only precommitted fallback logic.
+Use only precommitted historical source-selection/fallback retrieval logic. No
+actor may substitute a discretionary price.
 
 ---
 
