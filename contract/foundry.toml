@@ -1,0 +1,52 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+# Monad allows 128 KB runtime code (docs.monad.xyz, "Differences between Monad and Ethereum").
+code_size_limit = 131072
+bytecode_hash = "none"
+ffi = true
+fs_permissions = [
+    { access = "read", path = "./test-vectors" },
+    { access = "read", path = "../test-vectors" },
+    { access = "read-write", path = "../deployments" },
+    { access = "read", path = "./deploy" },
+]
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+# Fork tests against the live Kuru deployment on Monad testnet need network access; they run only under the
+# `fork` profile: FOUNDRY_PROFILE=fork forge test
+no_match_path = "test/fork/**"
+
+[fuzz]
+runs = 512
+seed = "0x4f70746172610000000000000000000000000000000000000000000000000001"
+
+[invariant]
+runs = 128
+depth = 64
+fail_on_revert = false
+
+[profile.ci.fuzz]
+runs = 10000
+
+[profile.ci.invariant]
+runs = 512
+depth = 128
+
+# Kuru Spot V2 secondary-market integration on a Monad testnet fork (test/fork/, README there).
+[profile.fork]
+match_path = "test/fork/**"
+no_match_path = "test/unit/**"
+
+[fmt]
+line_length = 120

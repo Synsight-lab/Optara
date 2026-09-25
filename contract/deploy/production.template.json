@@ -1,0 +1,72 @@
+{
+  "network": "monad-mainnet",
+  "chainId": 143,
+  "shortfallResolutionDelay": "REQUIRED: seconds, >= 86400 (LIQUIDATION.md section 102)",
+  "governance": {
+    "mode": "timelock",
+    "multisig": "REQUIRED: governance multisig address",
+    "timelockMinDelay": "REQUIRED: seconds (PRD.md section 20 item 11)"
+  },
+  "roles": {
+    "pauser": "REQUIRED: guardian address",
+    "unpauser": "REQUIRED: address allowed to unpause (or the timelock)",
+    "seriesCreator": "REQUIRED",
+    "oracleConfigAdmin": "REQUIRED",
+    "configAdmin": "REQUIRED"
+  },
+  "positionLimits": {
+    "maxSeriesPerGroup": "REQUIRED: from gas benchmarks (PRD.md section 20 item 13)",
+    "maxGroupsPerAccount": "REQUIRED",
+    "maxSeriesPerAccount": "REQUIRED"
+  },
+  "assets": [
+    {
+      "address": "REQUIRED: verified stablecoin address (DEPLOYMENT.md section 31)",
+      "symbol": "REQUIRED",
+      "decimals": "REQUIRED: must equal the token's decimals()",
+      "bufferBps": 0,
+      "fixedBufferNative": 0,
+      "exposureLimitNative": "REQUIRED: settlement-asset exposure cap in native units (PROTOCOL_SPEC.md section 42)"
+    }
+  ],
+  "underlyings": [{ "address": "REQUIRED: underlying identifier", "symbol": "REQUIRED" }],
+  "pairs": [
+    {
+      "underlying": "REQUIRED",
+      "asset": "REQUIRED",
+      "bounds": {
+        "minStrikeWad": "REQUIRED",
+        "maxStrikeWad": "REQUIRED",
+        "minCapWad": "REQUIRED",
+        "maxCapWad": "REQUIRED",
+        "minContractSizeWad": "REQUIRED",
+        "maxContractSizeWad": "REQUIRED",
+        "minTimeToExpiry": "REQUIRED",
+        "maxTimeToExpiry": "REQUIRED",
+        "quantityIncrement": "REQUIRED"
+      },
+      "seriesExposureLimitNative": "REQUIRED",
+      "pairExposureLimitNative": "REQUIRED"
+    }
+  ],
+  "oracleConfigs": [
+    {
+      "underlying": "REQUIRED",
+      "asset": "REQUIRED",
+      "observationStartOffset": "REQUIRED: signed seconds relative to expiry",
+      "observationEndOffset": "REQUIRED: signed seconds relative to expiry",
+      "minFinalizationDelay": "REQUIRED: > observationEndOffset",
+      "maxFinalizationDelay": "REQUIRED: escalation deadline (ORACLE_STALLED)",
+      "ruleVersion": "chainlink-round-in-force/v1",
+      "exposureLimitNative": "REQUIRED",
+      "primary": {
+        "kind": "REQUIRED: DIRECT (UNDERLYING/ASSET feed) or DERIVED (UNDERLYING/USD / ASSET/USD)",
+        "feed": "REQUIRED: verified Chainlink proxy on Monad",
+        "feedDecimals": "REQUIRED",
+        "quoteFeed": "DERIVED only: ASSET/USD proxy",
+        "quoteFeedDecimals": "DERIVED only",
+        "maxLegSkew": "DERIVED only: seconds"
+      }
+    }
+  ]
+}
