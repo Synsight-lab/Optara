@@ -220,6 +220,10 @@ A future on-chain Kuru router/adapter is optional and must remain outside the so
 
 ## 5. Core contract and package map
 
+Implementation note: the canonical build keeps every component's responsibility below but merges the
+ClearingHouse, MarginVault, RiskEngine and SettlementEngine state into one immutable `OptaraCore`, removing
+privileged cross-contract calls (section 25, "Implemented layout").
+
 ### On-chain source of truth
 
 ```text
@@ -1217,6 +1221,23 @@ optara/
 ```
 
 The SDK/package tree is modular application infrastructure. The contract tree contains every authoritative financial rule.
+
+### Implemented layout (this repository)
+
+```text
+contract/      Foundry project. OptaraCore merges ClearingHouse, MarginVault, RiskEngine and
+               SettlementEngine state in one immutable contract (RiskMath/PayoffMath/FixedPointMath
+               are internal libraries); OptaraConfig (AccessController + prospective config),
+               OracleRegistry, ChainlinkSettlementAdapter, SeriesFactory and OptionToken are separate.
+indexer/       event indexer, reconciliation monitor, read API, optional keeper
+frontend/      web app with a thin client layer shaped like @optara/sdk
+deployments/   per-network manifests + exported ABIs (consumed by the SDK repo)
+test-vectors/  independent exact-rational reference model + JSON math vectors
+```
+
+`@optara/math`, `@optara/sdk`, `@optara/kuru` and `@optara/shared` live in a separate repository. They
+consume `deployments/` (addresses, ABIs) and `test-vectors/vectors/*.json` (differential vectors), and remain
+non-authoritative exactly as described above.
 
 ---
 

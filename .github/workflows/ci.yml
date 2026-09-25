@@ -1,0 +1,328 @@
+name: CI
+
+# Runs on every push to any branch, on pull requests, and on demand.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_VERSION: v1.5.1 # pinned: the committed gas snapshot is exact for this compiler/toolchain
+  NODE_VERSION: "23" # indexer uses node:sqlite (Node >= 22.5)
+  PYTHON_VERSION: "3.11" # exact-rational reference model (stdlib only), FFI differential tests
+  FOUNDRY_DISABLE_NIGHTLY_WARNING: "1"
+
+jobs:
+  # -----------------------------------------------------------------------------------------------
+  # Solidity: format, build, Monad size limits, full test suite (CI fuzz/invariant depth), gas snapshot
+  # -----------------------------------------------------------------------------------------------
+  contracts:
+    name: Contracts · build, tests, gas
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Toolchain versions
+        run: forge --version && python3 --version
+
+      - name: Format check
+        run: forge fmt --check
+
+      - name: Build
+        run: forge build
+
+      - name: Contract size limits (Monad 128 KB runtime / 256 KB initcode)
+        run: python3 script/ci_checks.py sizes
+
+      - name: Test suite (unit, integration, deploy, FFI differential, fuzz x10k, invariants 512x400)
+        env:
+          FOUNDRY_PROFILE: ci
+        run: forge test -vvv
+
+      - name: Gas snapshot unchanged (run `forge snapshot` and commit when gas changes on purpose)
+        run: forge snapshot --check
+
+  # -----------------------------------------------------------------------------------------------
+  # Coverage gate: src/ must stay at 100% lines, functions and branches (DEPLOYMENT.md section 12)
+  # -----------------------------------------------------------------------------------------------
+  coverage:
+    name: Contracts · 100% coverage gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Coverage
+        run: forge coverage --report lcov --report summary --no-match-coverage "(test|script)/"
+
+      - name: Enforce 100% on src/
+        run: python3 script/ci_checks.py coverage lcov.info
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lcov
+          path: contract/lcov.info
+          if-no-files-found: ignore
+
+  # -----------------------------------------------------------------------------------------------
+  # Static analysis: Slither fails on any High finding; all Medium+ findings go to code scanning
+  # -----------------------------------------------------------------------------------------------
+  static-analysis:
+    name: Contracts · Slither
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to GitHub code scanning
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Slither
+        run: pip install slither-analyzer==0.11.5
+
+      - name: Slither (fail on High)
+        run: slither . --config-file slither.config.json --fail-high --sarif slither.sarif
+
+      - name: Upload SARIF to code scanning
+        if: always() && hashFiles('contract/slither.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true # code scanning needs GitHub Advanced Security on private repos
+        with:
+          sarif_file: contract/slither.sarif
+          category: slither
+
+  # -----------------------------------------------------------------------------------------------
+  # Spec conformance and generated artifacts: reference model, math vectors, exported ABIs and the
+  # TEST_CASES.md traceability matrix must all be reproducible from source and committed up to date
+  # -----------------------------------------------------------------------------------------------
+  conformance:
+    name: Spec conformance · vectors, ABIs, traceability
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Design regressions (exact-rational reference model)
+        run: python3 test-vectors/design_regressions.py
+
+      - name: Regenerate math vectors
+        run: python3 test-vectors/generate_vectors.py
+
+      - name: Build and re-export ABIs
+        run: |
+          (cd contract && forge build)
+          python3 contract/script/export_abis.py
+
+      - name: TEST_CASES.md traceability (every in-scope ID has a named test)
+        run: python3 contract/script/traceability.py
+
+      - name: Generated files are committed and up to date
+        run: |
+          paths="test-vectors/vectors deployments/abi contract/test/TRACEABILITY.md"
+          if [ -n "$(git status --porcelain -- $paths)" ]; then
+            echo "::error::Generated artifacts are stale. Regenerate them locally and commit:"
+            echo "  python3 test-vectors/generate_vectors.py"
+            echo "  python3 contract/script/export_abis.py"
+            echo "  python3 contract/script/traceability.py"
+            git status --porcelain -- $paths
+            git diff --stat -- $paths
+            exit 1
+          fi
+
+  # -----------------------------------------------------------------------------------------------
+  # Indexer: typecheck, unit tests, and the anvil end-to-end suite (deploys with DeployLocal.s.sol)
+  # -----------------------------------------------------------------------------------------------
+  indexer:
+    name: Indexer · typecheck, unit, anvil e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: indexer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: indexer/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: End-to-end (anvil + real deployment + keeper + reorg)
+        run: |
+          (cd ../contract && forge build)
+          npm run test:e2e
+
+      - name: Dependency audit (advisory)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+  # -----------------------------------------------------------------------------------------------
+  # Frontend: typecheck, unit/component tests, anvil integration against real contracts, production build
+  # -----------------------------------------------------------------------------------------------
+  frontend:
+    name: Frontend · typecheck, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests (unit, component, anvil integration)
+        run: |
+          (cd ../contract && forge build)
+          npm test
+
+      - name: Production build
+        env:
+          VITE_NETWORK: local
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+      - name: Dependency audit (advisory)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+  # -----------------------------------------------------------------------------------------------
+  # Kuru secondary market on a Monad testnet fork (real Kuru Spot V2 contracts). Depends on a live
+  # public RPC, so it reports but never blocks. Set the MONAD_TESTNET_RPC secret for a private RPC.
+  # -----------------------------------------------------------------------------------------------
+  kuru-fork:
+    name: Kuru fork · Monad testnet (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - name: Fork tests against live Kuru
+        env:
+          FOUNDRY_PROFILE: fork
+          MONAD_TESTNET_RPC: ${{ secrets.MONAD_TESTNET_RPC || 'https://testnet-rpc.monad.xyz' }}
+        run: forge test -vv
+
+  # -----------------------------------------------------------------------------------------------
+  # Single required check for branch protection
+  # -----------------------------------------------------------------------------------------------
+  ci-success:
+    name: CI passed
+    if: always()
+    needs: [contracts, coverage, static-analysis, conformance, indexer, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All blocking jobs succeeded
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "true" ]; then
+            echo "::error::One or more required jobs did not succeed"
+            exit 1
+          fi

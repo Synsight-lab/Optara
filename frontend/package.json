@@ -1,0 +1,35 @@
+{
+  "name": "@optara/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.103.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "7.18.4",
+    "viem": "2.56.9",
+    "wagmi": "2.19.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "6.10.0",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "jsdom": "26.1.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "3.2.7"
+  }
+}

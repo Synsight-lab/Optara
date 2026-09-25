@@ -469,6 +469,9 @@ At minimum, the implementation must preserve these rules:
 
 ## 14. Repository layout
 
+> Implemented layout: `contract/` (Foundry), `indexer/`, `frontend/`, `deployments/`, `test-vectors/`, `docs/`.
+> The SDK packages live in a separate repository (see `ARCHITECTURE.md` section 25, "Implemented layout").
+
 The recommended repository is a monorepo so the financial core and developer tooling remain clearly separated:
 
 ```text

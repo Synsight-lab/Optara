@@ -1,0 +1,412 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "registry_",
+    "type": "address",
+    "internalType": "contract IOracleRegistry"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "KIND_DERIVED",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "KIND_DIRECT",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "KIND_NONE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "isImmediateSuccessor",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "round",
+    "type": "uint80",
+    "internalType": "uint80"
+   },
+   {
+    "name": "next",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "quoteSettlementPrice",
+  "inputs": [
+   {
+    "name": "oracleConfigId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expiry",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "oracleData",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "priceWad",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "observationTimestamp",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "registry",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IOracleRegistry"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "validateConfig",
+  "inputs": [
+   {
+    "name": "cfg",
+    "type": "tuple",
+    "internalType": "struct OracleConfig",
+    "components": [
+     {
+      "name": "underlying",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "settlementAsset",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "adapter",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "observationStartOffset",
+      "type": "int64",
+      "internalType": "int64"
+     },
+     {
+      "name": "observationEndOffset",
+      "type": "int64",
+      "internalType": "int64"
+     },
+     {
+      "name": "minFinalizationDelay",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "maxFinalizationDelay",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "ruleVersion",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "sourceParams",
+      "type": "bytes",
+      "internalType": "bytes"
+     }
+    ]
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "verifySettlementPrice",
+  "inputs": [
+   {
+    "name": "oracleConfigId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expiry",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "oracleData",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "priceWad",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "observationTimestamp",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "error",
+  "name": "DivisionByZero",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidSource",
+  "inputs": [
+   {
+    "name": "reason",
+    "type": "string",
+    "internalType": "string"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "InvalidSourceIndex",
+  "inputs": [
+   {
+    "name": "sourceIndex",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "NoFeeRequired",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NoSecondarySource",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotImmediateSuccessor",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "roundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   },
+   {
+    "name": "nextRoundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "NotLatestRound",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "roundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "ObservationNotFinal",
+  "inputs": [
+   {
+    "name": "observationEnd",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "PrimaryObservationInvalid",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "PrimaryObservationValid",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "RoundAfterObservation",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "roundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "RoundUnavailable",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "roundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "SecondaryObservationInvalid",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "SuccessorNotAfterObservation",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "nextRoundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "SuccessorUnavailable",
+  "inputs": [
+   {
+    "name": "feed",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "roundId",
+    "type": "uint80",
+    "internalType": "uint80"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "WrongAdapter",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "WrongProofCount",
+  "inputs": [
+   {
+    "name": "expected",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "actual",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "ZeroAddress",
+  "inputs": []
+ }
+]

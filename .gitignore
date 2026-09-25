@@ -1,0 +1,84 @@
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
+indexer/node_modules/**
+*.sqlite
+*.sqlite-*
+# ---------------------------------------------------------------------------
+# Build output and caches
+# ---------------------------------------------------------------------------
+dist/
+build/
+*.tsbuildinfo
+.vite/
+.cache/
+
+
+# Foundry (contract/)
+contract/out/
+contract/cache/
+# Local anvil broadcasts only; public-network broadcasts are kept as deployment provenance
+contract/broadcast/*/31337/
+contract/lcov.info
+contract/coverage/
+contract/report/
+
+# Python (test-vectors/)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# ---------------------------------------------------------------------------
+# Test and runtime artifacts
+# ---------------------------------------------------------------------------
+coverage/
+*.lcov
+# Indexer SQLite database (rebuilt from chain events)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+# Throwaway manifests written by tests and local demos (deployments/local*.json stay committed:
+# the frontend and indexer build against them)
+deployments/e2e*.json
+deployments/fe2e*.json
+deployments/demo*.json
+deployments/.invariant-stats.log
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Secrets and local configuration: never commit keys, RPC credentials or
+# filled-in production deploy configs
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+keystore/
+contract/deploy/*.json
+!contract/deploy/*.template.json
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+.qodo/
+.claude/
+
+# Static-analysis output (CI uploads it as an artifact)
+*.sarif

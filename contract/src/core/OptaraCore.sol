@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {OptaraCoreBase} from "./OptaraCoreBase.sol";
@@ -37,6 +38,7 @@ import {RiskMath} from "../libraries/RiskMath.sol";
 /// accounting boundary rounds once: margin and net debits up, credits and payouts down.
 contract OptaraCore is OptaraCoreBase {
     using SafeCast for uint256;
+    using SafeERC20 for IERC20;
 
     constructor(IOptaraConfig config_, IOracleRegistry oracleRegistry_, uint64 shortfallResolutionDelay_)
         OptaraCoreBase(config_, oracleRegistry_, shortfallResolutionDelay_)
@@ -271,7 +273,7 @@ contract OptaraCore is OptaraCoreBase {
 
         // The OptionToken is the factory-deployed exact ERC-20, so transferFrom moves exactly `quantity`; only
         // this call's transfer is credited, never a pre-existing custody surplus (INV-HEDGE-02).
-        IOptionToken(s.optionToken).transferFrom(msg.sender, address(this), quantity);
+        IERC20(s.optionToken).safeTransferFrom(msg.sender, address(this), quantity);
         emit LongLocked(msg.sender, seriesId, quantity);
     }
 
@@ -293,7 +295,7 @@ contract OptaraCore is OptaraCoreBase {
         _removeIfEmpty(msg.sender, seriesId, s.groupId);
         _requireMarginSafe(msg.sender, asset);
 
-        IOptionToken(s.optionToken).transfer(recipient, quantity);
+        IERC20(s.optionToken).safeTransfer(recipient, quantity);
         emit LongUnlocked(msg.sender, seriesId, recipient, quantity);
     }
 
@@ -319,6 +321,9 @@ contract OptaraCore is OptaraCoreBase {
 
         address adapter = oracleRegistry.adapterOf(g.oracleConfigId);
         uint64 observationTimestamp;
+        // The adapter is pinned by the group's immutable oracle config (never caller-chosen) and every state-changing
+        // entry point is nonReentrant; the price can only be recorded after the adapter has verified it.
+        // slither-disable-next-line reentrancy-eth,reentrancy-no-eth
         (priceWad, observationTimestamp) =
             ISettlementOracle(adapter).verifySettlementPrice{value: msg.value}(g.oracleConfigId, g.expiry, oracleData);
         _recordFinalization(groupId, g, priceWad, observationTimestamp, keccak256(oracleData));

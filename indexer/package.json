@@ -1,0 +1,25 @@
+{
+  "name": "@optara/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optara V2 event indexer, reconciliation monitor and read API (non-authoritative).",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning --import tsx src/main.ts",
+    "keeper": "node --no-warnings=ExperimentalWarning --import tsx src/main.ts --keeper",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:e2e": "vitest run test/e2e"
+  },
+  "dependencies": {
+    "viem": "2.56.9"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
