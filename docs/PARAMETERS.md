@@ -81,14 +81,17 @@ calibration (`timeMode = 2`) is an open decision ([DESIGN_DECISIONS.md](DESIGN_D
 | `startBonusBps` | 0 | bps of slice MM |
 | `maxBonusBps` | 1,000 | bps |
 | `auctionDuration` | 1,800 | seconds |
-| `bonusSlopeBpsPerSecond` | `maxBonusBps / auctionDuration` | derived |
+| `bonusSlopeBpsPerSecond` | `(maxBonusBps − startBonusBps) / auctionDuration` | derived |
 | `minSliceBps` | 500 | bps |
 | `maxSliceBps` | 2,500 | bps |
 | `targetHealthBufferBps` | 500 | bps above IM where the auction ends |
 | `liquidationPenaltyBps` | 200 | bps of slice MM, to insurance |
 | `maxInsurancePerLiquidation` | per asset | native units |
 
-Constraint: `maxBonusBps + liquidationPenaltyBps < 10_000`.
+Constraints (`setLiquidationParams`, `InvalidLiquidationParams`): `startBonusBps ≤ maxBonusBps`,
+`maxBonusBps + liquidationPenaltyBps < 10_000`, `0 < auctionDuration ≤ 7 days`,
+`0 < minSliceBps ≤ maxSliceBps ≤ 10_000`, `targetHealthBufferBps ≤ 10_000`. `initialize` sets the defaults above;
+`maxInsurancePerLiquidation` starts at 0 (no top-ups) until governance sets it per asset.
 
 ## 6. Fees
 

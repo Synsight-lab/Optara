@@ -80,6 +80,14 @@ interface IPortfolioRiskManager is IRiskSets {
         external
         view
         returns (Risk memory);
+    /// @notice Risk after hypothetically changing several balances and the cash (no state change); used by
+    ///         `LiquidationModule.previewSlice`. Reverts `LengthMismatch` if the arrays differ in length.
+    function previewWithDeltas(
+        uint256 accountId,
+        bytes32[] calldata seriesIds,
+        int256[] calldata qtyDeltas,
+        int256 cashDeltaNative
+    ) external view returns (Risk memory);
     function previewWrap(uint256 accountId, bytes32 seriesId, uint256 qty)
         external
         view

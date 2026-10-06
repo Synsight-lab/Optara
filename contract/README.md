@@ -21,6 +21,7 @@ src/
   series/ExternalOptionFactory.sol  one wrapper clone per series at a deterministic address
   series/ExternalOptionWrapper.sol  ERC-20 + permit long token; fixed minter and burners
   series/SeriesNaming.sol           display names and symbols
+  liquidation/LiquidationModule.sol  Dutch slice auctions, wrapper-burn liquidation, bad-debt top-up (PROTOCOL_SPEC §6)
   oracle/LiveSpotOracle.sol       Pyth spot prices per product (ORACLES §2)
   oracle/VolSurfaceOracle.sol     signed IV surfaces, Merkle leaves, status (ORACLES §3)
   oracle/OracleUpdates.sol        the OracleUpdate argument and how modules apply it (ORACLES §4)
@@ -35,7 +36,7 @@ test/
   differential/  Solidity vs the Python reference model (vectors + FFI)
   gas/           gas benchmarks with regression ceilings
   harness/       external wrappers around internal libraries (so tests can catch reverts)
-  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk stack, clearing stack)
+  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk stack, clearing stack, liquidation stack)
 script/
   coverage_gate.py   TESTING.md §7 thresholds on an lcov report
   storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct

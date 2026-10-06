@@ -73,7 +73,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | PRV-001 | `previewMint` fee, equity and IM after equal the values produced by `mintExternalLong` in the same block |
 | PRV-002 | `previewWithdraw`, `previewWrap` and `maxWithdrawable` match execution; withdrawing exactly `maxWithdrawable` succeeds, +1 unit fails |
 | PRV-003 | `healthOf`, `equityOf`, `marginOf`, `priceOf`, `ivOf` match the reference model and report `fresh = false` when data is stale |
-| PRV-004 | `previewSlice`, `previewSettle`, `previewRedeem`, `previewSellerFee`, `previewBuyerFee` match execution |
+| PRV-004 | `previewSlice` (via `previewWithDeltas`; `LengthMismatch` on unequal arrays), `previewSettle`, `previewRedeem`, `previewSellerFee`, `previewBuyerFee` match execution |
 | PRV-005 | Ledger views (`balanceOf`, `seriesOf`, `totals`, `participants`, `isAuthorized`, `settlementPrice`, `recoveryRatio`, `groupState`, `isOracleStalled`, `insuranceBalance`, `keeperReserve`, `treasury`) match state |
 
 ## PRC — Pricing (vs reference vectors)
@@ -162,7 +162,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| LIQ-001 | `startAuction` reverts when equity ≥ MM (INV-21, `NotLiquidatable`); `AuctionStarted` emitted otherwise |
+| LIQ-001 | `startAuction` reverts when equity ≥ MM (INV-21, `NotLiquidatable`) or the bucket has no unexpired positions (`EmptyBucket`); `AuctionStarted` emitted otherwise |
 | LIQ-002 | Worked example [MATH.md](MATH.md) §12.1: cash 464.43, penalty 15.49, health −1,100.01 → −379.92 |
 | LIQ-003 | Every slice improves `equity − MM` by ≥ sliceMM × (1 − bonus − penalty), with equality when paid in full; dust slices that can't improve after rounding revert (INV-22, `HealthNotImproved`) |
 | LIQ-004 | Liquidator must be healthy after (INV-23); unhealthy liquidator reverts |
@@ -179,6 +179,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | LIQ-015 | Stale spot reverts liquidation; a surface older than `surfaceStaleAfter` but within `maxSurfaceStale` uses stale penalties; beyond it reverts (INV-45) |
 | LIQ-016 | Liquidator account equal to the liquidated account, or with another settlement asset, reverts (INV-23) |
 | LIQ-017 | A slice once equity ≥ IM × (1 + target) reverts; starting a second auction on an active bucket reverts (`AuctionActive`); slicing without an auction reverts (`AuctionNotActive`) (INV-46) |
+| LIQ-018 | `setLiquidationParams` validates every constraint (`InvalidLiquidationParams` reasons 1–4) and is governance-only (`LiquidationParamsSet`); `setMaxInsurancePerLiquidation` (`MaxInsurancePerLiquidationSet`) |
 
 ## STL — Settlement
 
@@ -378,6 +379,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | liquidateSlice | LIQ-002, LIQ-003, LIQ-004, LIQ-005, LIQ-007, LIQ-008, LIQ-009, LIQ-016 |
 | liquidateWithWrapper | LIQ-010 |
 | endAuction | LIQ-011 |
+| setLiquidationParams / setMaxInsurancePerLiquidation / liquidationParams / maxInsurancePerLiquidation | LIQ-018 |
+| auctionStart / currentBonus | LIQ-001, LIQ-006 |
+| previewWithDeltas | PRV-004 |
 | finalizeGroup | STL-001, STL-002, STL-003, STL-004 |
 | settleAccountGroup | STL-006, STL-018 |
 | settleAccountsGroup | STL-015 |
@@ -469,6 +473,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | TokensNotReceived | FEE-011, FEE-012 |
 | DeadlineExpired | VEN-004 |
 | SlippageExceeded | LIQ-009 |
+| EmptyBucket | LIQ-001 |
+| InvalidLiquidationParams | LIQ-018 |
+| LengthMismatch | PRV-004 |
 | MarketNotVerified | VEN-009 |
 | NotLiquidatable | LIQ-001 |
 | AuctionNotActive | LIQ-017 |

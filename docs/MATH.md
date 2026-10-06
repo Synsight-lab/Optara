@@ -281,10 +281,10 @@ The seller fee is charged **before** the IM check, so it can never consume requi
 For risk bucket `b` of account `a` during an active auction:
 
 ```text
-bonusBps   = min(startBonusBps + elapsed × bonusSlopeBpsPerSecond, maxBonusBps)
-sliceBps   in [minSliceBps, maxSliceBps]
+bonusBps   = startBonusBps + (maxBonusBps − startBonusBps) × min(elapsed, auctionDuration) / auctionDuration
+sliceBps   in [minSliceBps, maxSliceBps]  (up to 10_000 once elapsed ≥ auctionDuration)
 moved qty per unexpired leg = |q| × sliceBps / 10_000, rounded DOWN to a multiple of minPositionQty (sign of q)
-sliceMark  = Σ legValue(moved qty)                 // signed; < 0 when the slice is a net liability
+sliceMark  = equity_before − equity_after_moves    // = Σ legValue(moved qty); < 0 when a net liability
 sliceMM    = MM_before − MM_after                  // actual drop of the account's MM; must be > 0
 discount   = sliceMM × bonusBps / 10_000           (round up)
 penalty    = sliceMM × liquidationPenaltyBps / 10_000   (round up, to insurance)
@@ -299,6 +299,10 @@ Cash movement (account → liquidator is positive):
 if sliceMark < 0:   cashToLiquidator   = −sliceMark + discount
 if sliceMark ≥ 0:   cashFromLiquidator = max(0, sliceMark − discount)
 ```
+
+In native units: `cashToLiquidator` rounds **up**, `cashFromLiquidator` rounds **down**, the penalty rounds **up**
+(INV-49). `equity_after_moves` is measured before any cash moves; both equities and MMs are LIQUIDATION-mode values
+from the risk engine, so `sliceMark` uses the same (stale-direction) IVs as the account's equity.
 
 If the account's cash can't pay `cashToLiquidator + penalty`, the liquidator is paid first and the penalty is
 reduced (down to zero). If cash can't even cover `cashToLiquidator`, the account pays all its cash and the insurance

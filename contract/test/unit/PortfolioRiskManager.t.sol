@@ -28,7 +28,8 @@ import {
     UnknownRiskSet,
     RiskSetExists,
     RiskSetAlreadyAssigned,
-    InvalidSeriesParams
+    InvalidSeriesParams,
+    LengthMismatch
 } from "../../src/libraries/Errors.sol";
 
 /// @notice Unit tests for PortfolioRiskManager: worked examples (MRG-001..003) and margin behavior.
@@ -408,6 +409,32 @@ contract PortfolioRiskManagerTest is RiskFixture {
         // a delta on a held series too
         p = risk.previewWithDelta(acct, c5000, -1e18, 0);
         assertEq(p.initialMargin, 0, "flat again");
+    }
+
+    /// @dev Several deltas at once equal executing them: held and new series, repeated ids (which add up), zero
+    ///      entries (ignored).
+    function test_previewWithDeltasMatchesExecution() public {
+        _fund(acct, 20_000e6);
+        _hold(acct, c4500, -2e18);
+        bytes32[] memory ids = new bytes32[](5);
+        int256[] memory qs = new int256[](5);
+        (ids[0], qs[0]) = (c4500, 1e18); // held
+        (ids[1], qs[1]) = (c5000, 1e18); // new
+        (ids[2], qs[2]) = (c5000, 0.5e18); // the same new series again
+        (ids[3], qs[3]) = (p3500, 0); // ignored
+        (ids[4], qs[4]) = (bytes32(0), 1e18); // ignored
+        IPortfolioRiskManager.Risk memory p = risk.previewWithDeltas(acct, ids, qs, -100e6);
+        _hold(acct, c4500, 1e18);
+        _hold(acct, c5000, 1.5e18);
+        vm.prank(clearing);
+        ledger.subCash(acct, 100e6);
+        IPortfolioRiskManager.Risk memory r = risk.riskOf(acct);
+        assertEq(p.equity, r.equity);
+        assertEq(p.initialMargin, r.initialMargin);
+        assertEq(p.maintenanceMargin, r.maintenanceMargin);
+
+        vm.expectRevert(LengthMismatch.selector);
+        risk.previewWithDeltas(acct, ids, new int256[](4), 0);
     }
 
     function test_previewWithdrawAndMaxWithdrawable() public {

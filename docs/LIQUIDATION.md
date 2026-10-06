@@ -23,17 +23,21 @@ startAuction(accountId, underlying, oracleUpdate)
     records startTime; bonus starts at startBonusBps
 
 liquidateSlice(...)   // any number of times while the auction is active
-    bonus grows linearly to maxBonusBps over auctionDuration
+    bonus grows linearly from startBonusBps to maxBonusBps over auctionDuration
 
 auction ends when:
-    equity ≥ IM × (1 + targetHealthBufferBps)     -> healthy with a buffer (anyone may call endAuction)
-    or the bucket has no positions left
+    equity ≥ IM × (1 + targetHealthBufferBps)     -> healthy with a buffer
+    or the bucket has no unexpired positions left
 ```
+
+A slice that reaches either condition ends the auction in the same call. If the account recovers some other way
+(deposit, closing), anyone can call `endAuction`. An auction nobody ends stays active: if the account later dips
+below the target again, slices resume at the auction's (by then higher) bonus. Owners and keepers should end
+auctions once the account is above the target; the frontend shows the button.
 
 After `auctionDuration` the bonus stays at `maxBonusBps` and **whole-bucket mode** turns on: slices up to 100% are
 allowed.
 
-If the account recovers on its own (deposit, closing), anyone can call `endAuction` once it's above the target.
 
 ## 3. Portfolio-slice liquidation (main path)
 
@@ -52,7 +56,10 @@ function liquidateSlice(
 What happens:
 
 1. Apply oracle updates; require the auction is active and the account is still below the target.
-2. Compute `sliceMark`, `sliceMM`, `discount` and `penalty` ([MATH.md](MATH.md) §12).
+2. Compute `sliceMark`, `sliceMM`, `discount` and `penalty` ([MATH.md](MATH.md) §12). Both values come from the
+   risk engine (DD-31): `sliceMark` is the account's equity drop from moving the legs (before any cash moves) and
+   `sliceMM` its actual MM drop, both in LIQUIDATION mode, so they match the margin engine exactly, including
+   stale-IV direction.
 3. Move `sliceBps` of **every unexpired position** in the bucket (shorts and internal longs) from the account to the
    liquidator account. Each leg's moved quantity is rounded **down** to a multiple of `minPositionQty`. Expired legs
    stay and settle normally. `sliceMM` is the account's actual MM drop, so rounding can't overstate it. If the
@@ -62,7 +69,8 @@ What happens:
    - net-asset slice: the liquidator pays the account `max(0, sliceMark − discount)`.
 5. The account pays `penalty` to the insurance fund. If cash runs out, the liquidator's payment comes first and the
    penalty is reduced.
-6. Require: the liquidator account is healthy (equity ≥ IM) and the liquidated account's `equity − MM` strictly
+6. Require: the liquidator account covers its IM (measured in LIQUIDATION mode, so liquidation keeps working while
+   the surface is stale but within `maxSurfaceStale`) and the liquidated account's `equity − MM` strictly
    increased after rounding. In theory it rises by at least `sliceMM × (1 − bonus − penalty)` ([MATH.md](MATH.md)
    §12). Only dust-sized slices, whose gain rounding can erase, revert here.
 
@@ -82,8 +90,10 @@ function liquidateWithWrapper(
 
 1. The liquidator burns `qty` wrappers of a series the account is **short**.
 2. The account's short shrinks by `qty`, and MM falls by `ΔMM > 0`.
-3. The account pays the liquidator the burned liability's mark value plus `ΔMM × bonus`, and pays `ΔMM × penalty` to
-   insurance.
+3. The account pays the liquidator the burned liability's mark value (the account's equity rise) plus `ΔMM × bonus`,
+   and pays `ΔMM × penalty` to insurance. The bonus is the active auction's current bonus, or `startBonusBps` if
+   there is no auction. Cash shortfalls follow §5 (insurance top-up, then unpaid). The account must be below MM, and
+   its health must strictly improve.
 
 This works when wrappers can be bought (e.g. on Kuru), but it's never the only path, because wrapper liquidity may be
 thin.
@@ -123,14 +133,22 @@ can, insurance covers the rest, and only beyond that does the recovery ratio fal
 ## 8. Events
 
 ```solidity
-event AuctionStarted(uint256 indexed accountId, address indexed underlying, uint256 equity, uint256 mm, uint64 startTime);
+event AuctionStarted(uint256 indexed accountId, address indexed underlying, int256 equity, uint256 mm, uint64 startTime);
 event SliceLiquidated(uint256 indexed accountId, address indexed underlying, uint256 indexed liquidatorAccountId,
     uint16 sliceBps, int256 sliceMark, uint256 sliceMM, uint256 discount, uint256 penalty, int256 cashToLiquidator);
 event WrapperLiquidated(uint256 indexed accountId, bytes32 indexed seriesId, uint256 qty, uint256 liquidatorAccountId,
     uint256 cashToLiquidator, uint256 penalty);
 event BadDebtCovered(uint256 indexed accountId, address indexed asset, uint256 insuranceAmount, uint256 unpaid);
 event AuctionEnded(uint256 indexed accountId, address indexed underlying, uint8 reason); // 0 healthy, 1 empty
+event LiquidationParamsSet(LiquidationParams params);
+event MaxInsurancePerLiquidationSet(address indexed asset, uint256 amount);
 ```
+
+Units: `sliceMark`, `sliceMM` and `discount` are WAD of the settlement asset; `penalty`, `cashToLiquidator` and the
+insurance amounts are native units actually moved (`cashToLiquidator > 0`: account → liquidator).
+
+Gas: a slice computes the account's risk twice and the liquidator's once. At the maximum position count (16 legs, an
+8-leg bucket moved) it costs about 12.3M gas (GAS-003).
 
 ## 9. Liquidator playbook (for bot builders)
 

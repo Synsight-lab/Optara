@@ -29,7 +29,8 @@ import {
     InvalidRiskParams,
     UnknownRiskSet,
     RiskSetExists,
-    RiskSetAlreadyAssigned
+    RiskSetAlreadyAssigned,
+    LengthMismatch
 } from "../libraries/Errors.sol";
 
 /// @title PortfolioRiskManager
@@ -129,9 +130,10 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         bool hasActive;
     }
 
+    /// @dev Hypothetical balance changes (one entry per series; repeated ids add up) and a cash change.
     struct Delta {
-        bytes32 seriesId;
-        int256 qty;
+        bytes32[] seriesIds;
+        int256[] qtys;
         int256 cashNative;
     }
 
@@ -271,7 +273,7 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
 
     /// @inheritdoc IPortfolioRiskManager
     function requireHealthy(uint256 accountId) external view returns (Risk memory risk) {
-        risk = _compute(accountId, Mode.STRICT, Delta(0, 0, 0)).risk;
+        risk = _compute(accountId, Mode.STRICT, _noDelta()).risk;
         if (!_covers(risk.equity, risk.initialMargin)) revert NotHealthy(risk.equity, risk.initialMargin);
     }
 
@@ -291,13 +293,13 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
 
     /// @inheritdoc IPortfolioRiskManager
     function riskForLiquidation(uint256 accountId) external view returns (Risk memory) {
-        return _compute(accountId, Mode.LIQUIDATION, Delta(0, 0, 0)).risk;
+        return _compute(accountId, Mode.LIQUIDATION, _noDelta()).risk;
     }
 
     // =================================================================================================== views
 
     function riskOf(uint256 accountId) external view returns (Risk memory) {
-        return _compute(accountId, Mode.VIEW, Delta(0, 0, 0)).risk;
+        return _compute(accountId, Mode.VIEW, _noDelta()).risk;
     }
 
     function healthOf(uint256 accountId)
@@ -305,7 +307,7 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         view
         returns (HealthState state, int256 equity, uint256 initialMargin, uint256 maintenanceMargin, bool fresh)
     {
-        Result memory r = _compute(accountId, Mode.VIEW, Delta(0, 0, 0));
+        Result memory r = _compute(accountId, Mode.VIEW, _noDelta());
         (equity, initialMargin, maintenanceMargin, fresh) =
         (r.risk.equity, r.risk.initialMargin, r.risk.maintenanceMargin, r.risk.fresh);
         if (_covers(equity, initialMargin)) state = HealthState.HEALTHY;
@@ -315,11 +317,11 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
     }
 
     function equityOf(uint256 accountId) external view returns (int256) {
-        return _compute(accountId, Mode.VIEW, Delta(0, 0, 0)).risk.equity;
+        return _compute(accountId, Mode.VIEW, _noDelta()).risk.equity;
     }
 
     function marginOf(uint256 accountId) external view returns (uint256 initialMargin, uint256 maintenanceMargin) {
-        Risk memory r = _compute(accountId, Mode.VIEW, Delta(0, 0, 0)).risk;
+        Risk memory r = _compute(accountId, Mode.VIEW, _noDelta()).risk;
         return (r.initialMargin, r.maintenanceMargin);
     }
 
@@ -329,7 +331,18 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         view
         returns (Risk memory)
     {
-        return _compute(accountId, Mode.VIEW, Delta(seriesId, qtyDelta, cashDeltaNative)).risk;
+        return _compute(accountId, Mode.VIEW, _oneDelta(seriesId, qtyDelta, cashDeltaNative)).risk;
+    }
+
+    /// @inheritdoc IPortfolioRiskManager
+    function previewWithDeltas(
+        uint256 accountId,
+        bytes32[] calldata seriesIds,
+        int256[] calldata qtyDeltas,
+        int256 cashDeltaNative
+    ) external view returns (Risk memory) {
+        if (seriesIds.length != qtyDeltas.length) revert LengthMismatch();
+        return _compute(accountId, Mode.VIEW, Delta(seriesIds, qtyDeltas, cashDeltaNative)).risk;
     }
 
     function previewWrap(uint256 accountId, bytes32 seriesId, uint256 qty)
@@ -338,7 +351,7 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         returns (int256 equityAfter, uint256 imAfter, bool ok)
     {
         int256 q = qty.toInt256();
-        Risk memory r = _compute(accountId, Mode.VIEW, Delta(seriesId, -q, 0)).risk;
+        Risk memory r = _compute(accountId, Mode.VIEW, _oneDelta(seriesId, -q, 0)).risk;
         ok = _s().ledger.balanceOf(accountId, seriesId) >= q && _healthy(r);
         return (r.equity, r.initialMargin, ok);
     }
@@ -348,7 +361,7 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         view
         returns (int256 equityAfter, uint256 imAfter, bool ok)
     {
-        Risk memory r = _compute(accountId, Mode.VIEW, Delta(0, 0, -amount.toInt256())).risk;
+        Risk memory r = _compute(accountId, Mode.VIEW, _oneDelta(0, 0, -amount.toInt256())).risk;
         ok = amount <= _s().ledger.cashOf(accountId) && _healthy(r);
         return (r.equity, r.initialMargin, ok);
     }
@@ -357,7 +370,7 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
     ///         leaves IM unchanged, so withdrawing exactly this keeps the account healthy.
     function maxWithdrawable(uint256 accountId) external view returns (uint256) {
         RiskStorage storage $ = _s();
-        Risk memory r = _compute(accountId, Mode.VIEW, Delta(0, 0, 0)).risk;
+        Risk memory r = _compute(accountId, Mode.VIEW, _noDelta()).risk;
         if (!_healthy(r)) return 0;
         // forge-lint: disable-next-line(unsafe-typecast)
         uint256 free = uint256(r.equity) - r.initialMargin; // equity ≥ IM ≥ 0
@@ -694,21 +707,41 @@ contract PortfolioRiskManager is OptaraModule, IPortfolioRiskManager {
         if (s > rs.maxIv) s = rs.maxIv;
     }
 
-    /// @dev The account's positions, with one hypothetical balance change applied.
+    function _noDelta() private pure returns (Delta memory d) {}
+
+    function _oneDelta(bytes32 seriesId, int256 qty, int256 cashNative) private pure returns (Delta memory d) {
+        d.seriesIds = new bytes32[](1);
+        d.qtys = new int256[](1);
+        (d.seriesIds[0], d.qtys[0], d.cashNative) = (seriesId, qty, cashNative);
+    }
+
+    /// @dev The account's positions with the hypothetical balance changes applied. A series not held yet is appended
+    ///      once (later deltas for it add to the appended entry).
     function _positions(uint256 accountId, Delta memory d) private view returns (Position[] memory ps) {
         ps = _s().ledger.positionsOf(accountId);
-        if (d.seriesId == 0 || d.qty == 0) return ps;
-        for (uint256 i; i < ps.length; ++i) {
-            if (ps[i].seriesId == d.seriesId) {
-                ps[i].balance += d.qty;
-                return ps;
+        uint256 n = ps.length;
+        Position[] memory added = new Position[](d.seriesIds.length);
+        uint256 nAdded;
+        for (uint256 j; j < d.seriesIds.length; ++j) {
+            (bytes32 id, int256 q) = (d.seriesIds[j], d.qtys[j]);
+            if (id == 0 || q == 0) continue;
+            bool found;
+            for (uint256 i; i < n && !found; ++i) {
+                if (ps[i].seriesId == id) (ps[i].balance, found) = (ps[i].balance + q, true);
             }
+            for (uint256 i; i < nAdded && !found; ++i) {
+                if (added[i].seriesId == id) (added[i].balance, found) = (added[i].balance + q, true);
+            }
+            if (!found) added[nAdded++] = Position({seriesId: id, balance: q, series: _seriesInfo(id)});
         }
-        Position[] memory out = new Position[](ps.length + 1);
-        for (uint256 i; i < ps.length; ++i) {
+        if (nAdded == 0) return ps;
+        Position[] memory out = new Position[](n + nAdded);
+        for (uint256 i; i < n; ++i) {
             out[i] = ps[i];
         }
-        out[ps.length] = Position({seriesId: d.seriesId, balance: d.qty, series: _seriesInfo(d.seriesId)});
+        for (uint256 i; i < nAdded; ++i) {
+            out[n + i] = added[i];
+        }
         return out;
     }
 

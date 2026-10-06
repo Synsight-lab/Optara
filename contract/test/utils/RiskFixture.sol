@@ -14,6 +14,8 @@ import {FeeController} from "../../src/fees/FeeController.sol";
 import {InsuranceFund} from "../../src/insurance/InsuranceFund.sol";
 import {OptionClearing} from "../../src/clearing/OptionClearing.sol";
 import {IOptionClearing} from "../../src/interfaces/IOptionClearing.sol";
+import {LiquidationModule} from "../../src/liquidation/LiquidationModule.sol";
+import {ILiquidationModule} from "../../src/interfaces/ILiquidationModule.sol";
 import {IInsuranceFund} from "../../src/interfaces/IInsuranceFund.sol";
 import {IPortfolioRiskManager as IPRM} from "../../src/interfaces/IPortfolioRiskManager.sol";
 import {OptionPricer} from "../../src/risk/OptionPricer.sol";
@@ -51,6 +53,7 @@ abstract contract RiskFixture is GovernanceFixture {
     InsuranceFund internal insurance;
     FeeController internal fees;
     OptionClearing internal clearingModule; // set only when `_deployRealClearing()` is true
+    LiquidationModule internal liquidation; // set only when `_deployRealLiquidation()` is true
     address internal router = makeAddr("VenueRouter");
     MockPyth internal pyth;
     MockSettlementConfigs internal settlementConfigs;
@@ -106,6 +109,7 @@ abstract contract RiskFixture is GovernanceFixture {
         address insuranceAddr = _nextProxy(6);
         address feesAddr = _nextProxy(7);
         if (_deployRealClearing()) clearing = _nextProxy(8);
+        if (_deployRealLiquidation()) liquidationModule = _nextProxy(9);
         IProtocolControl c = IProtocolControl(address(pc));
         registry = OptionSeriesRegistry(
             upgradeAdmin.deployProxy(
@@ -203,6 +207,30 @@ abstract contract RiskFixture is GovernanceFixture {
         assertEq(address(risk), riskAddr, "address prediction");
         assertEq(address(fees), feesAddr, "address prediction");
         if (_deployRealClearing()) _deployClearing(c);
+        if (_deployRealLiquidation()) _deployLiquidation(c);
+    }
+
+    function _deployLiquidation(IProtocolControl c) private {
+        ILiquidationModule.Modules memory m = ILiquidationModule.Modules({
+            ledger: address(ledger),
+            registry: address(registry),
+            risk: address(risk),
+            insurance: address(insurance),
+            clearing: address(clearingModule),
+            spot: address(spot),
+            surface: address(surface)
+        });
+        liquidation = LiquidationModule(
+            upgradeAdmin.deployProxy(
+                address(new LiquidationModule()), abi.encodeCall(LiquidationModule.initialize, (c, m))
+            )
+        );
+        assertEq(address(liquidation), liquidationModule, "address prediction");
+    }
+
+    /// @dev Override (together with `_deployRealClearing`) to deploy the real LiquidationModule.
+    function _deployRealLiquidation() internal pure virtual returns (bool) {
+        return false;
     }
 
     function _deployClearing(IProtocolControl c) private {

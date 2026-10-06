@@ -210,6 +210,7 @@ below their minimums.
 | `healthOf(accountId)` | `(HEALTHY / CLOSE_ONLY / LIQUIDATABLE / INSOLVENT, equity, IM, MM, fresh)`; INSOLVENT = equity < 0 with no unexpired legs left |
 | `equityOf(accountId)`, `marginOf(accountId)` | equity; `(IM, MM)` |
 | `previewWithDelta(accountId, seriesId, qtyDelta, cashDeltaNative)` | `Risk` after a hypothetical balance and cash change |
+| `previewWithDeltas(accountId, seriesIds[], qtyDeltas[], cashDeltaNative)` | `Risk` after several hypothetical balance changes (repeated ids add up; `LengthMismatch` if the arrays differ) |
 | `previewWrap(accountId, seriesId, qty)` | `(equityAfter, imAfter, ok)` |
 | `previewWithdraw(accountId, amount)` | `(equityAfter, imAfter, ok)` |
 | `maxWithdrawable(accountId)` | `min(cash, floor((equity − IM) / scale))`, 0 if not healthy |
@@ -236,27 +237,59 @@ needs the seller fee) is in `OptionClearing`.
 
 ## 6. LiquidationModule
 
+Risk is measured in LIQUIDATION mode throughout (fresh spot; surface fresh, or within `maxSurfaceStale` with stale
+penalties; INV-45). A bucket is one account × one underlying. Pause bit `LIQUIDATE` (asset and product scope) on
+`startAuction`, `liquidateSlice` and `liquidateWithWrapper`; `endAuction` is never paused. The liquidator account must
+be operated by the caller (`NotAuthorized`), differ from the liquidated account (`InvalidRecipient`) and share its
+settlement asset (`AssetMismatch`). Functions taking `OracleUpdate` are payable and refund unused value.
+
 ### `startAuction(uint256 accountId, address underlying, OracleUpdate u)`
-- Anyone. Fresh spot; surface fresh or within `maxSurfaceStale`.
-- Require `equity < MM`, the bucket has positions, and no active auction exists for it.
-- Event `AuctionStarted`.
+- Anyone. No active auction for the bucket (`AuctionActive`). Apply `u`.
+- The bucket has unexpired positions (`EmptyBucket(accountId, underlying)`); `equity < MM`
+  (`NotLiquidatable(equity, MM)`, INV-21).
+- Records the start time. Event `AuctionStarted(accountId, underlying, equity, MM, startTime)`.
 
-### `liquidateSlice(...)` — see [LIQUIDATION.md](LIQUIDATION.md) §3
-- Caller authorized for `liquidatorAccountId`; same settlement asset; `liquidatorAccountId != accountId`.
-- Auction active; account below the target; slice bounds; oracle freshness as for `startAuction`.
-- Cash limits respected; require healthy(liquidator); require the account's `equity − MM` increased.
-- Event `SliceLiquidated`, and `BadDebtCovered` if insurance helped.
+### `liquidateSlice(accountId, underlying, liquidatorAccountId, sliceBps, minCashToLiquidator, maxCashFromLiquidator, OracleUpdate u)` — see [LIQUIDATION.md](LIQUIDATION.md) §3
+- Auction active (`AuctionNotActive`); `minSliceBps ≤ sliceBps ≤ maxSliceBps`, or `≤ 10,000` in whole-bucket mode
+  (`SliceOutOfBounds`). Apply `u`.
+- The account is below the target `IM × (1 + targetHealthBufferBps)` (`NotLiquidatable(equity, target)`, INV-46).
+- Moves `sliceBps` of every unexpired leg of the bucket (rounded down to `minPositionQty`) to the liquidator; the
+  ledger nets against opposite positions and checks the liquidator's position limits (`PositionLimit`).
+- `sliceMark` = the account's equity drop from the moves, `sliceMM` = its MM drop (must be `> 0`,
+  `HealthNotImproved`). Cash per [MATH.md](MATH.md) §12, insurance top-up up to `maxInsurancePerLiquidation`
+  (`BadDebtCovered`), penalty to insurance through `OptionClearing.payInsurance`.
+- `cash received ≥ minCashToLiquidator` and `cash paid ≤ maxCashFromLiquidator` (`SlippageExceeded`); the
+  account's `equity − MM` strictly increased (`HealthNotImproved`, INV-22); the liquidator covers its IM
+  (`NotHealthy`, INV-23).
+- Event `SliceLiquidated`. If the account reached the target, or the bucket has no unexpired positions left, the
+  auction ends in the same call (`AuctionEnded`, reason 0 or 1).
 
-### `liquidateWithWrapper(...)` — see [LIQUIDATION.md](LIQUIDATION.md) §4
-- Account below MM (an auction is not required, but the auction's current bonus applies if one exists; otherwise
-  `startBonusBps`).
-- Require `ΔMM > 0`.
-- Event `WrapperLiquidated`.
+### `liquidateWithWrapper(accountId, seriesId, qty, liquidatorAccountId, minCashToLiquidator, OracleUpdate u)` — see [LIQUIDATION.md](LIQUIDATION.md) §4
+- `qty > 0`; series unexpired (`SeriesNotActive`); the account is short at least `qty` (`InsufficientShort`).
+  Apply `u`. Account below MM (`NotLiquidatable(equity, MM)`); an auction is not required, but its current bonus
+  applies if one is active (otherwise `startBonusBps`).
+- Burns the caller's wrappers; the account's short shrinks by `qty`; `ΔMM > 0` (`HealthNotImproved`).
+- The account pays the liability's mark value (its equity rise) plus `ΔMM × bonus`, with the same insurance top-up and
+  penalty rules; `cash received ≥ minCashToLiquidator`; health strictly improves.
+- Event `WrapperLiquidated(accountId, seriesId, qty, liquidatorAccountId, cashToLiquidator, penalty)`.
 
 ### `endAuction(uint256 accountId, address underlying, OracleUpdate u)`
-- Anyone, when `equity ≥ IM × (1 + targetHealthBufferBps)` or the bucket is empty.
+- Anyone. Auction active (`AuctionNotActive`). Apply `u`. Ends with reason 1 if the bucket has no unexpired
+  positions, else requires `equity ≥ IM × (1 + targetHealthBufferBps)` (`AuctionActive` otherwise) and ends with
+  reason 0. Event `AuctionEnded`.
 
-View: `previewSlice(accountId, underlying, sliceBps) → (sliceMark, sliceMM, discount, penalty, cashToLiquidator)`.
+### Admin
+
+| Function | Caller | Rule | Event |
+|---|---|---|---|
+| `setLiquidationParams(p)` | Governance (timelocked) | `InvalidLiquidationParams(reason)`: 1 `startBonus > maxBonus` or `maxBonus + penalty ≥ 10,000`; 2 `auctionDuration` 0 or above 7 days; 3 not `0 < minSlice ≤ maxSlice ≤ 10,000`; 4 `targetHealthBufferBps > 10,000` | `LiquidationParamsSet` |
+| `setMaxInsurancePerLiquidation(asset, amount)` | Governance (timelocked) | Native units; 0 disables top-ups | `MaxInsurancePerLiquidationSet` |
+
+Views: `previewSlice(accountId, underlying, sliceBps) → (sliceMark, sliceMM, discount, penalty, cashToLiquidator)`
+(VIEW-mode risk via `previewWithDeltas`; equal to execution in the same block, PRV-004; `sliceMark`, `sliceMM`,
+`discount` in WAD, `penalty` and `cashToLiquidator` in native units, positive = account → liquidator),
+`auctionStart(accountId, underlying)`, `currentBonus(accountId, underlying) → (bonusBps, wholeBucket)`,
+`liquidationParams()`, `maxInsurancePerLiquidation(asset)`, `modules()`.
 
 ## 7. SettlementWindow
 
@@ -438,6 +471,7 @@ error ZeroAmount();
 error ZeroAddress();
 error NotAContract(address account);
 error InvalidRecipient();
+error LengthMismatch();
 error UnknownSeries(bytes32 seriesId);
 error UnknownAccount(uint256 accountId);
 error AssetMismatch();
@@ -485,7 +519,9 @@ error DeadlineExpired();
 error SlippageExceeded();
 error MarketNotVerified();
 // ---- Liquidation ----
-error NotLiquidatable(int256 equity, uint256 maintenanceMargin);
+error NotLiquidatable(int256 equity, uint256 threshold);
+error EmptyBucket(uint256 accountId, address underlying);
+error InvalidLiquidationParams(uint8 reason);
 error AuctionNotActive();
 error AuctionActive();
 error SliceOutOfBounds(uint16 sliceBps);
@@ -535,7 +571,8 @@ SellerFeeCharged, BuyerFeeCharged, FeeSplit,
 SpotSourceSet, SpotUpdated, SurfaceAccepted, NodeProven, PublisherAdded, PublisherRemoved, QuorumSet,
 EmergencyModeSet, SurfaceConfigSet, SettlementConfigRegistered, SettlementConfigApproved,
 ProductCloseOnlySet, RiskSetCreated, RiskSetUpdated, RiskSetEnabled, ProductRiskSetAssigned, ProductShortCapSet,
-AuctionStarted, SliceLiquidated, WrapperLiquidated, BadDebtCovered, AuctionEnded,
+AuctionStarted, SliceLiquidated, WrapperLiquidated, BadDebtCovered, AuctionEnded, LiquidationParamsSet,
+MaxInsurancePerLiquidationSet,
 GroupFinalized, AccountSettled, RecoveryRatioSet, SettlementClaimed, WrapperRedeemed, DustSwept, OracleStalled,
 InsuranceDeposited, InsurancePaid, InsuranceCovered, TreasuryWithdrawn, KeeperRewardPaid, KeeperReserveFunded,
 FeeRatesSet, SplitSet, MinSellerFeeSet, MinimumsSet, RewardsSet,

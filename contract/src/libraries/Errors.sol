@@ -10,6 +10,7 @@ error ZeroAmount();
 error ZeroAddress();
 error NotAContract(address account);
 error InvalidRecipient();
+error LengthMismatch();
 error UnknownSeries(bytes32 seriesId);
 error UnknownAccount(uint256 accountId);
 error AssetMismatch();
@@ -63,7 +64,9 @@ error SlippageExceeded();
 error MarketNotVerified();
 
 // ---- Liquidation ----
-error NotLiquidatable(int256 equity, uint256 maintenanceMargin);
+error NotLiquidatable(int256 equity, uint256 threshold);
+error EmptyBucket(uint256 accountId, address underlying);
+error InvalidLiquidationParams(uint8 reason);
 error AuctionNotActive();
 error AuctionActive();
 error SliceOutOfBounds(uint16 sliceBps);
