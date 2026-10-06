@@ -12,6 +12,8 @@ import {VolSurfaceOracle} from "../../src/oracle/VolSurfaceOracle.sol";
 import {PortfolioRiskManager} from "../../src/risk/PortfolioRiskManager.sol";
 import {FeeController} from "../../src/fees/FeeController.sol";
 import {InsuranceFund} from "../../src/insurance/InsuranceFund.sol";
+import {OptionClearing} from "../../src/clearing/OptionClearing.sol";
+import {IOptionClearing} from "../../src/interfaces/IOptionClearing.sol";
 import {IInsuranceFund} from "../../src/interfaces/IInsuranceFund.sol";
 import {IPortfolioRiskManager as IPRM} from "../../src/interfaces/IPortfolioRiskManager.sol";
 import {OptionPricer} from "../../src/risk/OptionPricer.sol";
@@ -37,8 +39,8 @@ import {MockPyth} from "../mocks/MockPyth.sol";
 
 /// @notice Full stack for margin tests: registry (with the real risk manager as its risk-set checker), factory,
 ///         ledger, spot oracle (mock Pyth), surface oracle and PortfolioRiskManager, deployed with predicted
-///         addresses. Settlement state and reserves are mocks until steps 8 and 11. Ledger writes come from a
-///         stand-in `clearing` address.
+///         addresses. Settlement state is a mock until step 11; the reserve check is a mock unless
+///         `_useRealReserves()`. Ledger writes come from a stand-in `clearing` address unless `_deployRealClearing()`.
 abstract contract RiskFixture is GovernanceFixture {
     OptionSeriesRegistry internal registry;
     ExternalOptionFactory internal factory;
@@ -48,6 +50,7 @@ abstract contract RiskFixture is GovernanceFixture {
     PortfolioRiskManager internal risk;
     InsuranceFund internal insurance;
     FeeController internal fees;
+    OptionClearing internal clearingModule; // set only when `_deployRealClearing()` is true
     address internal router = makeAddr("VenueRouter");
     MockPyth internal pyth;
     MockSettlementConfigs internal settlementConfigs;
@@ -102,6 +105,7 @@ abstract contract RiskFixture is GovernanceFixture {
         address riskAddr = _nextProxy(5);
         address insuranceAddr = _nextProxy(6);
         address feesAddr = _nextProxy(7);
+        if (_deployRealClearing()) clearing = _nextProxy(8);
         IProtocolControl c = IProtocolControl(address(pc));
         registry = OptionSeriesRegistry(
             upgradeAdmin.deployProxy(
@@ -198,6 +202,31 @@ abstract contract RiskFixture is GovernanceFixture {
         );
         assertEq(address(risk), riskAddr, "address prediction");
         assertEq(address(fees), feesAddr, "address prediction");
+        if (_deployRealClearing()) _deployClearing(c);
+    }
+
+    function _deployClearing(IProtocolControl c) private {
+        IOptionClearing.Modules memory m = IOptionClearing.Modules({
+            ledger: address(ledger),
+            registry: address(registry),
+            risk: address(risk),
+            fees: address(fees),
+            insurance: address(insurance),
+            spot: address(spot),
+            surface: address(surface),
+            settlementState: address(settlementState),
+            liquidationModule: liquidationModule,
+            settlementWindow: settlementWindow
+        });
+        clearingModule = OptionClearing(
+            upgradeAdmin.deployProxy(address(new OptionClearing()), abi.encodeCall(OptionClearing.initialize, (c, m)))
+        );
+        assertEq(address(clearingModule), clearing, "address prediction");
+    }
+
+    /// @dev Override to deploy the real OptionClearing at the `clearing` address instead of a stand-in.
+    function _deployRealClearing() internal pure virtual returns (bool) {
+        return false;
     }
 
     /// @dev Override to wire the risk manager's reserve check to the real FeeController instead of the mock.
@@ -292,14 +321,19 @@ abstract contract RiskFixture is GovernanceFixture {
 
     /// @dev Pushes a spot price published now (expo −8).
     function _setSpot(bytes32 productId, uint256 priceWad) internal {
-        bytes32 feed = productId == ethUsdc ? ETH_FEED : BTC_FEED;
-        pythTime = pythTime >= block.timestamp ? pythTime + 1 : block.timestamp;
         bytes[] memory u = new bytes[](1);
-        // forge-lint: disable-next-line(unsafe-typecast)
-        u[0] = pyth.encode(feed, int64(int256(priceWad / 1e10)), -8, pythTime);
+        u[0] = _spotBlob(productId, priceWad);
         bytes32[] memory ps = new bytes32[](1);
         ps[0] = productId;
         spot.update(u, ps);
+    }
+
+    /// @dev A Pyth update blob for `productId` published now (or 1 s after the previous one), expo −8.
+    function _spotBlob(bytes32 productId, uint256 priceWad) internal returns (bytes memory) {
+        bytes32 feed = productId == ethUsdc ? ETH_FEED : BTC_FEED;
+        pythTime = pythTime >= block.timestamp ? pythTime + 1 : block.timestamp;
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return pyth.encode(feed, int64(int256(priceWad / 1e10)), -8, pythTime);
     }
 
     /// @dev Publishes a surface whose nodes sit exactly at the given strikes (log-moneyness at `spotWad`) with the
@@ -311,7 +345,23 @@ abstract contract RiskFixture is GovernanceFixture {
         uint256[] memory ivs,
         uint64[] memory tenors
     ) internal {
-        IVolSurfaceOracle.SurfaceReport memory r;
+        (IVolSurfaceOracle.SurfaceReport memory r, bytes[] memory sigs, IVolSurfaceOracle.NodeProof[] memory n) =
+            _buildSurface(productId, spotWad, strikes, ivs, tenors);
+        surface.submitReport(r, sigs);
+        surface.proveNodes(n);
+    }
+
+    /// @dev Builds (without submitting) the next signed report for `productId` and proofs for all its leaves.
+    function _buildSurface(
+        bytes32 productId,
+        uint256 spotWad,
+        uint256[] memory strikes,
+        uint256[] memory ivs,
+        uint64[] memory tenors
+    )
+        internal
+        returns (IVolSurfaceOracle.SurfaceReport memory r, bytes[] memory sigs, IVolSurfaceOracle.NodeProof[] memory n)
+    {
         r.chainId = block.chainid;
         r.verifyingContract = address(surface);
         r.productId = productId;
@@ -346,8 +396,8 @@ abstract contract RiskFixture is GovernanceFixture {
             }
         }
         r.surfaceRoot = MerkleHelper.root(leaves);
-        surface.submitReport(r, _signAB(r));
-        IVolSurfaceOracle.NodeProof[] memory n = new IVolSurfaceOracle.NodeProof[](w.length);
+        sigs = _signAB(r);
+        n = new IVolSurfaceOracle.NodeProof[](w.length);
         for (uint256 i; i < w.length; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
             n[i] = IVolSurfaceOracle.NodeProof(
@@ -359,7 +409,6 @@ abstract contract RiskFixture is GovernanceFixture {
                 MerkleHelper.proof(leaves, i)
             );
         }
-        surface.proveNodes(n);
     }
 
     /// @dev Index of the node closest to k = 0 (for the header's ATM variance).

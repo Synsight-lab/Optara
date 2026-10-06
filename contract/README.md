@@ -8,6 +8,7 @@ Foundry project for the on-chain protocol specified in [`../docs`](../docs/READM
 ```text
 src/
   accounts/SubAccounts.sol        the ledger: cash, signed balances, totals, indexes, participants (PROTOCOL_SPEC §1)
+  clearing/OptionClearing.sol     collateral, mint/wrap/unwrap/close, custody, previewMint (PROTOCOL_SPEC §3–§4)
   fees/FeeController.sol          fees, split, treasury, keeper reserve and rewards, reserve minimums (PROTOCOL_SPEC §8.1)
   insurance/InsuranceFund.sol     insurance balance per asset; bad-debt cover into OptionClearing (§8.2)
   governance/ProtocolControl.sol  roles, scoped pause bits, manual close-only flags (PROTOCOL_SPEC §11.1)
@@ -22,6 +23,7 @@ src/
   series/SeriesNaming.sol           display names and symbols
   oracle/LiveSpotOracle.sol       Pyth spot prices per product (ORACLES §2)
   oracle/VolSurfaceOracle.sol     signed IV surfaces, Merkle leaves, status (ORACLES §3)
+  oracle/OracleUpdates.sol        the OracleUpdate argument and how modules apply it (ORACLES §4)
   oracle/SettlementOracle.sol     immutable configs, Chainlink round-in-force settlement (ORACLES §5)
   risk/FixedPoint.sol      units, conversions, rounding (MATH.md §1–§2)
   risk/PortfolioRiskManager.sol  equity, IM, MM, health, close-only, risk sets (PROTOCOL_SPEC §5)
@@ -33,7 +35,7 @@ test/
   differential/  Solidity vs the Python reference model (vectors + FFI)
   gas/           gas benchmarks with regression ceilings
   harness/       external wrappers around internal libraries (so tests can catch reverts)
-  mocks/, utils/ mock modules (V1/V2 upgrades) and the governance deployment fixture
+  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk stack, clearing stack)
 script/
   coverage_gate.py   TESTING.md §7 thresholds on an lcov report
   storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct

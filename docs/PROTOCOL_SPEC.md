@@ -104,63 +104,86 @@ Views: `getSeries(seriesId)` (reverts `UnknownSeries`), `seriesExists`, `groupOf
 
 ## 3. OptionClearing — collateral
 
+`OptionClearing` holds every settlement-asset token backing account cash and settlement pools (INV-7). Pause bits
+are checked with the account's asset (collateral) or the series' asset and product (positions). Functions taking an
+`OracleUpdate` apply it first ([ORACLES.md](ORACLES.md) §4) and refund unused `msg.value` last.
+
 ### `depositCollateral(uint256 accountId, uint256 amount)`
-- Anyone may deposit into any account (deposits only help).
-- `amount > 0`. Pulls exactly `amount` of the account's settlement asset (balance-difference check; reverts on
-  fee-on-transfer tokens).
+- Anyone may deposit into any account (deposits only help). Pause bit `DEPOSIT`.
+- Account exists (`UnknownAccount`); `amount > 0` (`ZeroAmount`). Pulls exactly `amount` of the account's settlement
+  asset (balance-difference check; `NonExactTransfer` on fee-on-transfer tokens).
 - `cash += amount`.
 - Event `CollateralDeposited(accountId, from, amount)`.
 
-### `withdrawCollateral(uint256 accountId, uint256 amount, address recipient, OracleUpdate u)`
-- Authorized for `accountId`. `amount > 0`, `recipient != 0`, `amount ≤ cash`.
-- Fresh oracles (if the account has any open position).
-- `cash −= amount`; require healthy; transfer to `recipient`.
-- Event `CollateralWithdrawn(accountId, recipient, amount)`.
+### `withdrawCollateral(uint256 accountId, uint256 amount, address recipient, OracleUpdate u)` (payable)
+- Pause bit `WITHDRAW`. Authorized for `accountId` (`NotAuthorized`). `amount > 0`, `recipient != 0`
+  (`InvalidRecipient`).
+- Apply `u`; `cash −= amount` (`InsufficientCash`); require healthy (STRICT). An account with no positions reads no
+  oracle data, so it can always withdraw its cash.
+- Transfer to `recipient`. Event `CollateralWithdrawn(accountId, recipient, amount)`.
 
 ## 4. OptionClearing — positions
 
-### `mintExternalLong(uint256 accountId, bytes32 seriesId, uint256 qty, address recipient, uint256 maxSellerFeeNative, OracleUpdate u)`
-- Authorized for `accountId`; `qty > 0`; `recipient != 0`.
-- Series active (`now < expiry`); product not close-only; insurance seed and keeper reserve met; the account's
-  settlement asset equals the series'.
-- Position and bucket limits; open-interest caps after the mint.
-- Fresh oracles.
-- Effects, in order:
-  1. `balance −= qty`;
-  2. `fee = sellerFee(qty)`; require `fee ≤ maxSellerFeeNative`; `cash −= fee` (revert if `cash < fee`); split the fee;
-  3. require healthy;
-  4. `wrapper.mint(recipient, qty)`.
-- Event `ExternalLongMinted(accountId, seriesId, qty, recipient, fee)`.
+### `mintExternalLong(uint256 accountId, bytes32 seriesId, uint256 qty, address recipient, uint256 maxSellerFeeNative, OracleUpdate u)` (payable)
+- Series exists (`UnknownSeries`); pause bit `MINT`; authorized; `qty > 0`; `recipient != 0`.
+- Insurance seed and keeper reserve of the series' asset at their minimums (`InsuranceBelowMinimum(asset)`, checked
+  before the oracle update so the specific error surfaces).
+- Apply `u`. Effects, in order:
+  1. `balance −= qty` (ledger: `AssetMismatch`, `PositionLimit`, `PositionBelowMinimum`);
+  2. `checkOpenRisk(seriesId, caps = true)` on the post-mint ledger: `SeriesNotActive`, `ProductCloseOnly`,
+     `OpenInterestCap(seriesId | productId)`;
+  3. `fee = previewSellerFee(seriesId, qty)`; `fee ≤ maxSellerFeeNative` (`FeeTooHigh`); if `fee > 0`:
+     `cash −= fee` (`InsufficientCash`), transfer it to `FeeController`, `notifySellerFee` (split);
+  4. require healthy (STRICT: `StaleSpot`, `StaleSurface`, `NotHealthy`, …);
+  5. `wrapper.mint(recipient, qty)`.
+- Event `ExternalLongMinted(accountId, seriesId, qty, recipient, fee)` (plus `SellerFeeCharged`, `FeeSplit`).
 
-### `wrapLong(uint256 accountId, bytes32 seriesId, uint256 qty, address recipient, OracleUpdate u)`
-- Authorized; series active; `balance ≥ qty` (must be long).
-- Fresh oracles.
-- `balance −= qty`; require healthy; `wrapper.mint(recipient, qty)`.
+### `wrapLong(uint256 accountId, bytes32 seriesId, uint256 qty, address recipient, OracleUpdate u)` (payable)
+- Pause bit `WRAP`; authorized; `qty > 0`; `recipient != 0`; series active (`SeriesNotActive`); `balance ≥ qty`
+  (`InsufficientLong`).
+- Apply `u`; `balance −= qty`; require healthy (the long may have been a hedge); `wrapper.mint(recipient, qty)`.
 - Event `LongWrapped(accountId, seriesId, qty, recipient)`.
 
 ### `unwrapLong(uint256 accountId, bytes32 seriesId, uint256 qty)`
-- Anyone holding wrappers may unwrap into an account they're authorized for. Series active (before expiry).
-- Settlement asset matches; position limits (this only adds a series if `balance` was 0).
-- `wrapper.burn(msg.sender, qty)`; `balance += qty`.
+- Pause bit `UNWRAP`. Anyone holding wrappers may unwrap into an account they're authorized for. `qty > 0`. Series
+  active (before expiry; afterwards wrappers redeem through settlement).
+- `wrapper.burn(msg.sender, qty)`; `balance += qty` (ledger: asset match, position limits — this only adds a series
+  if the balance was 0).
 - No oracle data or margin check (adding a long never lowers health).
 - Event `LongUnwrapped(accountId, seriesId, qty, from)`.
 
 ### `closeShortWithWrapper(uint256 accountId, bytes32 seriesId, uint256 qty)`
-- Authorized; group not finalized (allowed after expiry until finalization); `balance ≤ −qty` (short at least
-  `qty`).
+- Pause bit `CLOSE`; group not finalized (`GroupFinalized`; allowed after expiry until finalization); authorized;
+  `qty > 0`; `balance ≤ −qty` (`InsufficientShort`).
 - `wrapper.burn(msg.sender, qty)`; `balance += qty`.
 - No oracle data or margin check.
 - Event `ShortClosedWithWrapper(accountId, seriesId, qty)`.
 
-### `closeShortWithInternalLong(uint256 fromAccountId, uint256 toAccountId, bytes32 seriesId, uint256 qty, OracleUpdate u)`
-- Caller authorized for **both** accounts; same settlement asset; group not finalized.
-- `balance[from] ≥ qty` (long) and `balance[to] ≤ −qty` (short).
-- Fresh oracles (for `from`).
-- `balance[from] −= qty`; `balance[to] += qty`; require healthy(`from`).
+### `closeShortWithInternalLong(uint256 fromAccountId, uint256 toAccountId, bytes32 seriesId, uint256 qty, OracleUpdate u)` (payable)
+- Pause bit `CLOSE`; group not finalized; caller authorized for **both** accounts; `qty > 0`;
+  `balance[from] ≥ qty` (`InsufficientLong`) and `balance[to] ≤ −qty` (`InsufficientShort`). The ledger rejects a
+  different settlement asset (`AssetMismatch`).
+- Apply `u`; `balance[from] −= qty`; `balance[to] += qty`; require healthy(`from`). The target only loses a short,
+  so its health never falls (INV-13).
 - Event `ShortClosedWithInternalLong(fromAccountId, toAccountId, seriesId, qty)`.
 
 ### `updateOracles(OracleUpdate u)` (payable)
-- Anyone. Applies spot updates, surface reports and node proofs without any other action.
+- Anyone. Applies spot updates, surface reports and node proofs without any other action; refunds unused value.
+
+### Custody (internal modules only)
+
+| Function | Caller | Effect |
+|---|---|---|
+| `payInsurance(asset, amount)` | `LiquidationModule`, `SettlementWindow` | Transfer to `InsuranceFund` + `notifyDeposit` (penalties, swept dust). The caller has already debited the matching cash or pool. `amount = 0` is a no-op |
+| `payOut(asset, to, amount)` | `SettlementWindow` | Transfer to `to ≠ 0` (wrapper redemptions). The caller has already debited the matching pool |
+
+### Views
+
+- `previewMint(accountId, seriesId, qty) → (fee, equityAfter, imAfter, ok)`: the fee and VIEW-mode risk after the
+  hypothetical mint (`previewWithDelta(−qty, −fee)`), equal to what `mintExternalLong` produces in the same block
+  (PRV-001). `ok` = data fresh, series active, product not close-only, cash covers the fee and `equityAfter ≥ imAfter`;
+  it does not check open-interest caps or position limits.
+- `modules()`: the module addresses fixed at initialization.
 
 ## 5. PortfolioRiskManager
 
@@ -478,6 +501,7 @@ error InvalidSpotSource(uint8 reason);
 error InvalidSpotPrice(bytes32 productId);
 error InsufficientProviderFee(uint256 required, uint256 provided);
 error RefundFailed();
+error InvalidOracleUpdate();
 error InvalidSurfaceReport(uint8 reason);
 error InvalidSignatures();
 error InvalidSurfaceConfig(uint8 reason);

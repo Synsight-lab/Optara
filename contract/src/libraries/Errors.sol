@@ -81,6 +81,7 @@ error InvalidSpotSource(uint8 reason);
 error InvalidSpotPrice(bytes32 productId);
 error InsufficientProviderFee(uint256 required, uint256 provided);
 error RefundFailed();
+error InvalidOracleUpdate();
 error InvalidSurfaceReport(uint8 reason);
 error InvalidSignatures();
 error InvalidSurfaceConfig(uint8 reason);

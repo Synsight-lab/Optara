@@ -177,6 +177,7 @@ struct NodeProof {
 }
 struct OracleUpdate {
     bytes[]        spotUpdates;      // provider-specific, may be empty if cached data is fresh
+    bytes32[]      spotProductIds;   // products whose stored spot is refreshed from the provider after the blobs
     SurfaceReport[] reports;         // may be empty
     bytes[][]      reportSignatures; // one list per report
     NodeProof[]    nodes;            // leaves not yet cached
@@ -184,7 +185,18 @@ struct OracleUpdate {
 ```
 
 The contract applies the updates first, then runs the action against the cache. An empty update is fine if the
-cache is fresh.
+cache is fresh. Application rules (`contract/src/oracle/OracleUpdates.sol`, DD-30):
+
+- Spot: if `spotUpdates` or `spotProductIds` is non-empty, the module forwards exactly the provider fee
+  (`LiveSpotOracle.updateFee`) and calls `update(spotUpdates, spotProductIds)`; `msg.value` below the fee reverts
+  `InsufficientProviderFee`. The module refunds `msg.value − fee` to its caller at the end of the call
+  (`RefundFailed` if the caller rejects it).
+- Reports: `reports.length` must equal `reportSignatures.length` (`InvalidOracleUpdate`). A report whose
+  `surfaceSeq` is at or below the product's current sequence is **skipped**, not rejected, so two transactions
+  carrying the same report both succeed.
+- Nodes: passed to `proveNodes`; already-cached leaves are skipped there.
+- The frontend's `/oracle-update` builds `spotProductIds` from the products the account holds plus the product of
+  the series being traded.
 
 ## 5. SettlementOracle
 

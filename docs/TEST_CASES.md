@@ -56,7 +56,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | CLR-013 | Participant counter updates on every 0↔non-zero change and counts accounts, not series (INV-27) |
 | CLR-014 | INV-1 holds after every clearing action |
 | CLR-015 | Anyone may deposit into any account; deposit never lowers health (INV-13); custody equals Σ cash + Σ pools after every clearing action (INV-7); cash never negative (INV-8) |
-| CLR-016 | `updateOracles` alone applies spot updates, surface reports and node proofs, with no other effect |
+| CLR-016 | `updateOracles` alone applies spot updates, surface reports and node proofs, with no other effect; a report at or below the current sequence is skipped, not reverted; mismatched report/signature lists revert (`InvalidOracleUpdate`, DD-30) |
 | CLR-017 | Per-series totals equal the sum of balances after random action sequences (INV-2) |
 | CLR-018 | Risk-increasing actions revert on stale data, close-only product, emergency mode, insurance or keeper reserve below minimum (INV-12, `ProductCloseOnly`, `InsuranceBelowMinimum`) |
 | CLR-019 | OI caps: a mint pushing series OI or product short underlying above its cap reverts (`OpenInterestCap`); lowering a cap below current OI forces nothing and only blocks new mints (INV-42) |
@@ -64,6 +64,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | CLR-021 | Deposit, unwrap and close succeed with stale oracles and an empty `OracleUpdate` (LIV-1) |
 | CLR-022 | Input errors: `ZeroAmount`, `InvalidRecipient`, `UnknownSeries`, `InsufficientCash`, `InsufficientShort`, `InsufficientLong` each triggered |
 | CLR-023 | Provider fee handling: functions taking `OracleUpdate` refund excess `msg.value` |
+| CLR-024 | Custody: `payInsurance` only from `LiquidationModule` / `SettlementWindow` (credits `InsuranceFund`), `payOut` only from `SettlementWindow` to a non-zero recipient; zero amounts are no-ops |
 
 ## PRV — Previews and views
 
@@ -366,6 +367,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | closeShortWithWrapper | CLR-010, CLR-021 |
 | closeShortWithInternalLong | CLR-011 |
 | updateOracles | CLR-016 |
+| payInsurance / payOut | CLR-024 |
 | createRiskSet / updateRiskSet / raiseImBuffer / raiseMinIv / addScenarios / setOpenInterestCap / setRiskSetEnabled / getRiskSet | MRG-012 |
 | assignProductRiskSet / isRiskSetForProduct / productRiskSet / setProductShortCap / productShortCap | MRG-013 |
 | requireHealthy / riskForLiquidation / riskOf / previewWithDelta | MRG-005, MRG-007, MRG-014, PRV-002 |
@@ -460,7 +462,8 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | RiskSetAlreadyAssigned | MRG-013 |
 | PositionBelowMinimum | CLR-012 |
 | OpenInterestCap | CLR-019 |
-| FeeTooHigh | FEE-002 |
+| FeeTooHigh | FEE-002, CLR-005 |
+| InvalidOracleUpdate | CLR-016 |
 | InvalidFeeConfig | FEE-006, FEE-007 |
 | InsufficientTreasury | FEE-007 |
 | TokensNotReceived | FEE-011, FEE-012 |
