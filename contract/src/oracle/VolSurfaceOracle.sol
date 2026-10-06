@@ -36,6 +36,12 @@ contract VolSurfaceOracle is OptaraModule, EIP712Upgradeable, IVolSurfaceOracle 
     uint256 internal constant MAX_K_NODES = 32;
     uint256 internal constant BPS_TO_WAD = 1e14; // 1 bps of IV = 1e14 in WAD
 
+    // impliedVols status codes
+    uint8 public constant IV_OK = 0;
+    uint8 public constant IV_NO_SURFACE = 1;
+    uint8 public constant IV_NOT_PRICEABLE = 2;
+    uint8 public constant IV_MISSING_NODE = 3;
+
     uint8 internal constant R_DOMAIN = 1;
     uint8 internal constant R_PRODUCT = 2;
     uint8 internal constant R_SEQUENCE = 3;
@@ -203,6 +209,30 @@ contract VolSurfaceOracle is OptaraModule, EIP712Upgradeable, IVolSurfaceOracle 
     }
 
     // ------------------------------------------------------------------------------------------------- views
+
+    struct IvContext {
+        bytes32 productId;
+        uint64 seq;
+        uint64 validAfter;
+        uint64[4] tenors;
+        int256[] grid;
+        uint256 spot;
+    }
+
+    /// @inheritdoc IVolSurfaceOracle
+    function impliedVols(bytes32 productId, uint256 spotWad, uint256[] calldata strikes, uint64[] calldata expiries)
+        external
+        view
+        returns (uint256[] memory sigmas, uint8 status, uint256 failedIndex, uint8 tenorIndex, uint8 nodeIndex)
+    {
+        sigmas = new uint256[](strikes.length);
+        IvContext memory c = _ivContext(productId, spotWad);
+        if (c.seq == 0) return (sigmas, IV_NO_SURFACE, 0, 0, 0);
+        for (uint256 i; i < strikes.length; ++i) {
+            (status, sigmas[i], tenorIndex, nodeIndex) = _legIv(c, strikes[i], expiries[i]);
+            if (status != IV_OK) return (sigmas, status, i, tenorIndex, nodeIndex);
+        }
+    }
 
     function header(bytes32 productId) external view returns (SurfaceHeader memory) {
         return _s().headers[productId];
@@ -390,6 +420,50 @@ contract VolSurfaceOracle is OptaraModule, EIP712Upgradeable, IVolSurfaceOracle 
             r.riskParameterSetId
         );
         return keccak256(bytes.concat(a, b, c));
+    }
+
+    function _ivContext(bytes32 productId, uint256 spotWad) private view returns (IvContext memory c) {
+        SurfaceStorage storage $ = _s();
+        SurfaceHeader storage h = $.headers[productId];
+        c.productId = productId;
+        c.seq = h.surfaceSeq;
+        if (c.seq == 0) return c;
+        c.validAfter = h.validAfter;
+        c.tenors = h.tenorTimestamps;
+        c.grid = $.kNodes[productId];
+        c.spot = spotWad;
+    }
+
+    /// @dev MATH.md §5 for one series: tenors, nodes, the four proven leaves, unclamped σ.
+    function _legIv(IvContext memory c, uint256 strike, uint64 expiry)
+        private
+        view
+        returns (uint8 status, uint256 sigma, uint8 t, uint8 n)
+    {
+        (bool ok, uint256 a, uint256 b) = OptionPricer.findTenors(c.tenors, expiry);
+        if (!ok) return (IV_NOT_PRICEABLE, 0, 0, 0);
+        OptionPricer.IvQuery memory q;
+        q.k = OptionPricer.logMoneyness(strike, c.spot);
+        (uint256 lo, uint256 hi) = OptionPricer.findNodes(c.grid, q.k);
+        (q.kLo, q.kHi) = (c.grid[lo], c.grid[hi]);
+        (q.wALo, t, n) = _leaf(c, a, lo);
+        if (q.wALo == 0) return (IV_MISSING_NODE, 0, t, n);
+        (q.wAHi, t, n) = _leaf(c, a, hi);
+        if (q.wAHi == 0) return (IV_MISSING_NODE, 0, t, n);
+        (q.wBLo, t, n) = _leaf(c, b, lo);
+        if (q.wBLo == 0) return (IV_MISSING_NODE, 0, t, n);
+        (q.wBHi, t, n) = _leaf(c, b, hi);
+        if (q.wBHi == 0) return (IV_MISSING_NODE, 0, t, n);
+        (q.tenorA, q.tenorB, q.expiry, q.reportTime) = (c.tenors[a], c.tenors[b], expiry, c.validAfter);
+        q.maxIv = type(uint256).max;
+        return (IV_OK, OptionPricer.surfaceIv(q), 0, 0);
+    }
+
+    /// @dev A proven leaf's value (0 if not proven) and its indices, for error reporting.
+    function _leaf(IvContext memory c, uint256 tenor, uint256 node) private view returns (uint256 w, uint8 t, uint8 n) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        (t, n) = (uint8(tenor), uint8(node)); // tenor < 4, node < 32
+        w = _s().nodes[_leafKey(c.productId, c.seq, t, n)];
     }
 
     function _leafKey(bytes32 productId, uint64 seq, uint8 tenor, uint8 node) private pure returns (bytes32) {

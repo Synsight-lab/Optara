@@ -70,3 +70,24 @@ struct Group {
     uint64 expiry;
     bytes32 settlementOracleConfigId;
 }
+
+/// @notice Immutable series data the ledger caches on first use and returns with positions, so the risk manager
+///         prices an account with one call instead of one registry call per leg.
+struct LedgerSeries {
+    address underlying;
+    uint64 expiry;
+    OptionType optionType;
+    address settlementAsset;
+    bytes32 groupId;
+    bytes32 productId;
+    bytes32 riskParameterSetId;
+    uint256 strikeWad;
+    uint256 contractSizeWad;
+}
+
+/// @notice One open position with its series data.
+struct Position {
+    bytes32 seriesId;
+    int256 balance;
+    LedgerSeries series;
+}

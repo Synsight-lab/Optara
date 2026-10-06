@@ -128,6 +128,25 @@ contract SubAccountsInvariantTest is LedgerFixture {
         }
     }
 
+    /// @dev Product short notional = Σ over accounts and series of the product of |short| × CS.
+    function invariant_productShortNotional() public view {
+        uint256 eth;
+        uint256 btc;
+        for (uint256 i; i < handler.accountsLength(); ++i) {
+            for (uint256 j; j < handler.seriesLength(); ++j) {
+                bytes32 s = handler.seriesIds(j);
+                int256 b = ledger.balanceOf(handler.accounts(i), s);
+                if (b >= 0) continue;
+                // forge-lint: disable-next-line(unsafe-typecast)
+                uint256 n = uint256(-b) * registry.getSeries(s).contractSizeWad;
+                if (registry.getSeries(s).underlying == weth) eth += n;
+                else btc += n;
+            }
+        }
+        assertEq(ledger.productShortNotional(ethUsdc), eth);
+        assertEq(ledger.productShortNotional(btcUsdc), btc);
+    }
+
     /// @dev INV-6: every non-zero balance is at least the minimum and a multiple of it.
     function invariant_INV6_minimum() public view {
         uint256 m = ledger.minPositionQty();

@@ -359,7 +359,7 @@ contract OptionSeriesRegistry is OptaraModule, IOptionSeriesRegistry {
             revert InvalidSeriesParams(SP_SETTLEMENT_CONFIG);
         }
         if (p.volSurfaceProductId != productId) revert InvalidSeriesParams(SP_VOL_PRODUCT);
-        if (!$.riskSets.isRiskSetEnabled(p.riskParameterSetId)) revert InvalidSeriesParams(SP_RISK_SET);
+        if (!$.riskSets.isRiskSetForProduct(productId, p.riskParameterSetId)) revert InvalidSeriesParams(SP_RISK_SET);
     }
 
     function _s() private pure returns (RegistryStorage storage $) {

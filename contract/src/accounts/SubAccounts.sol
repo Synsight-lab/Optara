@@ -7,7 +7,7 @@ import {Roles} from "../governance/Roles.sol";
 import {IProtocolControl} from "../interfaces/IProtocolControl.sol";
 import {ISubAccounts} from "../interfaces/ISubAccounts.sol";
 import {IOptionSeriesRegistry} from "../interfaces/IOptionSeriesRegistry.sol";
-import {SeriesTerms} from "../libraries/OptaraTypes.sol";
+import {SeriesTerms, LedgerSeries, Position} from "../libraries/OptaraTypes.sol";
 import {
     NotAuthorized,
     ZeroAddress,
@@ -37,13 +37,6 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         address owner;
         address settlementAsset;
         uint256 cash; // native units of the settlement asset
-    }
-
-    /// @dev Immutable series data cached on first use (saves cold registry calls on every later write).
-    struct SeriesInfo {
-        address underlying;
-        address settlementAsset;
-        bytes32 groupId;
     }
 
     /// @dev Series count and 1-based list index of one underlying bucket, packed in one slot.
@@ -77,7 +70,8 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         mapping(uint256 accountId => mapping(bytes32 groupId => uint256)) groupSeriesCount;
         mapping(bytes32 groupId => uint256) participants;
         mapping(bytes32 seriesId => Totals) totals;
-        mapping(bytes32 seriesId => SeriesInfo) seriesInfo;
+        mapping(bytes32 seriesId => LedgerSeries) seriesInfo; // immutable series data, cached on first use
+        mapping(bytes32 productId => uint256) productShortNotional; // Σ |short qty| × CS (1e36 units)
     }
 
     // keccak256(abi.encode(uint256(keccak256("optara.storage.SubAccounts")) - 1)) & ~bytes32(uint256(0xff))
@@ -160,7 +154,7 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         int256 old = $.balances[accountId][seriesId];
         if (delta == 0) return old;
 
-        SeriesInfo memory info = _seriesInfo(seriesId);
+        LedgerSeries memory info = _seriesInfo(seriesId);
         if (info.settlementAsset != a.settlementAsset) revert AssetMismatch();
 
         balance = old + delta;
@@ -174,6 +168,11 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         Totals storage t = $.totals[seriesId];
         t.internalLong = t.internalLong - _pos(old) + _pos(balance);
         t.internalShort = t.internalShort - _neg(old) + _neg(balance);
+        if (_neg(old) != _neg(balance)) {
+            uint256 cs = info.contractSizeWad;
+            $.productShortNotional[info.productId] =
+                $.productShortNotional[info.productId] - _neg(old) * cs + _neg(balance) * cs;
+        }
 
         if (old == 0) _openPosition(accountId, seriesId, info);
         else if (balance == 0) _closePosition(accountId, seriesId, info);
@@ -247,6 +246,28 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         return (t.internalLong, t.internalShort);
     }
 
+    /// @inheritdoc ISubAccounts
+    function positionsOf(uint256 accountId) external view returns (Position[] memory positions) {
+        SubAccountsStorage storage $ = _s();
+        bytes32[] storage list = $.seriesList[accountId];
+        positions = new Position[](list.length);
+        for (uint256 i; i < list.length; ++i) {
+            bytes32 sid = list[i];
+            positions[i] = Position({seriesId: sid, balance: $.balances[accountId][sid], series: $.seriesInfo[sid]});
+        }
+    }
+
+    /// @inheritdoc ISubAccounts
+    function seriesInfo(bytes32 seriesId) external view returns (LedgerSeries memory info, bool cached) {
+        info = _s().seriesInfo[seriesId];
+        cached = info.groupId != 0;
+    }
+
+    /// @inheritdoc ISubAccounts
+    function productShortNotional(bytes32 productId) external view returns (uint256) {
+        return _s().productShortNotional[productId];
+    }
+
     function accountCount() external view returns (uint256) {
         return _s().accountCount;
     }
@@ -271,7 +292,7 @@ contract SubAccounts is OptaraModule, ISubAccounts {
     // ------------------------------------------------------------------------------------------------- internal
 
     /// @dev First non-zero balance in a series: series list, bucket and group participation.
-    function _openPosition(uint256 accountId, bytes32 seriesId, SeriesInfo memory info) private {
+    function _openPosition(uint256 accountId, bytes32 seriesId, LedgerSeries memory info) private {
         SubAccountsStorage storage $ = _s();
         bytes32[] storage list = $.seriesList[accountId];
         if (list.length >= $.maxSeriesPerAccount) revert PositionLimit();
@@ -294,7 +315,7 @@ contract SubAccounts is OptaraModule, ISubAccounts {
     }
 
     /// @dev Balance back to zero: remove from the series list, bucket and group participation (swap-and-pop).
-    function _closePosition(uint256 accountId, bytes32 seriesId, SeriesInfo memory info) private {
+    function _closePosition(uint256 accountId, bytes32 seriesId, LedgerSeries memory info) private {
         SubAccountsStorage storage $ = _s();
         bytes32[] storage list = $.seriesList[accountId];
         uint256 idx = $.seriesIndex[accountId][seriesId] - 1;
@@ -320,13 +341,21 @@ contract SubAccounts is OptaraModule, ISubAccounts {
         }
     }
 
-    function _seriesInfo(bytes32 seriesId) private returns (SeriesInfo memory info) {
+    function _seriesInfo(bytes32 seriesId) private returns (LedgerSeries memory info) {
         SubAccountsStorage storage $ = _s();
         info = $.seriesInfo[seriesId];
         if (info.groupId == 0) {
             SeriesTerms memory t = $.registry.getSeries(seriesId); // reverts UnknownSeries
-            info = SeriesInfo({
-                underlying: t.underlying, settlementAsset: t.settlementAsset, groupId: $.registry.groupOf(seriesId)
+            info = LedgerSeries({
+                underlying: t.underlying,
+                expiry: t.expiry,
+                optionType: t.optionType,
+                settlementAsset: t.settlementAsset,
+                groupId: $.registry.groupOf(seriesId),
+                productId: $.registry.productOf(seriesId),
+                riskParameterSetId: t.riskParameterSetId,
+                strikeWad: t.strikeWad,
+                contractSizeWad: t.contractSizeWad
             });
             $.seriesInfo[seriesId] = info;
         }

@@ -48,6 +48,10 @@ error PositionLimit();
 error PositionBelowMinimum(int256 balance);
 error InvalidLimits();
 error OpenInterestCap(bytes32 key);
+error InvalidRiskParams(uint8 reason);
+error UnknownRiskSet(bytes32 riskParameterSetId);
+error RiskSetExists(bytes32 riskParameterSetId);
+error RiskSetAlreadyAssigned(bytes32 productId);
 
 // ---- Fees and venues ----
 error FeeTooHigh(uint256 fee, uint256 max);

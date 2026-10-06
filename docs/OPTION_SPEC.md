@@ -93,7 +93,7 @@ productId = keccak256(abi.encode(keccak256("Optara.PM.Product"), underlying, set
 | Expiry | `now + minTimeToExpiry ≤ expiry ≤ now + maxTimeToExpiry` |
 | Settlement oracle | Config exists, is approved, and matches underlying + settlement asset |
 | Vol product | Matches `productId` |
-| Risk set | Exists and is enabled |
+| Risk set | The product's assigned risk set, enabled (`PortfolioRiskManager.isRiskSetForProduct`) |
 | Uniqueness | `seriesId` not used before |
 | Group size | The group has fewer than 256 series ([MATH.md](MATH.md) §14) |
 

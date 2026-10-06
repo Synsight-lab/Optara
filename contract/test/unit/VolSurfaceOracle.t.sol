@@ -378,6 +378,95 @@ contract VolSurfaceOracleTest is SurfaceFixture {
         oracle.proveNodes(n);
     }
 
+    // ------------------------------------------------------------------ VOL-010 / VOL-013: impliedVols
+
+    function _proveAll(uint64 seq, Grid memory gr) internal {
+        IVolSurfaceOracle.NodeProof[] memory n = new IVolSurfaceOracle.NodeProof[](N_TENORS * N_NODES);
+        for (uint256 i; i < N_TENORS; ++i) {
+            for (uint256 j; j < N_NODES; ++j) {
+                n[i * N_NODES + j] = _nodeProof(seq, gr, i, j);
+            }
+        }
+        oracle.proveNodes(n);
+    }
+
+    function _one(uint256 strike, uint64 expiry) internal pure returns (uint256[] memory k, uint64[] memory e) {
+        k = new uint256[](1);
+        e = new uint64[](1);
+        (k[0], e[0]) = (strike, expiry);
+    }
+
+    function test_VOL010_impliedVolStatuses() public {
+        (uint256[] memory k, uint64[] memory e) = _one(4000e18, T0 + 30 days);
+        (, uint8 st,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_NO_SURFACE());
+
+        _submit(r1);
+        (, st,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_MISSING_NODE(), "VOL-013: leaves not proven yet");
+
+        _proveAll(1, g);
+        uint256[] memory sig;
+        (sig, st,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_OK());
+        assertApproxEqAbs(sig[0], 0.6e18, 1e9, "ATM IV of the 60% smile");
+
+        (k, e) = _one(4000e18, T0 + 91 days); // beyond the last tenor
+        uint256 failed;
+        (, st, failed,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_NOT_PRICEABLE());
+        assertEq(failed, 0);
+    }
+
+    function test_VOL013_missingNodeReported() public {
+        _submit(r1);
+        IVolSurfaceOracle.NodeProof[] memory n = new IVolSurfaceOracle.NodeProof[](3);
+        n[0] = _nodeProof(1, g, 0, 2);
+        n[1] = _nodeProof(1, g, 0, 3);
+        n[2] = _nodeProof(1, g, 1, 2); // (1, 3) deliberately missing
+        oracle.proveNodes(n);
+        // k = ln(4400/4000) ≈ 0.095 lies between nodes 2 and 3; expiry between tenors 0 and 1
+        uint256[] memory k = new uint256[](2);
+        uint64[] memory e = new uint64[](2);
+        (k[0], e[0]) = (4000e18, T0 + 7 days); // needs (0,2) only
+        (k[1], e[1]) = (4400e18, T0 + 20 days);
+        (, uint8 st, uint256 failed, uint8 t, uint8 nd) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_MISSING_NODE());
+        assertEq(failed, 1);
+        assertEq(t, 1);
+        assertEq(nd, 3);
+    }
+
+    function test_VOL013_eachMissingLeafPositionReported() public {
+        _submit(r1);
+        // query between nodes 2 and 3 and between tenors 0 and 1: needs (0,2) (0,3) (1,2) (1,3)
+        uint256[] memory k = new uint256[](1);
+        uint64[] memory e = new uint64[](1);
+        (k[0], e[0]) = (4400e18, T0 + 20 days);
+        uint8[2][4] memory need = [[uint8(0), 2], [uint8(0), 3], [uint8(1), 2], [uint8(1), 3]];
+        for (uint256 m; m < 4; ++m) {
+            (, uint8 st,, uint8 t, uint8 nd) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+            assertEq(st, oracle.IV_MISSING_NODE());
+            assertEq(t, need[m][0]);
+            assertEq(nd, need[m][1]);
+            IVolSurfaceOracle.NodeProof[] memory n = new IVolSurfaceOracle.NodeProof[](1);
+            n[0] = _nodeProof(1, g, need[m][0], need[m][1]);
+            oracle.proveNodes(n);
+        }
+        (, uint8 ok,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(ok, oracle.IV_OK());
+    }
+
+    function test_VOL010_flatExtrapolationBeyondEdges() public {
+        _submit(r1);
+        _proveAll(1, g);
+        // k = ln(20000/4000) ≈ 1.61 > 1: uses node 4 only → σ = 0.6 + 0.2 = 0.8 at a tenor
+        (uint256[] memory k, uint64[] memory e) = _one(20_000e18, T0 + 30 days);
+        (uint256[] memory sig, uint8 st,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, oracle.IV_OK());
+        assertApproxEqAbs(sig[0], 0.8e18, 1e9);
+    }
+
     // ------------------------------------------------------------------ VOL-011 / VOL-012: staleness
 
     function test_VOL011_statusOverTime() public {

@@ -106,6 +106,17 @@ interface IVolSurfaceOracle {
     function setSurfaceConfig(bytes32 productId, SurfaceConfig calldata config) external;
     function setEmergencyMode(bytes32 productId, bool enabled) external;
 
+    /// @notice Implied volatility (unclamped, WAD) for several series of one product at spot `spotWad`, from the
+    ///         current report's proven leaves (MATH.md §5). Reads the grid once.
+    /// @return sigmas One IV per input (valid only when status == IV_OK).
+    /// @return status IV_OK, IV_NO_SURFACE, IV_NOT_PRICEABLE (expiry outside the tenors) or IV_MISSING_NODE.
+    /// @return failedIndex Input index of the first failure.
+    /// @return tenorIndex Missing leaf's tenor (IV_MISSING_NODE). @return nodeIndex Missing leaf's node.
+    function impliedVols(bytes32 productId, uint256 spotWad, uint256[] calldata strikes, uint64[] calldata expiries)
+        external
+        view
+        returns (uint256[] memory sigmas, uint8 status, uint256 failedIndex, uint8 tenorIndex, uint8 nodeIndex);
+
     function header(bytes32 productId) external view returns (SurfaceHeader memory);
     function kNodes(bytes32 productId) external view returns (int256[] memory);
     /// @return proven True if the leaf of the current report was proved. @return totalVarianceWad Its value.

@@ -54,3 +54,7 @@ match_path = "test/fork/**"
 
 [fmt]
 line_length = 120
+
+# Lints guard production code; test files make deliberate casts and use cheatcodes freely.
+[lint]
+ignore = ["test/**/*.sol"]

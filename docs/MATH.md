@@ -208,6 +208,12 @@ MM(a) = maxLoss(a, maintenanceStressSet)                                     (ro
 ```
 
 The stress sets are lists of scenarios in the risk parameter set (defaults in [PARAMETERS.md](PARAMETERS.md) §3).
+Losses are computed from per-leg values already rounded toward −∞ (§7); identities such as homogeneity therefore
+hold to a few wei, far below one native unit.
+
+Note: under a stale surface the short IV rises, which raises a short's current liability more than its liability in
+a deep in-the-money scenario, so IM can fall slightly while health (`equity − IM`) still falls. Health, not IM, is
+what INV-16 protects.
 
 Two details are deliberate, and both were confirmed by `reference/verify_math.py`:
 

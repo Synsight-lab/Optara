@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {LedgerSeries, Position} from "../libraries/OptaraTypes.sol";
+
 /// @title ISubAccounts
 /// @notice The ledger: subaccount owners and operators, cash, signed option balances, per-series totals, bounded
 ///         per-account position indexes and the per-group participant counter (docs/PROTOCOL_SPEC.md §1,
@@ -42,6 +44,12 @@ interface ISubAccounts {
     function participants(bytes32 groupId) external view returns (uint256);
     function seriesCountInGroup(uint256 accountId, bytes32 groupId) external view returns (uint256);
     function totals(bytes32 seriesId) external view returns (uint256 internalLong, uint256 internalShort);
+    /// @notice Every open position of the account with its series data (one call for the risk manager).
+    function positionsOf(uint256 accountId) external view returns (Position[] memory);
+    /// @notice Cached series data; `cached` is false until the series is first written in the ledger.
+    function seriesInfo(bytes32 seriesId) external view returns (LedgerSeries memory info, bool cached);
+    /// @notice Σ over the product's series of |total internal short| × contract size, in 1e36 units (q × CS).
+    function productShortNotional(bytes32 productId) external view returns (uint256);
     function accountCount() external view returns (uint256);
     function maxSeriesPerAccount() external view returns (uint256);
     function maxBucketsPerAccount() external view returns (uint256);

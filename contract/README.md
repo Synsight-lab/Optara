@@ -22,6 +22,7 @@ src/
   oracle/VolSurfaceOracle.sol     signed IV surfaces, Merkle leaves, status (ORACLES §3)
   oracle/SettlementOracle.sol     immutable configs, Chainlink round-in-force settlement (ORACLES §5)
   risk/FixedPoint.sol      units, conversions, rounding (MATH.md §1–§2)
+  risk/PortfolioRiskManager.sol  equity, IM, MM, health, close-only, risk sets (PROTOCOL_SPEC §5)
   risk/OptionPricer.sol    normal CDF, Black-76, surface IV, stale IV, position value (MATH.md §3, §5–§7)
 test/
   unit/          per-function behavior, reverts, events, worked examples

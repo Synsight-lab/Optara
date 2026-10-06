@@ -7,7 +7,7 @@ import {SubAccounts} from "../../src/accounts/SubAccounts.sol";
 import {ISubAccounts} from "../../src/interfaces/ISubAccounts.sol";
 import {IProtocolControl} from "../../src/interfaces/IProtocolControl.sol";
 import {IOptionSeriesRegistry} from "../../src/interfaces/IOptionSeriesRegistry.sol";
-import {OptionType} from "../../src/libraries/OptaraTypes.sol";
+import {OptionType, Position, LedgerSeries} from "../../src/libraries/OptaraTypes.sol";
 import {
     NotAuthorized,
     ZeroAddress,
@@ -299,6 +299,42 @@ contract SubAccountsTest is LedgerFixture {
             if (list[i] == x) return true;
         }
         return false;
+    }
+
+    function test_positionsOfReturnsSeriesData() public {
+        (, bool cachedBefore) = ledger.seriesInfo(ethP3500);
+        assertFalse(cachedBefore);
+        _delta(a, ethC4500, 2e18);
+        _delta(a, ethP3500, -1e18);
+        Position[] memory ps = ledger.positionsOf(a);
+        assertEq(ps.length, 2);
+        Position memory put = ps[0].seriesId == ethP3500 ? ps[0] : ps[1];
+        assertEq(put.balance, -1e18);
+        assertEq(put.series.strikeWad, 3500e18);
+        assertEq(uint8(put.series.optionType), uint8(OptionType.PUT));
+        assertEq(put.series.contractSizeWad, 1e18);
+        assertEq(put.series.expiry, EXP1);
+        assertEq(put.series.underlying, weth);
+        assertEq(put.series.settlementAsset, address(usdc));
+        assertEq(put.series.groupId, groupA);
+        assertEq(put.series.productId, ethUsdc);
+        assertEq(put.series.riskParameterSetId, RISK_SET);
+        (LedgerSeries memory info, bool cached) = ledger.seriesInfo(ethP3500);
+        assertTrue(cached);
+        assertEq(info.strikeWad, 3500e18);
+    }
+
+    function test_productShortNotional() public {
+        uint256 b = _newAccount(bob, address(usdc));
+        _delta(a, ethC4500, -2e18); // 2 × CS 1
+        _delta(b, ethP3500, -1e18);
+        _delta(a, btcC90k, -1e18); // other product
+        assertEq(ledger.productShortNotional(ethUsdc), 3e36);
+        _delta(a, ethC4500, 3e18); // short 2 → long 1
+        assertEq(ledger.productShortNotional(ethUsdc), 1e36);
+        _delta(b, ethP3500, 1e18);
+        assertEq(ledger.productShortNotional(ethUsdc), 0);
+        assertEq(ledger.productShortNotional(btcUsdc), 1e36);
     }
 
     function test_zeroDeltaIsNoOp() public {

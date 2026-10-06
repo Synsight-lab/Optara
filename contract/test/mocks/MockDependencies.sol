@@ -2,7 +2,12 @@
 pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ISettlementConfigs, IRiskSets} from "../../src/interfaces/IExternalDependencies.sol";
+import {
+    ISettlementConfigs,
+    IRiskSets,
+    ISettlementState,
+    IReserveStatus
+} from "../../src/interfaces/IExternalDependencies.sol";
 
 /// @notice ERC-20 with configurable decimals (stablecoins of 6 and 18 decimals, TESTING.md §4).
 contract MockERC20 is ERC20 {
@@ -49,7 +54,35 @@ contract MockRiskSets is IRiskSets {
         enabled[id] = on;
     }
 
-    function isRiskSetEnabled(bytes32 id) external view returns (bool) {
+    /// @dev Product-agnostic stand-in: the product binding is tested with the real PortfolioRiskManager.
+    function isRiskSetForProduct(bytes32, bytes32 id) external view returns (bool) {
         return enabled[id];
+    }
+}
+
+/// @notice Stand-in for SettlementWindow's finalized prices until BUILD_PLAN step 11.
+contract MockSettlementState is ISettlementState {
+    mapping(bytes32 => uint256) public price;
+    mapping(bytes32 => bool) public finalized;
+
+    function finalize(bytes32 groupId, uint256 priceWad) external {
+        (finalized[groupId], price[groupId]) = (true, priceWad);
+    }
+
+    function settlementPriceOf(bytes32 groupId) external view returns (bool, uint256) {
+        return (finalized[groupId], price[groupId]);
+    }
+}
+
+/// @notice Stand-in for the insurance/keeper reserve check until BUILD_PLAN step 8.
+contract MockReserveStatus is IReserveStatus {
+    mapping(address => bool) public unhealthy;
+
+    function setHealthy(address asset, bool healthy) external {
+        unhealthy[asset] = !healthy;
+    }
+
+    function reservesHealthy(address asset) external view returns (bool) {
+        return !unhealthy[asset];
     }
 }

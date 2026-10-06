@@ -122,18 +122,22 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| MRG-001 | Naked call IM/MM match the reference (3,417.78 / 1,447.43; cash needed 3,524.55) |
+| MRG-001 | Naked call equity / IM / MM match MATH.md §10 (−106.77 / 3,417.78 / 1,447.43; cash needed 3,524.55) through the full stack: signed surface, proven leaves, `riskOf` |
 | MRG-002 | Spread IM much lower than naked (438.22; cash needed 505.34) |
 | MRG-003 | Put example (1,423.23 / 676.31) |
-| MRG-004 | Different underlyings don't offset (INV-15) |
-| MRG-005 | Unwrap, close and deposit never lower health (property fuzz, INV-13) |
-| MRG-006 | MM ≤ IM for random portfolios, including mixed-vega ones (INV-14; IM uses the union of both sets) |
-| MRG-007 | Health states classified correctly at boundaries (equity = IM, = MM) |
-| MRG-008 | Expired-unfinalized legs valued at intrinsic with spot shocks; finalized-unsettled at exact payoff |
+| MRG-004 | Different underlyings don't offset: IM, MM and equity of an ETH + BTC account equal the sums of the single-product accounts (INV-15) |
+| MRG-005 | Receiving a long, closing part of a short and depositing never lower `equity − IM` or `equity − MM` (`previewWithDelta`, property fuzz and stateful invariant, INV-13) |
+| MRG-006 | MM ≤ IM for random portfolios (INV-14); a pinned calendar portfolio whose worst case is an MM scenario proves IM uses the union of both sets |
+| MRG-007 | Health states classified at the boundaries (equity = IM, between MM and IM, below MM; INSOLVENT once no unexpired legs remain) (`healthOf`, `requireHealthy`, `NotHealthy`) |
+| MRG-008 | Expired-unfinalized legs valued at intrinsic with spot shocks (no surface needed); finalized-unsettled at exact payoff with no scenarios; a bucket mixing live and expired legs |
 | MRG-009 | Wallet or Kuru-held wrappers give no margin credit (INV-52) |
-| MRG-010 | Margin never below the reference beyond rounding (differential fuzz) |
+| MRG-010 | Equity, IM and MM of random portfolios equal the Python reference (same NR CDF) within 1e-9 of notional, never below it beyond rounding (differential FFI fuzz); pinned portfolios where the union, the near-expiry scenarios and the scenario IV cap each decide IM match the reference within 1e-9 USDC |
 | MRG-011 | Homogeneity: scaling every position by c scales MM and the IM loss term by c (INV-41) |
-| MRG-012 | `setRiskParameterSet`: more conservative values instant, less conservative timelocked; existing series keep their set id (`RiskParameterSetUpdated`) |
+| MRG-012 | Risk sets: `createRiskSet` and `updateRiskSet` governance only (`RiskSetExists`, `UnknownRiskSet`, `InvalidRiskParams` 1–8); `raiseImBuffer`, `raiseMinIv`, `addScenarios`, lowering `setOpenInterestCap` instant for the risk admin, raising governance only; `setRiskSetEnabled` (disable: risk admin / guardian, enable: governance); `getRiskSet` (`RiskSetCreated`, `RiskSetUpdated`, `RiskSetEnabled`) |
+| MRG-013 | `assignProductRiskSet` once per product (`RiskSetAlreadyAssigned`, `ProductRiskSetAssigned`); `isRiskSetForProduct` gates series creation; `productRiskSet`; `setProductShortCap` lower instant / raise governance (`ProductShortCapSet`, `productShortCap`) |
+| MRG-014 | Freshness modes: `requireHealthy` (STRICT) reverts on stale spot or surface, a missing leaf or an unpriceable series; `riskForLiquidation` accepts a stale surface up to `maxSurfaceStale` (INV-45); `riskOf` (VIEW) reports `fresh = false`; stale surfaces raise shorts and lower longs, longs at intrinsic after `maxLongTimeValueStale`; IV clamped to the risk set (INV-16) |
+| MRG-015 | `checkOpenRisk`: `SeriesNotActive` at expiry, `ProductCloseOnly` for each cause (manual flag, missing or expired surface, low confidence, emergency mode, reserves below minimum), open-interest caps per series and per product only when `checkCaps` (`OpenInterestCap`, INV-42) |
+| MRG-016 | Margin check at 16 legs × 36 scenarios ≤ 8,000,000 gas (`GAS-001`); ledger `positionsOf`, `seriesInfo`, `productShortNotional` and surface `impliedVols` serve it in one call each |
 
 ## FEE — Fees, insurance, keeper reserve
 
@@ -359,7 +363,11 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | closeShortWithWrapper | CLR-010, CLR-021 |
 | closeShortWithInternalLong | CLR-011 |
 | updateOracles | CLR-016 |
-| setRiskParameterSet | MRG-012 |
+| createRiskSet / updateRiskSet / raiseImBuffer / raiseMinIv / addScenarios / setOpenInterestCap / setRiskSetEnabled / getRiskSet | MRG-012 |
+| assignProductRiskSet / isRiskSetForProduct / productRiskSet / setProductShortCap / productShortCap | MRG-013 |
+| requireHealthy / riskForLiquidation / riskOf / previewWithDelta | MRG-005, MRG-007, MRG-014, PRV-002 |
+| checkOpenRisk | MRG-015 |
+| positionsOf / seriesInfo / productShortNotional / impliedVols | MRG-016, ACC-008, VOL-010 |
 | setProductCloseOnly / isProductCloseOnly / upgradeAdmin | ACL-005, UPG-004 |
 | startAuction | LIQ-001, LIQ-015, LIQ-017 |
 | liquidateSlice | LIQ-002, LIQ-003, LIQ-004, LIQ-005, LIQ-007, LIQ-008, LIQ-009, LIQ-016 |
@@ -438,6 +446,10 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | InsufficientLong | CLR-022 |
 | PositionLimit | CLR-020 |
 | InvalidLimits | ACC-009 |
+| InvalidRiskParams | MRG-012, MRG-013 |
+| UnknownRiskSet | MRG-012, MRG-013 |
+| RiskSetExists | MRG-012 |
+| RiskSetAlreadyAssigned | MRG-013 |
 | PositionBelowMinimum | CLR-012 |
 | OpenInterestCap | CLR-019 |
 | FeeTooHigh | FEE-002 |

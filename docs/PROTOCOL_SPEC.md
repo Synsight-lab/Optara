@@ -48,7 +48,9 @@ to rebuild every cash balance and position.
 - `setMinPositionQty(q)`: `q` must divide the current minimum exactly (`InvalidLimits`), so every existing balance
   stays a valid multiple (INV-6). Event `MinPositionQtySet`.
 
-Views: `ownerOf`, `settlementAssetOf`, `cashOf`, `balanceOf(accountId, seriesId) → int256`,
+Views: `positionsOf(accountId) → Position[]` (each with its cached series data, one call for the risk manager),
+`seriesInfo(seriesId) → (LedgerSeries, cached)`, `productShortNotional(productId)` (Σ |short| × CS, 1e36 units),
+`ownerOf`, `settlementAssetOf`, `cashOf`, `balanceOf(accountId, seriesId) → int256`,
 `seriesOf(accountId) → bytes32[]`, `bucketsOf(accountId) → address[]`, `isAuthorized(accountId, caller)`,
 `isOperator`, `participants(groupId)`, `seriesCountInGroup(accountId, groupId)`,
 `totals(seriesId) → (internalLong, internalShort)`, `accountCount`, `maxSeriesPerAccount`, `maxBucketsPerAccount`,
@@ -160,28 +162,54 @@ Views: `getSeries(seriesId)` (reverts `UnknownSeries`), `seriesExists`, `groupOf
 ### `updateOracles(OracleUpdate u)` (payable)
 - Anyone. Applies spot updates, surface reports and node proofs without any other action.
 
-## 5. PortfolioRiskManager (views and admin)
+## 5. PortfolioRiskManager
 
-Views (use cached oracle data; also return a `fresh` flag):
+Margin per [MATH.md](MATH.md) §5–§9. Every series of a product uses the product's one risk parameter set, so a
+risk bucket (one product) has one scenario set. Values are WAD of the account's settlement asset.
+
+### 5.1 Checks used by other modules
+
+| Function | Mode | Reverts |
+|---|---|---|
+| `requireHealthy(accountId) → Risk` | STRICT: fresh spot and FRESH surface for every product the account holds | `StaleSpot`, `StaleSurface`, `MissingSurfaceNode`, `SeriesNotPriceable`, `NotHealthy(equity, IM)` |
+| `checkOpenRisk(seriesId, checkCaps)` | — | `SeriesNotActive` (at or after expiry), `ProductCloseOnly`, and with `checkCaps` (mints): `OpenInterestCap(seriesId)` if total internal short > the set's `maxOpenInterestPerSeries`, `OpenInterestCap(productId)` if product short notional > `maxShortUnderlyingWad` |
+| `riskForLiquidation(accountId) → Risk` | LIQUIDATION: fresh spot; surface FRESH or STALE (penalties applied) | `StaleSpot`, `StaleSurface` beyond `maxSurfaceStale` (INV-45) |
+
+A product is close-only when `ProtocolControl` flags it, its surface is missing or older than `maxSurfaceStale`,
+the current report has low confidence, the surface is in emergency mode, or the settlement asset's reserves are
+below their minimums.
+
+### 5.2 Views (VIEW mode: never revert on staleness; `fresh` reports it)
 
 | View | Returns |
 |---|---|
-| `equityOf(accountId)` | `int256` WAD |
-| `marginOf(accountId)` | `(IM, MM)` WAD |
-| `healthOf(accountId)` | `(state, equity, IM, MM, fresh)` |
-| `priceOf(seriesId)` | `(mid, shortPrice, longPrice)` per option, WAD |
-| `ivOf(seriesId)` | `(σ, σ_short, σ_long)` WAD |
-| `previewMint(accountId, seriesId, qty)` | `(fee, equityAfter, imAfter, ok)` |
+| `riskOf(accountId)` | `Risk {equity, initialMargin, maintenanceMargin, fresh}` |
+| `healthOf(accountId)` | `(HEALTHY / CLOSE_ONLY / LIQUIDATABLE / INSOLVENT, equity, IM, MM, fresh)`; INSOLVENT = equity < 0 with no unexpired legs left |
+| `equityOf(accountId)`, `marginOf(accountId)` | equity; `(IM, MM)` |
+| `previewWithDelta(accountId, seriesId, qtyDelta, cashDeltaNative)` | `Risk` after a hypothetical balance and cash change |
 | `previewWrap(accountId, seriesId, qty)` | `(equityAfter, imAfter, ok)` |
 | `previewWithdraw(accountId, amount)` | `(equityAfter, imAfter, ok)` |
-| `maxWithdrawable(accountId)` | native |
+| `maxWithdrawable(accountId)` | `min(cash, floor((equity − IM) / scale))`, 0 if not healthy |
+| `priceOf(seriesId)` | `(mid, shortPrice, longPrice)` per option (intrinsic once expired, payoff once finalized) |
+| `ivOf(seriesId)` | `(σ, σ_short, σ_long)` |
+| `isProductCloseOnly(productId)`, `isRiskSetForProduct(productId, setId)`, `getRiskSet(id)`, `productRiskSet(productId)`, `productShortCap(productId)` | |
 
-Admin:
+Views revert only when pricing is impossible: no spot ever (`StaleSpot`), no surface (`StaleSurface`), a missing
+leaf (`MissingSurfaceNode`) or an expiry outside the surface's tenors (`SeriesNotPriceable`). `previewMint` (which
+needs the seller fee) is in `OptionClearing`.
 
-- `setRiskParameterSet(id, RiskParams)` — risk admin; risk-increasing changes are timelocked (§12).
-- Manual product close-only flags live in `ProtocolControl` (§11). The risk manager treats a product as close-only
-  when that flag is set **or** an automatic cause applies (stale or low-confidence surface, emergency mode,
-  insurance below minimum).
+### 5.3 Admin
+
+| Function | Caller | Rule | Event |
+|---|---|---|---|
+| `createRiskSet(id, RiskParams)` | Governance | New id (`RiskSetExists`); valid (`InvalidRiskParams(reason)`: 1 buffer ≤ 5000 bps, 2 `0 < minIv < maxIv ≤ 1000%`, 3 near-expiry floor ≤ 1 day, 4 `0 < maxOpenInterestPerSeries ≤ 1e24`, 5 1–24 MM and ≤ 24 IM scenarios, 6 scenario values: shocks in [−100%, +1000%], `timeMode ≤ 2`, shift only with mode 2) | `RiskSetCreated`, `RiskSetEnabled` |
+| `updateRiskSet(id, RiskParams)` | Governance (timelocked) | Replace everything, either direction | `RiskSetUpdated` |
+| `raiseImBuffer(id, bps)`, `raiseMinIv(id, minIv)` | Risk admin or governance (instant) | Increase only (reason 7) | `RiskSetUpdated` |
+| `addScenarios(id, initialAdd, maintenanceAdd)` | Risk admin or governance (instant) | Append (a larger set can only raise a maximum loss); ≤ 24 per set | `RiskSetUpdated` |
+| `setOpenInterestCap(id, cap)` | Lower: risk admin or governance. Raise: governance | `0 < cap ≤ 1e24` | `RiskSetUpdated` |
+| `setRiskSetEnabled(id, enabled)` | Disable: risk admin, guardian or governance. Enable: governance | Disabled sets can't be used by new series; existing series keep being margined with them | `RiskSetEnabled` |
+| `assignProductRiskSet(productId, id)` | Governance, once per product (`RiskSetAlreadyAssigned`) | Set enabled (`UnknownRiskSet`); product exists (reason 8) | `ProductRiskSetAssigned` |
+| `setProductShortCap(productId, capWad)` | Lower: risk admin or governance. Raise: governance | Product has a set (reason 8) | `ProductShortCapSet` |
 
 ## 6. LiquidationModule
 
@@ -260,7 +288,9 @@ Views: `spotPrice(productId) → (priceWad, publishTime)`, `requireFreshSpot(pro
 | `setSurfaceConfig(productId, SurfaceConfig)` | Governance | `InvalidSurfaceConfig(reason)`: 1 product, 2 lifetime (1 s – 1 day), 3 move / confidence, 4 IV floor < cap ≤ 1000%, 5 stale thresholds (`staleAfter ≤ maxLongTimeValueStale ≤ maxSurfaceStale`), 6 penalty | Set | `SurfaceConfigSet` |
 | `setEmergencyMode(productId, enabled)` | Enable: guardian or governance. Disable: governance | — | Waives `maxIvMoveBps`; the risk manager treats the product as close-only while on | `EmergencyModeSet` |
 
-Views: `header(productId)`, `kNodes(productId)`, `nodeValue(productId, tenorIndex, nodeIndex) → (proven, w)` for the
+Views: `impliedVols(productId, spot, strikes[], expiries[]) → (sigmas, status, failedIndex, tenorIndex, nodeIndex)`
+(unclamped IV per series from the current report's proven leaves; status OK, NO_SURFACE, NOT_PRICEABLE or
+MISSING_NODE), `header(productId)`, `kNodes(productId)`, `nodeValue(productId, tenorIndex, nodeIndex) → (proven, w)` for the
 current report, `surfaceStatus(productId) → (NONE | FRESH | STALE | EXPIRED_DATA, staleSeconds)`, `isEmergency`,
 `surfaceConfig`, `reportDigest(report)`, `isPublisher(account) → (active, independent)`, `quorum`, `registry`.
 
@@ -395,6 +425,10 @@ error PositionLimit();
 error PositionBelowMinimum(int256 balance);
 error InvalidLimits();
 error OpenInterestCap(bytes32 key);
+error InvalidRiskParams(uint8 reason);
+error UnknownRiskSet(bytes32 riskParameterSetId);
+error RiskSetExists(bytes32 riskParameterSetId);
+error RiskSetAlreadyAssigned(bytes32 productId);
 // ---- Fees and venues ----
 error FeeTooHigh(uint256 fee, uint256 max);
 error DeadlineExpired();
@@ -449,7 +483,7 @@ ExternalLongMinted, LongWrapped, LongUnwrapped, ShortClosedWithWrapper, ShortClo
 SellerFeeCharged, BuyerFeeCharged, FeeSplit,
 SpotSourceSet, SpotUpdated, SurfaceAccepted, NodeProven, PublisherAdded, PublisherRemoved, QuorumSet,
 EmergencyModeSet, SurfaceConfigSet, SettlementConfigRegistered, SettlementConfigApproved,
-ProductCloseOnlySet, RiskParameterSetUpdated,
+ProductCloseOnlySet, RiskSetCreated, RiskSetUpdated, RiskSetEnabled, ProductRiskSetAssigned, ProductShortCapSet,
 AuctionStarted, SliceLiquidated, WrapperLiquidated, BadDebtCovered, AuctionEnded,
 GroupFinalized, AccountSettled, RecoveryRatioSet, SettlementClaimed, WrapperRedeemed, DustSwept, OracleStalled,
 InsuranceDeposited, InsuranceCovered, TreasuryWithdrawn, KeeperRewardPaid,

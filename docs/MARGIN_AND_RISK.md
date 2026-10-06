@@ -27,6 +27,10 @@ Margin is computed per **risk bucket** = one subaccount × one underlying, and t
 
 A subaccount may hold at most `maxBucketsPerAccount` underlyings and `maxSeriesPerAccount` series.
 
+Every series of a product uses the product's one risk parameter set (assigned once by governance), so all legs of a
+bucket are stressed with the same scenarios. The set's contents can change (conservative changes instantly by the
+risk admin, others through governance); the assignment can't.
+
 ## 3. Initial and maintenance margin
 
 | | Initial margin (IM) | Maintenance margin (MM) |
@@ -88,7 +92,8 @@ A **product** (underlying × settlement asset) becomes close-only when any of th
 - the surface is older than `maxSurfaceStale`;
 - the latest surface has `confidenceBps > maxConfidenceBps`;
 - the guardian sets it close-only (incident, publisher outage, emergency upgrade);
-- the insurance fund or keeper reserve for the settlement asset is below its minimum.
+- the insurance fund or keeper reserve for the settlement asset is below its minimum;
+- the product has no surface yet, or the surface is in emergency mode.
 
 In close-only, no account may open new risk on that product. Existing positions can still be reduced, liquidated and
 settled.
@@ -99,8 +104,8 @@ Per-account counts limit gas. These caps limit **economic** exposure:
 
 | Cap | Measured as | Checked on |
 |---|---|---|
-| `maxOpenInterestPerSeries` | total internal short quantity of the series | mint, liquidation transfers |
-| `maxShortUnderlyingPerProduct` | Σ \|short qty\| × CS across all series of the product | mint |
+| `maxOpenInterestPerSeries` (in the risk set) | total internal short quantity of the series | mint |
+| `maxShortUnderlyingPerProduct` (`setProductShortCap`) | Σ \|short qty\| × CS across all series of the product (maintained by the ledger) | mint |
 
 Lowering a cap never forces anyone to close. It only blocks new risk.
 
@@ -137,5 +142,8 @@ Scenario `timeMode = 2` (shift by a horizon) allows liquidation-horizon calibrat
 ## 11. Gas
 
 A margin check prices every leg in every scenario: up to `maxSeriesPerAccount × maxScenarioCount` Black-76 calls.
+Measured: 4.76M gas for 16 legs × 36 scenarios (`test/gas/PortfolioRiskManager.gas.t.sol`), against the 8M target.
+The ledger returns all positions with their series data in one call and the surface oracle returns all of a
+bucket's IVs in one call, so cross-contract calls stay at a few per bucket.
 The risk check at maximum positions must fit `maxRiskCheckGas` (benchmark before launch). If it doesn't, reduce
 `maxSeriesPerAccount` or the scenario count, or use the signed price-table fallback ([ORACLES.md](ORACLES.md) §3.9).

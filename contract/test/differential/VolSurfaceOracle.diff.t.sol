@@ -31,6 +31,56 @@ contract VolSurfaceOracleDiffTest is SurfaceFixture {
         assertEq(ecrecover(oracle.reportDigest(r), v, rr, s), pubC);
     }
 
+    /// @dev VOL-010: on-chain IV from proven leaves equals the reference model's surface interpolation.
+    /// forge-config: default.fuzz.runs = 100
+    /// forge-config: ci.fuzz.runs = 1000
+    function testFuzz_VOL010_impliedVolMatchesReference(uint256 strike, uint64 dt, uint256 baseIv) public {
+        baseIv = bound(baseIv, 0.2e18, 1.2e18);
+        Grid memory g = _grid(T0, baseIv);
+        oracle.submitReport(_report(1, T0, g), _sigs(_report(1, T0, g), _keysAB()));
+        IVolSurfaceOracle.NodeProof[] memory n = new IVolSurfaceOracle.NodeProof[](N_TENORS * N_NODES);
+        for (uint256 i; i < N_TENORS; ++i) {
+            for (uint256 j; j < N_NODES; ++j) {
+                n[i * N_NODES + j] = _nodeProof(1, g, i, j);
+            }
+        }
+        oracle.proveNodes(n);
+
+        strike = bound(strike, 500e18, 30_000e18);
+        uint64 expiry = T0 + uint64(bound(dt, 7 days, 90 days));
+        uint256[] memory k = new uint256[](1);
+        uint64[] memory e = new uint64[](1);
+        (k[0], e[0]) = (strike, expiry);
+        (uint256[] memory sig, uint8 st,,,) = oracle.impliedVols(ethUsdc, 4000e18, k, e);
+        assertEq(st, 0);
+
+        string[] memory cmd = new string[](12);
+        (cmd[0], cmd[1], cmd[2]) = ("python3", "../reference/ffi.py", "iv");
+        (cmd[3], cmd[4]) = (vm.toString(strike), vm.toString(uint256(4000e18)));
+        (cmd[5], cmd[6]) = (vm.toString(uint256(expiry)), vm.toString(uint256(T0)));
+        cmd[7] = string.concat(
+            vm.toString(uint256(g.tenors[0])),
+            ",",
+            vm.toString(uint256(g.tenors[1])),
+            ",",
+            vm.toString(uint256(g.tenors[2]))
+        );
+        string memory kn = vm.toString(g.kNodes[0]);
+        for (uint256 j = 1; j < N_NODES; ++j) {
+            kn = string.concat(kn, ",", vm.toString(g.kNodes[j]));
+        }
+        cmd[8] = kn;
+        string memory w = vm.toString(g.w[0]);
+        for (uint256 j = 1; j < g.w.length; ++j) {
+            w = string.concat(w, ",", vm.toString(g.w[j]));
+        }
+        cmd[9] = w;
+        (cmd[10], cmd[11]) = ("0", vm.toString(uint256(100e18)));
+        // forge-lint: disable-next-line(unsafe-cheatcode)
+        uint256 ref = abi.decode(vm.ffi(cmd), (uint256));
+        assertApproxEqRel(sig[0], ref, 1e9);
+    }
+
     // ------------------------------------------------------------------ JSON typed data
 
     function _castSign(IVolSurfaceOracle.SurfaceReport memory r, uint256 key) internal returns (bytes memory) {

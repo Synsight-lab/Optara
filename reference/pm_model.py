@@ -57,8 +57,14 @@ def intrinsic(is_call: bool, S: float, K: float) -> float:
     return max(S - K, 0.0) if is_call else max(K - S, 0.0)
 
 
-def black76(is_call: bool, F: float, K: float, sigma: float, T: float, cdf=ncdf_ref) -> float:
+# The CDF used when black76 is called without one. ffi.py switches it to ncdf_nr to compare with the contracts
+# exactly (they implement NR erfcc); everything else uses the exact reference.
+DEFAULT_CDF = None
+
+
+def black76(is_call: bool, F: float, K: float, sigma: float, T: float, cdf=None) -> float:
     """Per-unit option price, zero rates, F = spot. Floored at intrinsic; call <= F, put <= K."""
+    cdf = cdf or DEFAULT_CDF or ncdf_ref
     if T <= 0.0 or sigma <= 0.0 or F <= 0.0:
         return intrinsic(is_call, F, K)
     v = sigma * math.sqrt(T)

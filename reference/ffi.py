@@ -8,6 +8,8 @@ with math.erfc as the normal CDF. WAD integers in, WAD integer out.
   black76 <isCall 0|1> <F> <K> <sigma> <T>      Black-76 price (T in WAD years)
   iv <K> <S> <expiry> <reportTime> <tenors,> <kNodes,> <w row-major,> <minIv> <maxIv>
                                                 surface IV (MATH.md section 5); w has len(tenors) x len(kNodes)
+  risk <cashWad> <spot> <now> <legs>            (equity int256, IM, MM) with the default stress sets and the NR
+                                                CDF; legs = "isCall:K:CS:expiry:q:sigma;..." (WAD ints, q signed)
 """
 import sys
 
@@ -42,6 +44,19 @@ def main(argv: list[str]) -> None:
         grid = [flat[i * n:(i + 1) * n] for i in range(len(tenors))]
         min_iv, max_iv = int(argv[8]) / WAD, int(argv[9]) / WAD
         out(m.iv_from_surface(K, S, expiry, report_time, tenors, knodes, grid, min_iv, max_iv))
+    elif cmd == "risk":
+        m.DEFAULT_CDF = m.ncdf_nr
+        cash, S, now = int(argv[1]) / WAD, int(argv[2]) / WAD, float(argv[3])
+        legs = []
+        for item in argv[4].split(";"):
+            if not item:
+                continue
+            c, K, cs, expiry, q, sigma = item.split(":")
+            legs.append(m.Leg("X", c == "1", int(K) / WAD, int(cs) / WAD, float(expiry), int(q) / WAD,
+                              int(sigma) / WAD))
+        r = m.account_risk(cash, legs, {"X": S}, now, m.RiskParams())
+        words = [round(r.equity * WAD) % 2**256, max(0, round(r.im * WAD)), max(0, round(r.mm * WAD))]
+        sys.stdout.write("0x" + "".join(w.to_bytes(32, "big").hex() for w in words))
     else:
         raise SystemExit(f"unknown command {cmd}")
 

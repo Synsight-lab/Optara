@@ -134,7 +134,12 @@ Tolerances for Solidity vs reference:
 | Settlement, fees, ratios (integer math) | Exactly equal |
 
 Rule: **margin may never come out below the reference by more than rounding.** Any under-margining beyond that fails
-the build.
+the build. For margin differentials the reference uses the same NR `erfcc` CDF as the contracts (`ffi.py risk`), so
+the only differences are fixed-point rounding (tolerance 1e-9 of notional); the CDF approximation itself is checked
+separately against the exact CDF (PRC-001/002).
+
+Mutation checks: after each module, deliberately inject bugs and confirm tests fail. The harness must confirm each
+mutant **compiles**; a mutant that doesn't compile reports zero failing tests and looks like a survivor.
 
 ## 4. Mocks
 

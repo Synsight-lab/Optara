@@ -49,7 +49,7 @@ jobs:
         run: forge fmt --check
 
       - name: Build (warnings are errors)
-        run: forge build --deny-warnings
+        run: forge build --deny warnings
 
       - name: Storage layout (upgradeable modules use ERC-7201 only; slot constants correct)
         run: python3 script/storage_check.py
