@@ -24,7 +24,7 @@ import {
     AssetMismatch,
     NonExactTransfer,
     SeriesNotActive,
-    GroupFinalized,
+    GroupAlreadyFinalized,
     ProductCloseOnly,
     InsuranceBelowMinimum,
     StaleSpot,
@@ -450,7 +450,7 @@ contract OptionClearingTest is ClearingFixture {
 
         settlementState.finalize(group30, 4100e18);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(GroupFinalized.selector, group30));
+        vm.expectRevert(abi.encodeWithSelector(GroupAlreadyFinalized.selector, group30));
         clearingModule.closeShortWithWrapper(acct, c4500, 0.5e18);
     }
 
@@ -530,7 +530,7 @@ contract OptionClearingTest is ClearingFixture {
 
         settlementState.finalize(group30, 4100e18);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(GroupFinalized.selector, group30));
+        vm.expectRevert(abi.encodeWithSelector(GroupAlreadyFinalized.selector, group30));
         clearingModule.closeShortWithInternalLong(bobAcct, acct, c4500, 1e18, _empty());
     }
 

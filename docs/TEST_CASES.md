@@ -50,7 +50,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | CLR-007 | Unwrap: wrapper burned from caller, balance +qty (`LongUnwrapped`), no oracle data needed (INV-4, 13) |
 | CLR-008 | Unwrap or mint into an account with a different settlement asset reverts (`AssetMismatch`, INV-5) |
 | CLR-009 | Wrap: needs a long, healthy after (`LongWrapped`); reverts if the long was needed as a hedge (INV-3, 11) |
-| CLR-010 | Close with wrapper reduces the short (`ShortClosedWithWrapper`); reverts if `qty` > short; works after expiry, reverts after finalization (`GroupFinalized`) |
+| CLR-010 | Close with wrapper reduces the short (`ShortClosedWithWrapper`); reverts if `qty` > short; works after expiry, reverts after finalization (`GroupAlreadyFinalized`) |
 | CLR-011 | Close with internal long between two of the caller's accounts (`ShortClosedWithInternalLong`); the source must stay healthy (INV-11); the target's health never falls (INV-13) |
 | CLR-012 | A non-zero balance below `minPositionQty` reverts (INV-6, `PositionBelowMinimum`) |
 | CLR-013 | Participant counter updates on every 0↔non-zero change and counts accounts, not series (INV-27) |
@@ -188,8 +188,8 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | STL-001 | Finalize with a valid round-in-force proof (successor or latest round); for any round history exactly one round is provable (`verify`); second finalize reverts (INV-26) |
 | STL-002 | Too early (`FinalizationTooEarly`, `earliestFinalization`), each wrong proof reverts with its reason (`InvalidSettlementProof` 1–12): earlier round, round after the end, skipped round, false latest claim, missing round or successor, wrong proof count; stale or non-positive observation is invalid; Chainlink phase boundaries handled (`isImmediateSuccessor`) |
 | STL-003 | Fallback feed only after the primary is proven invalid; refused while the primary is valid; derived sources: half-up division, leg skew limit, invalid leg |
-| STL-004 | `ORACLE_STALLED` after the deadline (`OracleStalled`); late valid finalize works |
-| STL-005 | Wrapper supply snapshot at finalization; supply only decreases afterwards (INV-33) |
+| STL-004 | `ORACLE_STALLED` after the deadline; `flagOracleStalled` emits `OracleStalled` once and reverts before the deadline or after finalization (`OracleNotStalled`); late valid finalize works |
+| STL-005 | Wrapper supply snapshot at finalization; supply only decreases afterwards (INV-33); `GroupFinalized` carries the capped price, observation time and participant count |
 | STL-006 | `settleAccountGroup` nets all series; debt collected into the pool; unpaid recorded; balances zeroed; counter decremented (`AccountSettled`) |
 | STL-007 | Ratio can't be computed while participants > 0 (INV-28, `SettlementIncomplete`) |
 | STL-008 | Netting example [MATH.md](MATH.md) §13.2: ratio exactly 1 (INV-30) |
@@ -197,16 +197,17 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | STL-010 | The ratio is the same for wrappers and internal creditors and is set once (INV-29, `RatioAlreadySet`, `RecoveryRatioSet`) |
 | STL-011 | Redemption order irrelevant: random orders give identical per-unit payouts (INV-32) |
 | STL-012 | Total payouts ≤ collected + insurance; pool = collected + insurance − payouts, never negative (INV-31) |
-| STL-013 | Zero-payoff wrappers redeem for 0 and burn (`WrapperRedeemed`) |
+| STL-013 | Zero-payoff wrappers redeem for 0 and burn (`WrapperRedeemed`); an in-the-money put pays `K − S*`; payouts go to the named recipient |
 | STL-014 | `claimSettlement` credits cash once (`SettlementClaimed`) |
 | STL-015 | Batch settle skips non-participants; rewards paid |
-| STL-016 | `sweepDust` only when everything is redeemed and claimed (`DustSwept`) |
+| STL-016 | `sweepDust` only when everything is redeemed and claimed (`PayoutsOutstanding`, `DustSwept`) |
 | STL-017 | Settlement identity: for random groups, Σ account nets + wrapper claims == 0 exactly at finalization (INV-47) |
 | STL-018 | Settling the same account twice reverts (`NotParticipant`); claiming twice reverts (`NothingToClaim`) (INV-48) |
 | STL-019 | Rounding: debts round up, credits, ratio and payouts round down (INV-49) |
 | STL-020 | Any address can settle any participant; rewards escalate; settlement completes for every group (LIV-2) |
 | STL-021 | Redeem or claim before the ratio reverts (`RatioNotSet`); settle before finalization reverts (`GroupNotFinalized`) |
 | STL-022 | `registerConfig` (oracle admin) stores an approved config under the hash of its contents that can never change; duplicates and each invalid config revert (`SettlementConfigExists`, `InvalidSettlementConfig` 1–6); `setConfigApproved`: governance approves, guardian may revoke, unknown id reverts (`UnknownSettlementConfig`); `isConfigUsable` matches the pair; `stalledAfter` (`SettlementConfigRegistered`, `SettlementConfigApproved`) |
+| STL-023 | The payoff price is capped per group at `floor(1e50 / CS)` over its series (C-14); unknown groups revert (`UnknownGroup`); `groupState` walks ACTIVE → EXPIRED → (ORACLE_STALLED) → FINALIZED → ALL_SETTLED → REDEEMABLE; settling one group leaves other groups' positions untouched |
 
 ## VEN — Venues
 
@@ -388,6 +389,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | computeRecoveryRatio | STL-007, STL-008, STL-009, STL-010 |
 | claimSettlement | STL-014, STL-018 |
 | redeemWrapper | STL-011, STL-013, STL-021 |
+| flagOracleStalled / isOracleStalled | STL-004 |
+| groupState / groupAccounting / settlementPriceOf / creditOf / wrapperSupplyAtFinalization | STL-005, STL-023, PRV-005 |
+| previewSettle / previewRedeem | PRV-004 |
 | sweepDust | STL-016 |
 | setFeeRates / feeRates | FEE-006 |
 | setSplit | FEE-010 |
@@ -438,7 +442,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | UnknownAccount | ACC-006 |
 | AssetMismatch | CLR-008 |
 | SeriesNotActive | CLR-006 |
-| GroupFinalized | CLR-010, STL-001 |
+| GroupAlreadyFinalized | CLR-010, STL-001 |
 | GroupNotFinalized | STL-021 |
 | ProductCloseOnly | CLR-018 |
 | InsuranceBelowMinimum | CLR-018 |
@@ -486,6 +490,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | SettlementIncomplete | STL-007 |
 | RatioAlreadySet | STL-010 |
 | RatioNotSet | STL-021 |
+| UnknownGroup | STL-023 |
+| OracleNotStalled | STL-004 |
+| PayoutsOutstanding | STL-016 |
 | NothingToClaim | STL-018 |
 | InvalidSurfaceReport | VOL-002 |
 | InvalidSignatures | VOL-005 |

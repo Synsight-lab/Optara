@@ -26,7 +26,7 @@ error GroupFull(bytes32 groupId);
 
 // ---- Lifecycle ----
 error SeriesNotActive(bytes32 seriesId);
-error GroupFinalized(bytes32 groupId);
+error GroupAlreadyFinalized(bytes32 groupId);
 error GroupNotFinalized(bytes32 groupId);
 
 // ---- Risk gates ----
@@ -78,6 +78,9 @@ error SettlementIncomplete(uint256 participantsLeft);
 error RatioAlreadySet();
 error RatioNotSet();
 error NothingToClaim();
+error UnknownGroup(bytes32 groupId);
+error OracleNotStalled(bytes32 groupId, uint64 stalledAfter);
+error PayoutsOutstanding(bytes32 groupId);
 
 // ---- Oracles ----
 error InvalidSpotSource(uint8 reason);

@@ -108,3 +108,36 @@ contract FeeOnTransferToken is ERC20 {
         super._update(from, to, value);
     }
 }
+
+/// @notice Stand-in SettlementOracle for SettlementWindow unit tests: prices are set per (config, expiry); verify
+///         reverts until one is set; the stall deadline is expiry + 7 days.
+contract MockSettlementOracle {
+    struct Answer {
+        uint256 price;
+        uint64 observationTime;
+        bool set;
+    }
+
+    mapping(bytes32 => mapping(uint64 => Answer)) internal answers;
+    uint64 public constant MAX_FINALIZATION_DELAY = 7 days;
+
+    error NoPrice();
+
+    function setPrice(bytes32 configId, uint64 expiry, uint256 price) external {
+        answers[configId][expiry] = Answer(price, expiry, true);
+    }
+
+    function verify(bytes32 configId, uint64 expiry, bytes calldata)
+        external
+        view
+        returns (uint256 priceWad, uint64 observationTime, uint8 sourceUsed)
+    {
+        Answer memory a = answers[configId][expiry];
+        if (!a.set) revert NoPrice();
+        return (a.price, a.observationTime, 0);
+    }
+
+    function stalledAfter(bytes32, uint64 expiry) external pure returns (uint64) {
+        return expiry + MAX_FINALIZATION_DELAY;
+    }
+}

@@ -36,7 +36,15 @@ import {
 import {IPyth} from "../../src/interfaces/IPyth.sol";
 import {Roles} from "../../src/governance/Roles.sol";
 import {OptionType, ProductConfig, SeriesParams} from "../../src/libraries/OptaraTypes.sol";
-import {MockERC20, MockSettlementConfigs, MockSettlementState, MockReserveStatus} from "../mocks/MockDependencies.sol";
+import {
+    MockERC20,
+    MockSettlementConfigs,
+    MockSettlementState,
+    MockReserveStatus,
+    MockSettlementOracle
+} from "../mocks/MockDependencies.sol";
+import {SettlementWindow} from "../../src/settlement/SettlementWindow.sol";
+import {ISettlementWindow} from "../../src/interfaces/ISettlementWindow.sol";
 import {MockPyth} from "../mocks/MockPyth.sol";
 
 /// @notice Full stack for margin tests: registry (with the real risk manager as its risk-set checker), factory,
@@ -54,6 +62,8 @@ abstract contract RiskFixture is GovernanceFixture {
     FeeController internal fees;
     OptionClearing internal clearingModule; // set only when `_deployRealClearing()` is true
     LiquidationModule internal liquidation; // set only when `_deployRealLiquidation()` is true
+    SettlementWindow internal window; // set only when `_deployRealSettlement()` is true
+    address internal settlementOracle; // the window's oracle: a MockSettlementOracle unless overridden
     address internal router = makeAddr("VenueRouter");
     MockPyth internal pyth;
     MockSettlementConfigs internal settlementConfigs;
@@ -110,6 +120,8 @@ abstract contract RiskFixture is GovernanceFixture {
         address feesAddr = _nextProxy(7);
         if (_deployRealClearing()) clearing = _nextProxy(8);
         if (_deployRealLiquidation()) liquidationModule = _nextProxy(9);
+        if (_deployRealSettlement()) settlementWindow = _nextProxy(10);
+        address settlementStateAddr = _deployRealSettlement() ? settlementWindow : address(settlementState);
         IProtocolControl c = IProtocolControl(address(pc));
         registry = OptionSeriesRegistry(
             upgradeAdmin.deployProxy(
@@ -175,7 +187,7 @@ abstract contract RiskFixture is GovernanceFixture {
                         IOptionSeriesRegistry(registryAddr),
                         ILiveSpotOracle(spotAddr),
                         IVolSurfaceOracle(surfaceAddr),
-                        ISettlementState(address(settlementState)),
+                        ISettlementState(settlementStateAddr),
                         IReserveStatus(_useRealReserves() ? feesAddr : address(reserves))
                     )
                 )
@@ -208,6 +220,35 @@ abstract contract RiskFixture is GovernanceFixture {
         assertEq(address(fees), feesAddr, "address prediction");
         if (_deployRealClearing()) _deployClearing(c);
         if (_deployRealLiquidation()) _deployLiquidation(c);
+        if (_deployRealSettlement()) _deploySettlement(c);
+    }
+
+    function _deploySettlement(IProtocolControl c) private {
+        settlementOracle = _settlementOracleFor(c);
+        ISettlementWindow.Modules memory m = ISettlementWindow.Modules({
+            ledger: address(ledger),
+            registry: address(registry),
+            settlementOracle: settlementOracle,
+            fees: address(fees),
+            insurance: address(insurance),
+            clearing: address(clearingModule)
+        });
+        window = SettlementWindow(
+            upgradeAdmin.deployProxy(
+                address(new SettlementWindow()), abi.encodeCall(SettlementWindow.initialize, (c, m))
+            )
+        );
+        assertEq(address(window), settlementWindow, "address prediction");
+    }
+
+    /// @dev The SettlementWindow's oracle; override to use the real SettlementOracle.
+    function _settlementOracleFor(IProtocolControl) internal virtual returns (address) {
+        return address(new MockSettlementOracle());
+    }
+
+    /// @dev Override (together with real clearing and liquidation) to deploy the real SettlementWindow.
+    function _deployRealSettlement() internal pure virtual returns (bool) {
+        return false;
     }
 
     function _deployLiquidation(IProtocolControl c) private {
@@ -242,7 +283,7 @@ abstract contract RiskFixture is GovernanceFixture {
             insurance: address(insurance),
             spot: address(spot),
             surface: address(surface),
-            settlementState: address(settlementState),
+            settlementState: _deployRealSettlement() ? settlementWindow : address(settlementState),
             liquidationModule: liquidationModule,
             settlementWindow: settlementWindow
         });

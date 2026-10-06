@@ -153,7 +153,7 @@ are checked with the account's asset (collateral) or the series' asset and produ
 - Event `LongUnwrapped(accountId, seriesId, qty, from)`.
 
 ### `closeShortWithWrapper(uint256 accountId, bytes32 seriesId, uint256 qty)`
-- Pause bit `CLOSE`; group not finalized (`GroupFinalized`; allowed after expiry until finalization); authorized;
+- Pause bit `CLOSE`; group not finalized (`GroupAlreadyFinalized`; allowed after expiry until finalization); authorized;
   `qty > 0`; `balance ≤ −qty` (`InsufficientShort`).
 - `wrapper.burn(msg.sender, qty)`; `balance += qty`.
 - No oracle data or margin check.
@@ -293,18 +293,63 @@ Views: `previewSlice(accountId, underlying, sliceBps) → (sliceMark, sliceMM, d
 
 ## 7. SettlementWindow
 
-| Function | Caller | Checks | Effects | Event |
-|---|---|---|---|---|
-| `finalizeGroup(groupId, settlementData)` | Anyone | Group exists, not finalized; settlement oracle proof valid | Store price; snapshot wrapper supplies; pay finalize reward | `GroupFinalized` |
-| `settleAccountGroup(accountId, groupId)` | Anyone | Finalized; account is a participant | Net the account, collect debt, record credit, zero balances, decrement participants, pay reward | `AccountSettled` |
-| `settleAccountsGroup(accountIds[], groupId)` | Anyone | Same, per account; skips non-participants | Batch of the above | `AccountSettled` × n |
-| `computeRecoveryRatio(groupId)` | Anyone | Finalized; `participants == 0`; ratio not set | Insurance cover; set ratio (once) | `InsuranceCovered` (if insurance paid), `RecoveryRatioSet` |
-| `claimSettlement(accountId, groupId)` | Anyone (pays into the account) | Ratio set; credit unclaimed | `cash += credit × ratio` | `SettlementClaimed` |
-| `redeemWrapper(seriesId, qty, recipient)` | Wrapper holder | Ratio set; `qty > 0` | Burn; pay `floor(qty × payoff × ratio)` | `WrapperRedeemed` |
-| `sweepDust(groupId)` | Anyone | All wrappers redeemed and credits claimed | Remaining pool → insurance | `DustSwept` |
+Formulas: [MATH.md](MATH.md) §13; lifecycle: [SETTLEMENT.md](SETTLEMENT.md). Every amount is computed from exact
+numerators `q × intrinsic × CS` (1e54 scale) and rounded once: debts up; credits, the ratio and payouts down
+(INV-49). Account cash and group pools both live in `OptionClearing` custody, so collecting a debt or paying a credit
+moves no tokens; insurance cover comes in through `InsuranceFund.cover`, wrapper payouts go out through
+`OptionClearing.payOut`, swept dust through `OptionClearing.payInsurance`. Unknown groups revert `UnknownGroup`.
+Pause bits (asset and product scope): `FINALIZE`, `SETTLE` (settling and the ratio), `CLAIM_REDEEM` (claims,
+redemptions, sweep).
 
-Views: `groupState(groupId)`, `settlementPrice(groupId)`, `recoveryRatio(groupId)`,
-`previewSettle(accountId, groupId)`, `previewRedeem(seriesId, qty)`, `isOracleStalled(groupId)`.
+### `finalizeGroup(bytes32 groupId, bytes settlementData)`
+- Anyone. Not finalized (`GroupAlreadyFinalized`, INV-26). `SettlementOracle.verify` proves the round in force
+  (`FinalizationTooEarly`, `InvalidSettlementProof(reason)`).
+- Caps the payoff price at `min(S*, min over the group's series of floor(1e50 / CS))` (MATH.md §14, C-14), snapshots
+  every series' wrapper supply (INV-33) and sums the wrapper claims at the capped price.
+- Pays the caller `finalizeRewardNative` (`FeeController.payFinalizeReward`). Event
+  `GroupFinalized(groupId, priceWad, observationTime, participants)`.
+
+### `flagOracleStalled(bytes32 groupId)`
+- Anyone, once `now ≥ stalledAfter(config, expiry)` and the group is not finalized (`OracleNotStalled(groupId,
+  stalledAfter)`). Emits `OracleStalled(groupId, stalledAfter)` once; later calls are no-ops. The group stays
+  finalizable by a late authentic round.
+
+### `settleAccountGroup(uint256 accountId, bytes32 groupId)` / `settleAccountsGroup(uint256[] accountIds, bytes32 groupId)`
+- Anyone. Finalized (`GroupNotFinalized`). Single: the account is a participant (`NotParticipant`, INV-48); batch:
+  non-participants (and repeats) are skipped.
+- Nets all the account's series in the group into `N_a`, zeroes those balances through the ledger (decrementing
+  `participants`, INV-27). Debt: `ceil(−N_a / D)`, collects `min(cash, debt)` into the pool, the rest is unpaid.
+  Credit: records `creditN = N_a`.
+- Pays the caller the escalating settle reward per account settled. Event
+  `AccountSettled(accountId, groupId, netNumerator, collected, unpaid)`.
+
+### `computeRecoveryRatio(bytes32 groupId)`
+- Anyone. Finalized; ratio not set (`RatioAlreadySet`); `participants == 0` (`SettlementIncomplete(n)`, INV-28).
+- `grossClaim = ceil((wrapperClaimN + netCreditN) / D)`; if it exceeds `collected`, `InsuranceFund.cover` pays up to
+  the shortfall into the pool (`InsuranceCovered(groupId, asset, amount)` if non-zero).
+- `ratio = grossClaimN == 0 ? 1 : min(1, floor((collected + insurance) × D × 1e18 / grossClaimN))`, stored once
+  (INV-29). Event `RecoveryRatioSet(groupId, ratioWad, grossClaim, collected, insuranceContribution)`.
+
+### `claimSettlement(uint256 accountId, bytes32 groupId)`
+- Anyone (pays into the account). Ratio set (`RatioNotSet`); credit not yet claimed (`NothingToClaim`, INV-48).
+- `cash += floor(creditN × ratio / (D × 1e18))`, taken from the pool. Event `SettlementClaimed(accountId, groupId,
+  amount)`.
+
+### `redeemWrapper(bytes32 seriesId, uint256 qty, address recipient)`
+- Wrapper holder. `qty > 0` (`ZeroAmount`), `recipient ≠ 0` (`InvalidRecipient`), ratio set (`RatioNotSet`).
+- Burns `qty` from the caller and pays `floor(qty × intrinsic × CS × ratio / (D × 1e18))` from the pool to
+  `recipient` (zero-payoff wrappers burn for 0). Event `WrapperRedeemed(seriesId, holder, recipient, qty, payout)`.
+
+### `sweepDust(bytes32 groupId)`
+- Anyone. Ratio set; every credit claimed and every series' wrapper supply 0 (`PayoutsOutstanding(groupId)`).
+- The remaining pool (rounding dust) goes to `InsuranceFund`. Event `DustSwept(groupId, amount)`.
+
+Views: `settlementPriceOf(groupId) → (finalized, priceWad)` (the risk manager's and clearing's settlement state),
+`groupState(groupId)` (ACTIVE, EXPIRED, ORACLE_STALLED, FINALIZED, ALL_SETTLED, REDEEMABLE),
+`groupAccounting(groupId)`, `settlementPrice(groupId)`, `recoveryRatio(groupId) → (set, ratioWad)`,
+`previewSettle(accountId, groupId) → (netNumerator, debt, collectable)`, `previewRedeem(seriesId, qty) → (payout,
+ratioFixed)` (ratio 1 until fixed), `isOracleStalled(groupId)`, `creditOf(accountId, groupId)`,
+`wrapperSupplyAtFinalization(seriesId)`, `modules()`.
 
 ## 8. FeeController and InsuranceFund
 
@@ -485,7 +530,7 @@ error SeriesExists(bytes32 seriesId);
 error GroupFull(bytes32 groupId);
 // ---- Lifecycle ----
 error SeriesNotActive(bytes32 seriesId);
-error GroupFinalized(bytes32 groupId);
+error GroupAlreadyFinalized(bytes32 groupId);
 error GroupNotFinalized(bytes32 groupId);
 // ---- Risk gates ----
 error ProductCloseOnly(bytes32 productId);
@@ -532,6 +577,9 @@ error SettlementIncomplete(uint256 participantsLeft);
 error RatioAlreadySet();
 error RatioNotSet();
 error NothingToClaim();
+error UnknownGroup(bytes32 groupId);
+error OracleNotStalled(bytes32 groupId, uint64 stalledAfter);
+error PayoutsOutstanding(bytes32 groupId);
 // ---- Oracles ----
 error InvalidSpotSource(uint8 reason);
 error InvalidSpotPrice(bytes32 productId);

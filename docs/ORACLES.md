@@ -240,7 +240,8 @@ This is the same rule as the V2 `ChainlinkSettlementAdapter`. Its code is in git
 
 ### 5.3 ORACLE_STALLED
 
-If no valid price exists by `expiry + maxFinalizationDelay`, the group is flagged `ORACLE_STALLED`:
+If no valid price exists by `expiry + maxFinalizationDelay`, the group is `ORACLE_STALLED`
+(`SettlementWindow.groupState`; `flagOracleStalled` emits `OracleStalled` once):
 
 - no redemption, no settlement;
 - no invented or current-spot price;

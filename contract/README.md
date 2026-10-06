@@ -17,6 +17,7 @@ src/
   governance/Roles.sol, PauseBits.sol
   libraries/Errors.sol     every custom error (mirrored in PROTOCOL_SPEC §13)
   libraries/OptaraTypes.sol  shared structs and enums (series terms, products, groups)
+  settlement/SettlementWindow.sol   finalize, settle, recovery ratio, claims, redemption, dust (PROTOCOL_SPEC §7)
   series/OptionSeriesRegistry.sol   settlement assets, products, write-once series terms (PROTOCOL_SPEC §2)
   series/ExternalOptionFactory.sol  one wrapper clone per series at a deterministic address
   series/ExternalOptionWrapper.sol  ERC-20 + permit long token; fixed minter and burners
@@ -36,7 +37,7 @@ test/
   differential/  Solidity vs the Python reference model (vectors + FFI)
   gas/           gas benchmarks with regression ceilings
   harness/       external wrappers around internal libraries (so tests can catch reverts)
-  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk stack, clearing stack, liquidation stack)
+  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk, clearing, liquidation and settlement stacks)
 script/
   coverage_gate.py   TESTING.md §7 thresholds on an lcov report
   storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct

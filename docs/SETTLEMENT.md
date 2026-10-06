@@ -19,7 +19,7 @@ early redeemers would be paid in full and late ones could find the pool empty. I
 ```text
 ACTIVE ──(now ≥ expiry)──> EXPIRED
 EXPIRED ──(finalizeGroup)──> FINALIZED            // price fixed, redemption closed, settlement window open
-EXPIRED ──(now ≥ expiry + maxFinalizationDelay)──> flagged ORACLE_STALLED (still finalizable later)
+EXPIRED ──(now ≥ expiry + maxFinalizationDelay)──> ORACLE_STALLED (flagOracleStalled emits once; still finalizable)
 FINALIZED ──(participants == 0)──> ALL_SETTLED
 ALL_SETTLED ──(computeRecoveryRatio)──> REDEEMABLE // ratio fixed, redemption and claims open
 ```
@@ -43,7 +43,8 @@ function finalizeGroup(bytes32 groupId, bytes calldata settlementData) external;
 
 - Permissionless. Pays `finalizeRewardNative` from the keeper reserve.
 - `SettlementOracle` verifies the round-in-force proof ([ORACLES.md](ORACLES.md) §5).
-- Stores `settlementPrice[groupId]` once. It can never change.
+- Stores `settlementPrice[groupId]` once. It can never change. The stored price is capped per group at
+  `min over the group's series of floor(1e50 / CS)` so every payoff sum fits in `int256` ([MATH.md](MATH.md) §14).
 - Snapshots `wrapperSupplyAtFinalization[seriesId]` for every series in the group. Wrapper supply can only fall
   after this, through redemption.
 - Emits `GroupFinalized(groupId, priceWad, observationTimestamp, participants)`.
@@ -84,6 +85,10 @@ function settleAccountGroup(uint256 accountId, bytes32 groupId) external;
 
 Credits are **not** counted as equity or made withdrawable until the ratio is fixed and the account claims them.
 
+`settleAccountsGroup(accountIds, groupId)` settles a batch and skips accounts that are not (or no longer)
+participants, so keepers can submit overlapping batches. A batch of 20 accounts with two series each costs about
+3.3M gas (GAS-002).
+
 ## 7. Recovery ratio
 
 ```solidity
@@ -121,7 +126,11 @@ pool[groupId] = collected + insuranceContribution − Σ payouts so far
 invariant:      pool ≥ Σ remaining payouts at the fixed ratio       (INV-6)
 ```
 
-The pool's stablecoins stay in `OptionClearing` custody, tracked separately from account cash.
+The pool's stablecoins stay in `OptionClearing` custody, tracked separately from account cash
+(`groupAccounting(groupId).pool`). Collecting a debt or paying a credit moves no tokens; insurance cover comes in
+through `InsuranceFund.cover`, wrapper payouts leave through `OptionClearing.payOut` and swept dust through
+`OptionClearing.payInsurance`. So `OptionClearing`'s balance always equals account cash plus every group's pool
+(INV-7). `sweepDust` reverts `PayoutsOutstanding` until every wrapper is redeemed and every credit claimed.
 
 ## 10. Example
 
@@ -140,6 +149,7 @@ receives 649.999999 (the ratio and payout round down; the 1 micro-USDC of dust i
 
 ## 11. Oracle failure
 
-If the price never arrives: the group stays `EXPIRED` and is flagged `ORACLE_STALLED` after the deadline. Positions
+If the price never arrives: the group stays `EXPIRED` and reads `ORACLE_STALLED` after the deadline (anyone may
+call `flagOracleStalled` to emit `OracleStalled` once, for indexers and alerts). Positions
 remain reserved; closes with wrappers stay open; nothing is redeemed. A late authentic round can still finalize. No
 current-spot or invented price is ever used. See [ORACLES.md](ORACLES.md) §5.3.

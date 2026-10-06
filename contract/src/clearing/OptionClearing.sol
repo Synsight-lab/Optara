@@ -26,7 +26,7 @@ import {
     InvalidRecipient,
     NonExactTransfer,
     SeriesNotActive,
-    GroupFinalized,
+    GroupAlreadyFinalized,
     InsuranceBelowMinimum,
     InsufficientShort,
     InsufficientLong,
@@ -305,7 +305,7 @@ contract OptionClearing is OptaraModule, IOptionClearing {
         _requireNotPaused(PauseBits.CLOSE, t.settlementAsset, t.volSurfaceProductId);
         bytes32 groupId = $.registry.groupOf(seriesId);
         (bool finalized,) = $.settlementState.settlementPriceOf(groupId);
-        if (finalized) revert GroupFinalized(groupId);
+        if (finalized) revert GroupAlreadyFinalized(groupId);
     }
 
     /// @dev Computes the seller fee, checks the user's maximum, debits it from cash and hands it to FeeController.
