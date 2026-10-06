@@ -1,881 +1,137 @@
-# Optara V2 Product Requirements Document
+# Product Requirements — Optara PM
 
-**Document type:** Product Requirements Document  
-**Protocol:** Optara  
-**Target release:** V2 solvency-first MVP  
-**Network target:** Monad  
-**Settlement asset:** Pair-specific approved stablecoin  
-**Status:** Engineering baseline
+## 1. Summary
 
----
+Optara PM lets anyone write and trade **standard, uncapped European calls and puts** on Monad with **portfolio
+margin**. Writers post margin sized by stress tests instead of the full worst case, so they can sell options with
+far less capital than a fully collateralized system. Long claims are ERC-20 tokens that trade on Kuru and any other
+venue. Optara never runs a matching engine: venues trade, Optara clears.
 
-## 1. Product summary
+## 2. Problem
 
-Optara V2 is an on-chain options clearing protocol for **European-style capped calls and puts**.
+| Today (capped V2) | Problem |
+|---|---|
+| Every option has a maximum payout (a "cap") | Buyers don't get a standard option; calls stop paying above the cap |
+| Writers lock the exact worst-case loss | Capital-inefficient: a call worth ~107 USDC needed up to its full cap in collateral |
+| Premium received on Kuru is not margin | Writers must move money back manually |
 
-The product allows a seller to create a bounded option obligation using the **stablecoin quoted by that option pair** as margin, mint a transferable ERC-20 long option token, and allow that long token to trade on Kuru or other compatible venues. At expiry, the long token redeems for a capped payoff in that same settlement stablecoin, determined by an oracle settlement price. Applications SHOULD interact through modular packages (`@optara/sdk`, `@optara/math`, and `@optara/kuru`), but these packages are non-authoritative: the Solidity contracts independently enforce every safety-critical rule.
-
-The central product requirement is:
-
-> A user must never be allowed to create, modify, or withdraw from an Optara portfolio in a way that leaves the core V2 system unable to cover the exact maximum contractual settlement loss of that portfolio.
-
-The core V2 is designed to obtain capital efficiency through:
-
-- capped liabilities;
-- cash settlement rather than physical delivery;
-- exact netting of compatible long and short positions;
-- shared account collateral across compatible positions;
-- transferable long option tokens;
-- secondary-market liquidity through Kuru.
-
-It does **not** obtain capital efficiency by allowing unlimited-loss calls to remain materially undercollateralized and hoping liquidation occurs in time.
-
----
-
-## 2. Problem statement
-
-Fully collateralized on-chain options are safe but often capital-inefficient:
-
-- a covered call may require locking the full underlying asset;
-- collateral is often isolated per position;
-- long hedges may not reduce required collateral;
-- users cannot easily reuse compatible protection across a portfolio;
-- option liquidity becomes fragmented if every protocol also builds its own exchange.
-
-At the other extreme, undercollateralized naked options can create bad debt when prices gap faster than liquidation.
-
-Optara V2 must provide a middle design:
-
-```text
-bounded contractual payout
-+ exact worst-case portfolio margin
-+ pair-stablecoin settlement
-+ transferable long option tokens
-+ external trading venue integration
-```
-
----
+Traders expect options that behave like those on Deribit or Binance: uncapped payoff, portfolio margin,
+liquidation if margin runs low.
 
 ## 3. Goals
 
-### G1. Bounded seller liability
+| ID | Goal |
+|---|---|
+| G1 | Standard payoffs: calls `max(S−K,0)`, puts `max(K−S,0)`, no caps. |
+| G2 | Portfolio margin: one account's shorts and longs on the same underlying offset each other. |
+| G3 | Long claims are standard ERC-20 tokens tradable on any venue. |
+| G4 | Kuru is the first venue, plugged in through an adapter. The protocol works without it. |
+| G5 | Permissionless liquidation with no centralized matching engine. |
+| G6 | Losses beyond collateral are absorbed by an insurance fund first, then shared equally by all long holders of the affected group. |
+| G7 | Protocol fees fund the insurance fund, keepers and treasury. |
+| G8 | Upgradeable contracts with timelocks, while series terms and finalized results can never be rewritten. |
+
+## 4. Non-goals (v1)
+
+- No centralized or in-house order matching (an adapter slot exists for later).
+- No spot or perpetual positions, and no delta offsets from them.
+- No collateral other than the subaccount's single settlement stablecoin.
+- No cross-stablecoin margin.
+- No American (early) exercise.
+- No offsets between different underlyings (each underlying is margined separately and the results are added).
+- No margin credit for anything held outside Optara (Kuru balances, wallet tokens).
+
+## 5. Users
+
+| User | What they do | What they need |
+|---|---|---|
+| **Writer** | Deposits stablecoin, mints wrappers, sells them | Low margin, clear liquidation risk, fee preview |
+| **Buyer** | Buys wrappers on Kuru, holds or redeems | Full payoff, honest disclosure of recovery-ratio risk |
+| **Market maker** | Writes and buys many series, runs spreads | Portfolio offsets, unwrap/wrap, predictable margin |
+| **Liquidator** | Takes over unhealthy positions for a reward | Clear auction rules, capital efficiency for taken positions |
+| **Keeper** | Finalizes groups, settles accounts, submits oracle data | Small rewards, deterministic calls |
+| **Surface publisher** | Computes and signs IV surfaces | Clear schema, quorum rules |
+| **Governance / guardian** | Lists series, sets parameters, pauses | Timelocks, limited emergency powers |
+
+## 6. Functional requirements
+
+### Accounts and collateral
+- FR-1 A user can create any number of subaccounts. Each is bound to one settlement asset at creation.
+- FR-2 Owners can approve operators who may act for the subaccount (except changing operators).
+- FR-3 Deposit is always allowed for approved assets. Withdraw is allowed only if the account stays healthy (equity ≥ IM) with fresh oracle data.
+
+### Series
+- FR-4 Authorized creators list series with: underlying, settlement asset, type, strike, contract size, expiry, settlement oracle config, volatility product, risk parameter set.
+- FR-5 Series terms can never change after creation.
+- FR-6 Each series gets exactly one wrapper token, deployed at creation.
+
+### Writing and wrapping
+- FR-7 `mintExternalLong` creates a short of `qty` and mints `qty` wrapper tokens, charging the seller fee, only if the account stays healthy afterwards.
+- FR-8 `unwrapLong` turns wrappers into an internal long. It is always allowed before expiry.
+- FR-9 `wrapLong` turns an internal long into wrappers if the account stays healthy afterwards.
+- FR-10 `closeShortWithWrapper` burns wrappers to reduce a short. Always allowed until the group is finalized.
+- FR-11 `closeShortWithInternalLong` moves a long from one of the caller's subaccounts to another to cancel a short.
+
+### Margin
+- FR-12 Every option is priced on-chain with Black-76 from live spot and a signed IV surface.
+- FR-13 IM and MM come from stress scenarios defined in a risk parameter set.
+- FR-14 Stale spot or surface data blocks risk-increasing actions. Risk-reducing actions never need oracle data.
+- FR-15 Stale data is applied conservatively by direction: shorts at higher IV, longs at lower IV or intrinsic only.
+
+### Trading
+- FR-16 Writers and buyers may trade wrappers on any venue. Optara never needs to know.
+- FR-17 Optara's `VenueRouter` offers buy and sell routes through registered adapters, with premium, fee and deadline limits, and charges the buyer fee on buys.
+- FR-18 `KuruAdapter` is the first adapter. Disabling it breaks nothing in clearing or settlement.
+
+### Liquidation
+- FR-19 Anyone can start an auction on a risk bucket below MM and take slices through a Dutch auction.
+- FR-20 Liquidators fund the margin of what they take with their own subaccount.
+- FR-21 Liquidators may instead burn wrappers to close the account's shorts.
+- FR-22 Liquidation always improves the liquidated account's health.
+
+### Settlement
+- FR-23 After expiry, anyone can finalize a group with the precommitted settlement oracle data. One price per group.
+- FR-24 Keepers settle every account with positions in the group. Redemption stays closed until all are settled.
+- FR-25 The insurance fund covers shortfalls. The remaining shortfall sets one recovery ratio per group.
+- FR-26 Wrapper holders redeem at `payoff × recoveryRatio`. Internal creditors claim the same ratio.
+- FR-27 A missing settlement price flags the group `ORACLE_STALLED`. No invented prices.
+
+### Fees and insurance
+- FR-28 Seller fee on minting, buyer fee on router buys, both with user-set maximums.
+- FR-29 Fees split into insurance, treasury and keeper reserve.
+- FR-30 New risk is blocked for an asset until its insurance fund and keeper reserve reach their minimums.
+
+### Governance
+- FR-31 All core contracts are upgradeable behind a timelock. A guardian can pause and set close-only instantly.
+- FR-32 No upgrade or admin action can change series terms, finalized prices or recovery ratios.
+
+## 7. Acceptance criteria (v1 is done when)
+
+1. A writer can deposit USDC, mint ETH call wrappers and sell them on Kuru through the router.
+2. A buyer can buy through the router, see both fees, unwrap, and redeem after settlement.
+3. A short call + long higher-strike call needs less margin than the short alone (the spread example in [MATH.md](MATH.md) §11).
+4. Stale spot or surface data blocks minting, wrapping and withdrawals, but not deposits, unwraps or closes.
+5. A liquidator can take slices of an unhealthy account; each slice improves its health.
+6. A group finalizes once; all accounts settle; the recovery ratio is 1 when everyone is solvent and the same for all holders when not.
+7. Redemption order never changes anyone's payout percentage.
+8. Kuru disabled: minting, transfer, unwrap, close, settle and redeem all still work.
+9. All invariants in [INVARIANTS.md](INVARIANTS.md) pass stateful fuzzing.
+10. Gas for a risk check at the maximum allowed positions fits the target in [PARAMETERS.md](PARAMETERS.md).
+11. An upgrade cannot change any series term, finalized price or recovery ratio (tested).
+12. Every contract has unit, fuzz, invariant and E2E tests that pass ([TESTING.md](TESTING.md) §0), and
+    `reference/check_traceability.py` passes.
+
+## 8. Success metrics after launch
 
-Every option series MUST have a maximum payout known before trading begins.
+- Zero bad debt reaching the recovery ratio in normal market conditions.
+- Insurance fund grows from fees faster than it pays out.
+- Liquidation auctions clear within their duration.
+- Surface publisher uptime ≥ the target in [PARAMETERS.md](PARAMETERS.md).
 
-### G2. Solvency-first margin
+## 9. Risks users must be told about
 
-Core V2 MUST require sufficient collateral in the exact settlement stablecoin of each risk group, plus recognized locked hedges, to cover the exact worst-case settlement loss under the supported netting rules.
-
-### G3. Capital efficiency
-
-Optara SHOULD reduce collateral compared with naive per-position full collateral when positions genuinely offset one another.
-
-### G4. Composability
-
-Long option positions MUST be represented by transferable ERC-20 tokens.
-
-### G5. External liquidity
-
-The protocol SHOULD support secondary trading of option tokens on Kuru without making Kuru part of Optara's solvency assumptions.
-
-### G6. Deterministic settlement
-
-At expiry, settlement MUST be calculated from immutable option terms and an approved settlement oracle.
-
-### G7. Auditable risk rules
-
-The core margin logic MUST be deterministic and explainable. The MVP MUST NOT require FHS, SPAN, or a black-box statistical model.
-
-### G8. Modular developer surface
-
-Optara SHOULD expose a typed, modular off-chain developer surface:
-
-```text
-@optara/math -> deterministic reference math and previews
-@optara/sdk  -> Optara reads, transaction builders, events, high-level workflows
-@optara/kuru -> optional Kuru-specific trading/inventory workflows
-```
-
-These modules MUST NOT become trusted substitutes for on-chain margin, custody, authorization, or settlement checks.
-
----
-
-## 4. Non-goals for core V2
-
-The following are explicitly outside the core V2 MVP:
-
-- American-style early exercise;
-- uncapped call options;
-- cross-underlying portfolio offsets;
-- cross-expiry probabilistic netting;
-- FHS margin;
-- SPAN margin;
-- volatility-model-based undercollateralized naked shorts;
-- using one stablecoin or volatile asset to collateralize obligations denominated in another settlement asset;
-- rehypothecation of user collateral;
-- protocol-owned market making;
-- guaranteeing Kuru liquidity;
-- transferable/tokenized short liabilities;
-- borrowing against long option tokens;
-- automatic socialization of losses across healthy users.
-- trusting SDK/client-calculated margin, health, balances, or external trade state as authoritative protocol state.
-
----
-
-## 5. Users and roles
-
-### 5.1 Option writer / seller
-
-Deposits margin in the option pair's settlement stablecoin, creates a short obligation, receives newly minted long option tokens, and may sell those tokens to earn premium.
-
-A writer can later close the short by acquiring the same long option series and returning/burning it through Optara.
-
-### 5.2 Option buyer / long holder
-
-Acquires a long option token and owns the right to the capped payoff in that series' settlement stablecoin at expiry.
-
-The current holder at redemption receives the payout; the original buyer is not special.
-
-### 5.3 Trader / market maker
-
-Trades long option tokens on Kuru or another supported ERC-20 venue.
-
-### 5.4 Hedged writer
-
-A writer who locks compatible long option tokens in Optara. The risk engine may recognize those locked longs to reduce margin.
-
-### 5.5 Protocol operator / governance
-
-Manages whitelisted assets, oracle adapters, approved settlement assets, prospective protocol parameters and emergency controls. Existing V2 financial code and internal authority bindings are immutable.
-
-Governance MUST NOT be able to change the economic terms of an already-created option series.
-
-### 5.6 Developer / integrator
-
-Uses `@optara/sdk` for typed Optara interactions, `@optara/math` for previews/reference calculations, and optionally `@optara/kuru` for venue-specific trading workflows. Integrator software is advisory/convenience infrastructure; contracts remain the source of truth.
-
----
-
-## 6. Product terminology
-
-### Pair / market
-
-Every core V2 series belongs to a market of the form:
-
-```text
-UNDERLYING / QUOTE_STABLECOIN
-```
-
-The quote stablecoin is also the series `settlementAsset` and the required cash collateral asset for unhedged liability in that risk group. Examples: `MON/USDT`, `ETH/USDC`, `BTC/USDe`. Core V2 does not cross-margin balances between different settlement stablecoins.
-
-### Option series
-
-A unique immutable combination of:
-
-```text
-underlying
-option type: CALL or PUT
-strike
-expiry
-max payout per unit
-contract size
-settlement asset
-oracle / settlement rule
-```
-
-### Long option token
-
-ERC-20 token representing the buyer-side claim for one specific option series.
-
-### Short obligation
-
-Internal Optara accounting entry recording how many units of a series a margin account has written.
-
-### Max payout
-
-Maximum settlement-stablecoin payout per option unit before multiplying by quantity/contract size.
-
-### Risk group
-
-Positions eligible for exact portfolio netting. Core V2 requires the same:
-
-```text
-underlying
-expiry
-settlement stablecoin
-settlement rule/oracle domain
-```
-
-### Locked hedge
-
-A long option token deposited into Optara and explicitly locked for margin purposes. It cannot be transferred or redeemed while used by the risk engine.
-
----
-
-## 7. Product rules
-
-### PR-1. European settlement only
-
-An option MUST settle only after its expiry timestamp and valid settlement-price finalization.
-
-### PR-2. Cash settlement only
-
-Settlement MUST be paid in the configured **quote/settlement stablecoin of the option pair**. Core V2 MUST support only governance-approved stablecoins and MUST NOT silently convert between settlement assets.
-
-### PR-3. Payout cap is mandatory
-
-Every series MUST define `maxPayout > 0`.
-
-For puts, the implementation MUST require:
-
-```text
-0 < maxPayout <= strike
-```
-
-because an asset price cannot settle below zero, a larger cap adds no economic value, and the risk engine's `K - C` critical price would otherwise be negative.
-
-### PR-4. Immutable series terms
-
-After series creation, no privileged role may change:
-
-- call/put type;
-- underlying;
-- strike;
-- expiry;
-- max payout;
-- contract size;
-- settlement asset;
-- settlement oracle/rule.
-
-### PR-5. Short positions are not freely transferable
-
-A user MUST NOT be able to transfer a short obligation away from its securing margin account in core V2.
-
-### PR-6. Long tokens are transferable
-
-Long option tokens MUST be standard transferable ERC-20 assets unless they are currently escrowed/locked inside Optara.
-
----
-
-## 8. Option payoff requirements
-
-Let:
-
-```text
-S = settlement price
-K = strike
-C = max payout per unit
-Q = quantity adjusted for contract size
-```
-
-### Call
-
-```text
-CallPayoff = min(max(S - K, 0), C) * Q
-```
-
-### Put
-
-```text
-PutPayoff = min(max(K - S, 0), C) * Q
-```
-
-The implementation MUST preserve:
-
-```text
-0 <= Payoff <= C * Q
-```
-
-for every valid settlement price.
-
-The cap MUST apply to contractual settlement, not be introduced retroactively after a writer loses money.
-
----
-
-## 9. Margin requirements
-
-### 9.1 Core requirement
-
-For each margin account **and for each settlement stablecoin independently**:
-
-```text
-recognizedCollateral(account, settlementAsset)
-    >= requiredMargin(account, settlementAsset)
-```
-
-must hold after every operation that can increase risk or remove collateral. Core V2 MUST NOT sum token values across different settlement stablecoins to satisfy this check.
-
-### 9.2 Recognized collateral
-
-Core V2 recognizes:
-
-- the exact settlement stablecoin held inside the Optara margin account for that risk group;
-- compatible long option tokens explicitly deposited and locked as hedges.
-
-Core V2 MUST NOT count as collateral:
-
-- the same stablecoin held only in the user wallet;
-- wallet long option tokens;
-- Kuru margin balances;
-- unconfirmed sale proceeds;
-- positions in external protocols;
-- unapproved collateral assets.
-
-### 9.3 Exact worst-case margin
-
-Within one supported risk group:
-
-```text
-loss(S) = shortPayoffs(S) - longPayoffs(S)
-worstCaseLoss = max(max(loss(S), 0))
-```
-
-Required margin for one risk group is:
-
-```text
-groupRequiredMargin = worstCaseLoss + safetyBuffer
-```
-
-Account requirement is then aggregated **by settlement asset**, not by converting everything to dollars:
-
-```text
-requiredMargin(account, asset)
-    = sum(groupRequiredMargin for account risk groups settled in asset)
-```
-
-The exact implementation MUST evaluate every relevant payoff breakpoint, not sample a small arbitrary price range.
-
-### 9.4 Safe netting scope
-
-Core V2 MAY net positions only when they are in the same risk group.
-
-It MUST NOT reduce a January expiry margin requirement using a February expiry long position.
-
-It MUST NOT reduce MON risk using ETH options.
-
-It MUST NOT use USDT collateral or USDT-settled option credits to satisfy a USDC-settled margin requirement, or vice versa.
-
-### 9.5 Premium handling
-
-Premium is market consideration, not magical collateral.
-
-If an option is sold on Kuru, the premium is initially part of the user's Kuru trading balance according to Kuru's trading flow. It MUST NOT reduce Optara margin until the same settlement stablecoin is actually deposited into Optara.
-
-If a future Optara-Kuru adapter routes premium directly into Optara, the deposit must complete before the risk engine counts it.
-
----
-
-## 10. Required user flows
-
-### UF-1. Deposit collateral
-
-1. User approves the option pair's settlement stablecoin to Optara.
-2. User calls `deposit(settlementAsset, amount)`.
-3. MarginVault receives that settlement stablecoin and credits the corresponding asset balance.
-4. ClearingHouse credits `marginBalance[user][settlementAsset]`.
-5. Event is emitted.
-
-### UF-2. Create/write an option
-
-1. User selects an existing valid series.
-2. User chooses quantity.
-3. ClearingHouse simulates the portfolio after adding the short.
-4. RiskEngine calculates post-trade required margin.
-5. If insufficient, transaction reverts.
-6. If sufficient:
-   - short quantity increases;
-   - matching long option tokens are minted;
-   - long tokens are sent to the specified recipient.
-
-The system MUST not mint long claim supply without creating matching short obligation.
-
-### UF-3. Sell the long token on Kuru
-
-1. Writer moves the ERC-20 option token into the required Kuru trading flow.
-2. Writer lists/sells OPTION against that series' settlement stablecoin.
-3. Buyer receives the option token after trade settlement.
-4. Writer receives trading proceeds in Kuru's accounting domain.
-5. Optara's short position remains attached to the original writer's Optara margin account.
-
-Trading the long token MUST NOT transfer the original writer's short liability.
-
-### UF-4. Secondary trading
-
-Any holder may transfer or sell the long option token before expiry, subject to ERC-20 and external venue rules.
-
-The holder at redemption owns the claim.
-
-### UF-5. Lock a hedge
-
-1. User calls `lockLong(seriesId, quantity)`, which transfers the compatible long token into Optara custody and locks it in one step (series must be ACTIVE).
-2. Only the transferred quantity is credited as locked.
-3. RiskEngine recalculates required margin.
-4. If the hedge lowers exact worst-case loss, excess collateral in that settlement stablecoin may become withdrawable.
-5. Locked long quantity cannot be transferred or redeemed until unlocked.
-
-### UF-6. Close a short
-
-1. Writer acquires the same series long token.
-2. Writer approves/transfers the token to Optara.
-3. Writer calls `closeShort(seriesId, quantity, EXTERNAL)`, or `closeShort(seriesId, quantity, LOCKED)` to consume its own locked hedge of the identical series.
-4. ClearingHouse verifies short quantity exists.
-5. The long token is burned.
-6. Matching short quantity is reduced.
-7. Margin is recalculated.
-8. Excess collateral in the applicable settlement stablecoin becomes available.
-
-### UF-7. Withdraw collateral
-
-1. User calls `withdraw(settlementAsset, amount)` for a specific settlement stablecoin.
-2. ClearingHouse synchronizes every finalized risk group affecting that asset; expired-unfinalized groups stay reserved at worst case.
-3. RiskEngine computes post-withdraw margin.
-4. Withdrawal succeeds only if all requirements remain satisfied.
-
-### UF-8. Finalize expiry
-
-1. Expiry passes.
-2. OracleAdapter obtains a valid settlement price according to configured rules.
-3. SettlementEngine records the final settlement price for the whole risk group exactly once.
-4. Each series' per-underlying payoff `phi*` becomes a deterministic function of that price.
-5. Series enters `SETTLED` state.
-
-If no valid price arrives by the configured escalation deadline, the group is flagged `ORACLE_STALLED`; recovery follows `PROTOCOL_SPEC.md` section 41.
-
-### UF-9. Redeem a long
-
-1. Holder calls `redeem(seriesId, quantity)`.
-2. Optara burns the holder's long option tokens.
-3. Optara transfers `floorDiv(phi* x contractSize x quantity, D_A)` units of the series' settlement stablecoin, computed from the exact product with a single final rounding (`MATH.md` section 47).
-4. A redeemed token cannot be used again.
-
-### UF-10. Settle a writer account
-
-1. Account contains positions in a finalized risk group.
-2. ClearingHouse sums the exact short and locked-long payoff numerators for the complete account group.
-3. The net result is applied once to the account's balance in that settlement stablecoin (debit rounded up, credit rounded down).
-4. The group's short quantities are cleared.
-5. Locked long hedges in the group are burned as part of the same operation.
-6. Remaining collateral becomes available subject to other open positions.
-
-This flow MUST be implementable without iterating over every writer in a series in a single transaction.
-
----
-
-## 11. Kuru integration requirements
-
-Kuru is a secondary trading dependency, not a settlement dependency.
-
-### KI-1. ERC-20 compatibility
-
-Optara long tokens MUST behave as ordinary ERC-20 assets suitable for an external market.
-
-### KI-2. Separate accounting domains
-
-Documentation and frontend UX MUST distinguish:
-
-```text
-Optara Margin Account
-!=
-Kuru Trading Margin Account
-```
-
-### KI-3. Market structure
-
-The preferred market is:
-
-```text
-base asset  = Optara option token
-quote asset = series settlement stablecoin
-```
-
-### KI-4. No solvency dependency
-
-Optara settlement MUST continue to function if:
-
-- Kuru has no liquidity;
-- the Kuru market is paused/unavailable;
-- the option token is not actively listed on a frontend.
-
-### KI-5. Close via acquired token
-
-Optara MUST allow a writer to close a short using a valid long token acquired from Kuru or any other source.
-
-### KI-6. Adapter is optional
-
-Any Kuru adapter MUST be convenience infrastructure only. A bug or outage in the adapter must not invalidate Optara's core margin or settlement accounting.
-
----
-
-### KI-7. Kuru integration package
-
-The recommended client architecture is:
-
-```text
-Application
-   |
-   +--> @optara/sdk  --> Optara contracts
-   |
-   +--> @optara/kuru --> Kuru SDK/contracts
-             |
-             +-------> @optara/sdk when an Optara action is also required
-```
-
-`@optara/kuru` MAY orchestrate workflows such as market lookup, buy-to-close, inventory movement, and premium routing, but it MUST NOT directly credit Optara collateral, decrement a short, or recognize a hedge without the corresponding canonical Optara state transition.
-
-## 12. Oracle requirements
-
-### OR-1. Provider abstraction
-
-Optara MUST use an oracle interface rather than hard-coding one provider into core accounting logic.
-
-### OR-2. Series-specific oracle domain
-
-Each series MUST reference an approved oracle/settlement configuration at creation. The configuration MUST bind the priced underlying to the series `settlementAsset`; the risk and settlement engines must interpret `S` and `K` in the same quote-stablecoin units.
-
-### OR-3. Settlement finality
-
-Settlement price MUST be finalized once and then immutable.
-
-### OR-4. Staleness checks
-
-The oracle adapter MUST reject stale or invalid data according to the selected provider's semantics.
-
-The implementation MUST NOT assume every approved stablecoin is exactly worth one U.S. dollar. If a provider does not expose a direct `UNDERLYING/SETTLEMENT_STABLECOIN` price, any derived price path must be explicit in `oracleConfigId` and must include the conversion needed to express the underlying in settlement-stablecoin units.
-
-### OR-5. Expiry rule
-
-The exact price-selection rule around expiry MUST be specified before production deployment, for example a provider-specific price update at/after expiry or a defined time-weighted settlement rule.
-
-This is a launch-blocking decision and cannot remain ambiguous in production.
-
-### OR-6. Failure path
-
-The production specification MUST define what happens if no valid price is available within the normal settlement window. Governance must not have arbitrary discretion to choose a profitable price for one side.
-
----
-
-## 13. Settlement and solvency requirements
-
-### SR-1. Per-asset claim safety
-
-Solvency MUST be enforced **per settlement stablecoin**. Finalized claims in one stablecoin MUST NOT rely on balances held in another.
-
-Total outstanding long claims must remain backed by writer obligations secured under the margin rules.
-
-### SR-2. No withdrawal around unpaid matured debt
-
-A writer MUST NOT withdraw collateral while ignoring a matured short liability.
-
-### SR-3. No unbounded settlement loop
-
-Finalizing one series MUST NOT require looping through all writers or holders.
-
-### SR-4. Long redemption is fungible
-
-Any valid holder of the series token receives the same payout per unit.
-
-### SR-5. No socialized loss in core V2
-
-A healthy user's collateral MUST NOT be intentionally confiscated to cover another account's shortfall under normal operation.
-
-The architecture is expected to prevent such shortfalls through exact bounded-risk margin.
-
-If backing is nevertheless lost through an invariant failure, pooled custody would otherwise pay first redeemers in full and leave the last ones unpaid. The only permitted response is the verified-shortfall resolution in `LIQUIDATION.md` section 102: a timelocked, evidence-backed, single recovery ratio applied equally to every claimant of that settlement asset on that core.
-
----
-
-## 14. Liquidation requirements
-
-Liquidation is **not** the primary solvency mechanism for the core V2 bounded-risk mode.
-
-A price move in the underlying should not make a properly margined core V2 account insolvent because the maximum contractual loss is already bounded and margin is based on exact worst-case expiry loss.
-
-Therefore:
-
-- core V2 MAY omit price-driven liquidation entirely;
-- or implement a limited safety/position-reduction mechanism for operational reasons;
-- any future undercollateralized leverage mode MUST have a separate specification covering initial margin, maintenance margin, liquidation incentives, gap risk, and insurance/bad-debt handling.
-
-The future leverage mode MUST NOT be silently enabled by changing one margin parameter in production.
-
----
-
-## 15. Composability requirements
-
-### CR-1. Transferable long token
-
-A long option token MUST be usable by wallets, Kuru, vaults, and other ERC-20-aware contracts.
-
-### CR-2. Stable metadata
-
-External integrations MUST be able to query immutable series metadata.
-
-### CR-3. No external hedge assumption
-
-An external protocol holding an Optara long does not automatically reduce an Optara writer's margin. Only tokens locked under Optara control can be recognized.
-
-### CR-4. Permissionless holder redemption
-
-Any holder should be able to redeem after settlement without needing the original writer or original buyer.
-
-### CR-5. Short liability isolation
-
-Composability of the long token MUST NOT make short liabilities transferable without collateral checks.
-
----
-
-## 16. Functional requirements by component
-
-### SeriesFactory
-
-MUST:
-
-- create unique series IDs;
-- reject invalid expiries;
-- reject zero strike/cap/contract size where inappropriate;
-- enforce approved underlying/oracle/settlement combinations;
-- prevent duplicate series or deterministically map identical terms to one series;
-- permanently freeze series economic terms.
-
-### OptionToken
-
-MUST:
-
-- implement standard ERC-20 behavior;
-- be mintable/burnable only through authorized Optara contracts;
-- expose/resolve its `seriesId`;
-- use exactly 18 decimals (`OPTION_SPEC.md` section 9).
-
-### MarginVault
-
-MUST:
-
-- custody governance-approved settlement stablecoins;
-- prevent arbitrary transfers by users;
-- transfer only under ClearingHouse/SettlementEngine authorization;
-- use safe ERC-20 transfer handling;
-- maintain accounting conservation per settlement asset;
-- never satisfy one settlement asset's liabilities by silently spending another stablecoin.
-
-### ClearingHouse
-
-MUST:
-
-- manage account collateral ledger by settlement asset;
-- manage short quantities;
-- manage locked long hedges;
-- enforce risk checks before state-changing actions;
-- enforce aggregate exposure caps and asset restriction gates;
-- support write, close (EXTERNAL or LOCKED source), unfinalized cancellation, deposit (including cure deposits), recapitalize, withdraw, lock, unlock, and settlement synchronization.
-
-### RiskEngine
-
-MUST:
-
-- calculate exact supported worst-case loss;
-- net only permitted positions;
-- reject portfolios exceeding implementation limits;
-- use exact integer payoff numerators and round the worst-case total up once (`MATH.md` section 24);
-- expose required margin by settlement asset, e.g. `requiredMargin(account, settlementAsset)`.
-
-### SettlementEngine
-
-MUST:
-
-- finalize settlement exactly once per risk group;
-- derive each series' exact payoff per underlying unit from the group price;
-- support long redemption;
-- support lazy, atomic per-account risk-group synchronization;
-- prevent double redemption and double short settlement.
-
-### OracleAdapter
-
-MUST:
-
-- normalize provider data into Optara price units;
-- validate timestamps/freshness;
-- enforce configured settlement rule;
-- expose clear failure states.
-
----
-
-### Off-chain developer packages
-
-The MVP SHOULD maintain these modular packages:
-
-#### `@optara/math`
-
-MUST/SHOULD:
-
-- implement deterministic reference payoff, critical-point, worst-case-loss, margin, and settlement calculations;
-- use the same documented units and rounding model as the Solidity implementation;
-- be used for differential/reference tests;
-- never be trusted by contracts as proof of account health.
-
-#### `@optara/sdk`
-
-SHOULD provide:
-
-- typed contract clients and generated types;
-- series/account/position reads;
-- margin and settlement previews;
-- transaction builders for deposit, write, close, lock, unlock, withdraw, sync, and redeem;
-- event decoding and transaction-result helpers.
-
-Every state-changing transaction MUST still pass all on-chain checks.
-
-#### `@optara/kuru`
-
-SHOULD isolate Kuru-specific logic such as:
-
-- canonical market discovery/validation;
-- market creation helpers where supported;
-- buy/sell workflows;
-- option/stablecoin inventory movement;
-- buy-to-close orchestration;
-- market-maker helpers.
-
-A Kuru package failure MUST NOT affect Optara solvency or settlement correctness.
-
-## 17. Risk-engine implementation constraints
-
-The risk engine MUST avoid unbounded gas growth.
-
-Core V2 SHOULD impose explicit limits such as:
-
-- maximum open series per account;
-- maximum positions per risk group;
-- maximum distinct risk groups per account;
-- maximum batch operations.
-
-The exact values are deployment parameters and must be benchmarked.
-
-Because capped option payoffs are piecewise linear, exact worst-case loss can be found by evaluating finite critical settlement prices. The implementation should use this structure rather than brute-force price grids.
-
----
-
-## 18. Security requirements
-
-The implementation MUST have tests covering at least:
-
-- payout cap enforcement at extreme prices;
-- strike/cap boundary rounding;
-- put price floor at zero;
-- margin after write;
-- margin after closing a short;
-- margin after locking/unlocking a hedge;
-- attempted hedge double-use;
-- transfer of locked long token;
-- withdrawal that would break margin;
-- cross-expiry netting rejection;
-- cross-underlying netting rejection;
-- double redemption;
-- double settlement;
-- oracle stale data;
-- oracle decimal conversion;
-- malicious/reentrant ERC-20 behavior where relevant;
-- fee-on-transfer/rebasing token rejection for collateral;
-- series metadata immutability;
-- supply/short conservation;
-- accounting conservation;
-- expiry boundary ordering;
-- Kuru integration not affecting Optara solvency.
-- SDK preview values never being accepted as authorization without on-chain recomputation;
-- differential tests between Solidity payoff/risk math and `@optara/math`.
-
-A production release requires independent audit/review.
-
----
-
-## 19. Acceptance criteria for V2 MVP
-
-V2 MVP is functionally complete when all of the following are true:
-
-1. A user can deposit an approved settlement stablecoin and the balance is tracked by asset.
-2. An approved series can be created.
-3. A sufficiently margined user can write the series.
-4. Writing creates a short obligation and matching long ERC-20 supply.
-5. An insufficiently margined write reverts.
-6. A long token can be transferred between wallets.
-7. A long token can be traded in a Kuru `OPTION/<series settlement stablecoin>` market in an integration test or supported deployment environment.
-8. A writer can buy/acquire the same long token and close the short (or close against its own locked hedge of the identical series).
-9. Compatible locked longs reduce exact margin where mathematically valid.
-10. Incompatible expiries/underlyings do not reduce margin.
-11. A user cannot withdraw below required margin.
-12. A series can be finalized after expiry using the configured oracle rule.
-13. A holder can redeem the correct capped payout in the series' settlement stablecoin.
-14. A writer's matured liability is correctly charged without requiring a global writer loop.
-15. Fuzz/invariant tests show no payout above cap, no double redemption, no unsafe hedge reuse, and no collateral withdrawal below required margin.
-16. `@optara/math` reference calculations match Solidity across the supported test domain.
-17. `@optara/sdk` can build the core user transactions without becoming an authorization source.
-18. `@optara/kuru` can discover/use the canonical `OPTION/<settlement stablecoin>` market while preserving the Kuru/Optara accounting boundary.
-19. Aggregate exposure caps hold across accounts and are released per group at finalization.
-20. An oracle-stalled group stays reserved while cancellation, safe unlock and free-cash withdrawal still work.
-21. A confirmed asset deficit restricts every outflow of that asset, and a verified shortfall resolves at one uniform ratio.
-
----
-
-## 20. Launch-blocking open decisions
-
-The following must be finalized in later specifications before production implementation is considered complete:
-
-1. exact whitelist of supported settlement stablecoins and token addresses for each environment;
-2. exact supported underlying/stablecoin pair combinations;
-3. initial supported underlying(s);
-4. production settlement-oracle provider(s);
-5. exact direct or derived oracle path for each `UNDERLYING/SETTLEMENT_STABLECOIN` pair;
-6. exact expiry price-selection/finality rule;
-7. contract-size convention per underlying (option tokens are fixed at 18 decimals);
-8. series-creation permission model;
-9. minimum/maximum strike, cap, expiry, and quantity bounds;
-10. immutable versioned-core address bindings and initialization sealing;
-11. governance/admin model, multisig thresholds and timelock durations;
-12. emergency pause scope;
-13. account/risk-group position-count limits (from gas benchmarks);
-14. aggregate exposure-cap values per series, pair, oracle config and asset (`PROTOCOL_SPEC.md` section 42);
-15. `maxFinalizationDelay` and fallback eligibility per oracle config;
-16. reconciliation evidence standard for clearing a restriction or resolving a shortfall (`LIQUIDATION.md` sections 101–102);
-17. Kuru market-creation and frontend-listing operational process;
-18. exact MVP scope of `@optara/kuru` and whether any separate on-chain Kuru router/adapter is needed later.
-
-Already decided in the specifications (no longer open): MVP protocol fees are zero
-(`FEES.md`); MVP safety buffer is zero and snapshotted per group (`MATH.md` section 25);
-lazy writer-sync accounting uses exact numerators and one rounding per group
-(`MATH.md` sections 24, 54, 118); the financial core is immutable and versioned
-(`ACCESS_CONTROL.md` section 40).
-
-None of these open items should be silently inferred by an implementation agent.
-
----
-
-## 21. Product principle for engineers and AI agents
-
-When implementation details conflict with this PRD, prefer the interpretation that preserves these properties in order:
-
-```text
-1. solvency
-2. immutable buyer/seller contract terms
-3. correct settlement
-4. no double-counting of collateral or hedges
-5. deterministic margin
-6. composability
-7. gas efficiency
-8. convenience
-```
-
-A convenience feature must never weaken the first five properties.
-
----
-
-## 22. Revised acceptance requirements
-
-The MVP MUST implement the exact numerator settlement model, atomic sale delivery,
-donation-tolerant custody, persistent incident containment, and aggregate exposure
-caps defined in the detailed specifications. Its financial core is immutable and
-versioned; upgradeable variants are outside canonical V2.
-
-Users MUST be shown that oracle-stalled groups retain backing and support matching
-claim cancellation/free-collateral exit, but unmatched claims may remain unresolved
-if all approved observation sources permanently fail. Expiry is not a guaranteed
-payout deadline. No deployment may enable risk with unspecified historical observation
-selection, fallback eligibility, or aggregate exposure caps.
+- **Writers** can be liquidated if the market moves against them. Liquidation costs a discount and a penalty.
+- **Buyers** can receive less than 100% of the payoff if bad debt exceeds the insurance fund.
+- **Everyone** depends on oracle and publisher uptime; if they fail, new risk stops.
+- **Everyone** trusts governance: contracts are upgradeable behind a timelock.
+- **MON** volatility is synthetic at launch (no liquid MON options market exists to derive it from).

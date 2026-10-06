@@ -1,101 +1,74 @@
-# Optara V2 — Build Plan (contracts, indexer, frontend)
+# Optara PM — Build Plan
 
-Scope: everything in `docs/` except the SDK packages (`@optara/math`, `@optara/sdk`,
-`@optara/kuru`, `@optara/shared`), which live in a separate repo and plug in later.
-The docs remain the source of truth; every step below cites the section it implements.
+The specification is [`docs/`](docs/README.md). This plan orders the work. Every step cites the docs it implements
+and ends only when its tests pass ([TESTING.md](docs/TESTING.md) §0: unit, fuzz, invariant, E2E for every contract).
+V2's plan is in git history.
 
 ## 0. Repository layout
 
 ```text
-contract/       Foundry project (merged core, factory, token, oracle, config)
-indexer/        Node/TypeScript event indexer + read API (SQLite)
-frontend/       Vite + React + wagmi/viem web app (thin client layer in src/lib/optara)
-test-vectors/   Independent exact-rational Python reference + generated JSON vectors
-deployments/    Exported ABIs + per-network deployment manifests (consumed by SDK repo)
-docs/           Specifications (unchanged except the repo-layout note, step 9)
+contract/     Foundry project (all on-chain code, tests, deploy scripts)
+reference/    Independent Python reference model + spec checks (exists)
+deployments/  Per-network manifests and exported ABIs (step 14)
+indexer/      Envio HyperIndex + health worker (step 15)
+keepers/      Settlement keeper, liquidation bot, spot updater (step 15)
+publisher/    Surface publisher service (step 15)
+frontend/     Web app (step 16)
 ```
 
-## 1. Architecture decisions (confirmed with the user)
+## 1. Build decisions
 
-| Decision | Choice | Doc basis |
+| Decision | Choice | Why |
 |---|---|---|
-| Contract layout | **Merged core**: one `OptaraCore` holds accounts, custody, settlement, containment. Risk/payoff math are internal libraries. Separate: `OptaraConfig` (roles, approvals, pauses, limits), `SeriesFactory`, `OptionToken` clones, `OracleRegistry`, `ChainlinkSettlementAdapter`, `SettlementEngine`-equivalent logic lives in the core. | ARCHITECTURE §5 "exact Solidity types may differ"; ACCESS_CONTROL §17 "choose the simplest auditable design" |
-| Oracle rule | Chainlink round-in-force at observation end, proven by immediate successor or latest round; direct and derived (U/USD ÷ S/USD) sources; precommitted primary→secondary selection with on-chain proof that the primary observation is invalid | ORACLE §§6–25, 71–77, 119; OPTION_SPEC §27 |
-| Fees | No fee code (fee-free MVP, `write(seriesId, quantity, recipient)`) | FEES §§2, 24 |
-| Upgradeability | None. Immutable core, one-time sealed wiring | ACCESS_CONTROL §§40–45 |
-| Target chain | Monad (128 KB code size limit) | Monad docs |
+| Compiler | Solidity 0.8.28, `evm_version = cancun`, optimizer 200 runs | Same toolchain as V2 (proven on Monad) |
+| Code size | `code_size_limit = 131072` | Monad allows 128 KB runtime code |
+| Math | Solady `FixedPointMathLib` (`lnWad`, `expWad`, `sqrt`, `fullMulDiv`) | MATH.md §6 requires audited primitives |
+| Pricer | `OptionPricer` as an **internal** library (inlined) | No linked-library deployment step; cheaper calls; Monad's size limit leaves room |
+| Proxies | OpenZeppelin v5 `TransparentUpgradeableProxy`, deployed by `UpgradeAdmin`, which owns every `ProxyAdmin` | Upgrade logic stays out of implementations, so a bad implementation can't brick upgrades |
+| Governance | `ProtocolControl` (roles, pauses, manual close-only) read by every module; governance = timelock with the default admin role | One place for every safety switch (DD-20) |
+| Storage | ERC-7201 namespaced storage in every upgradeable module | ACCESS_CONTROL protected storage; layout-safe upgrades |
+| Dependencies | forge-std v1.9.7, OpenZeppelin v5.7.0 (+ upgradeable v5.7.0), Solady v0.1.26, as git submodules | Pinned tags |
 
-## 2. Contracts (phase order follows ARCHITECTURE §26 / PROTOCOL_SPEC §39)
+## 2. Steps
 
-1. **Libraries**: `PayoffMath` (capped payoff, exact numerator, bounded products),
-   `RiskMath` (critical points, worst-case numerator, settlement numerators),
-   `FixedPointMath` (ceilDiv/floorDiv, D_A, rho scaling). MATH §§6–11, 22–26, 47, 50–54.
-2. **OptaraConfig**: roles (GOVERNANCE, CONFIG, SERIES_CREATOR, ORACLE_CONFIG, PAUSER,
-   UNPAUSER), asset/underlying/pair approval + status, series bounds, quantity increment,
-   position limits (hard caps), buffer defaults, exposure limits (raise = governance,
-   lower = pauser), scoped pause bits (global / asset / oracle config). ACCESS_CONTROL,
-   PROTOCOL_SPEC §§29, 31, 37, 42, STATE_MACHINE §§3, 9–17.
-3. **OracleRegistry + ChainlinkSettlementAdapter**: immutable configs, signed offset
-   validation, `verifySettlementPrice(configId, expiry, data) payable`, statuses
-   APPROVED/SUSPENDED/RETIRED. ORACLE §§6–25, 32–36, 71–77, 119; ARCHITECTURE §13.
-4. **OptionToken (ERC-20, 18 dec, clone) + SeriesFactory**: validation, deterministic
-   `seriesId`/`groupId` with `protocolSeriesDomain` (chainId + core + version),
-   deterministic metadata. OPTION_SPEC §§5–20, 41; PROTOCOL_SPEC §43.
-5. **OptaraCore**: deposit (+cure), recapitalize, withdraw, write, closeShort
-   (EXTERNAL/LOCKED), cancelUnfinalizedShort, lockLong, unlockLong, syncRiskGroup,
-   syncAccount, finalizeRiskGroup, redeem, checkAndRestrict, restrictAsset,
-   clearAssetRestriction, propose/execute/cancel shortfall resolution, exposure
-   counters with O(1) group release, bounded account indexes, views (requiredMargin,
-   effectiveCash, freeCollateral, deficit, previews, lifecycle). PROTOCOL_SPEC §§10–24,
-   41–43; MATH §§24–37, 46–58, 93–97, 118–119; LIQUIDATION §§101–102.
-6. **Deployment scripts + manifest/ABI export** with explicit JSON config, chainId check,
-   no silent defaults, role verification, deployer-role revocation. DEPLOYMENT.
+Each step: code → unit tests → fuzz tests → differential tests against `reference/` where math is involved →
+invariant handlers and E2E flows extended as modules land.
 
-## 3. Tests (TESTING.md, TEST_CASES.md)
+| # | Step | Implements | Done when |
+|---|---|---|---|
+| 1 | **Scaffold**: Foundry project, dependencies, config, CI | ARCHITECTURE §10, TESTING §8 | `forge build` and an empty test run pass |
+| 2 | **Math**: `FixedPoint` (unit conversions, rounding), `OptionPricer` (normal CDF, Black-76, intrinsic, surface interpolation, stale IV) | MATH §1–§7 | PRC-001..007, VOL-010/011 math parts; differential vectors from `reference/pm_model.py` |
+| 3 | **Shared base**: types, errors, events, roles, pause bits, ERC-7201 base, `UpgradeAdmin` (timelock + allowlist) | PROTOCOL_SPEC §11–§14, ACCESS_CONTROL | UPG-001/002, ACL-*, PAU-* |
+| 4 | **Series**: `OptionSeriesRegistry`, `ExternalOptionFactory`, `ExternalOptionWrapper` | OPTION_SPEC, PROTOCOL_SPEC §2 | SER-* |
+| 5 | **Ledger**: `SubAccounts` (owners, operators, cash, signed balances, totals, participants, position indexes) | PROTOCOL_SPEC §1, OPTION_SPEC §8 | ACC-*, INV-1/2/6/27 unit + fuzz |
+| 6 | **Oracles**: `LiveSpotOracle` (+ Pyth source), `VolSurfaceOracle` (EIP-712 quorum, Merkle leaves), `SettlementOracle` (round-in-force, ported from `d89d3a1`) | ORACLES | SPT-*, VOL-*, STL-001..004 |
+| 7 | **Risk**: `PortfolioRiskManager` (equity, buckets, scenarios, IM/MM, stale rules, health, previews) | MATH §8–§9, MARGIN_AND_RISK | MRG-*, differential IM/MM vs reference |
+| 8 | **Fees & insurance**: `FeeController`, `InsuranceFund` | FEES, MATH §11 | FEE-* |
+| 9 | **Clearing**: `OptionClearing` (deposit, withdraw, mint, wrap, unwrap, closes, `updateOracles`, custody, `pay*`) | PROTOCOL_SPEC §3–§4 | CLR-*, PRV-* |
+| 10 | **Liquidation**: `LiquidationModule` | LIQUIDATION, MATH §12 | LIQ-* |
+| 11 | **Settlement**: `SettlementWindow` | SETTLEMENT, MATH §13 | STL-* |
+| 12 | **Venues**: `VenueRegistry`, `VenueRouter`, `KuruAdapter` (+ mock venue, fork test) | VENUES_AND_KURU | VEN-* |
+| 13 | **System tests**: full invariant suite, E2E F1–F19, gas at max positions, upgrade/storage tests, Slither (added to CI here) | TESTING §0, §5–§7 | All INV/LIV, E2E-*, GAS-*, `check_traceability.py` |
+| 14 | **Deployment**: scripts, manifests, ABI export, launch checklist | DEPLOYMENT | Local + testnet deploys verified |
+| 15 | **Off-chain**: indexer (Envio + health worker), keepers, spot updater, surface publisher | INDEXER_AND_KEEPERS | KPR-*, PUB-*, IDX-* |
+| 16 | **Frontend** | FRONTEND, USER_FLOWS | FE-* |
 
-- Unit tests named by catalog ID (`test_PAY_001_...`) for every contract area.
-- Fuzz tests: payoff properties, risk monotonicity, rounding, split redemption.
-- Differential tests: Solidity vs independent Python `Fraction` reference, via FFI fuzz
-  and static JSON vectors (the same vectors the SDK repo will use).
-- Stateful invariant suite with handlers and ghost/shadow accounting (INV-001..020,
-  supply identities, pooled vault identity, exposure-counter identity).
-- Hostile-token and reentrancy suites; DOS/gas at maximum limits; deploy tests
-  DEPLOY-TEST-001..015.
-- `contract/test/TRACEABILITY.md`: every TEST_CASES ID mapped to a test or marked
-  N/A with justification (SDK/Kuru-package IDs move to the SDK repo; UPG-* N/A for the
-  immutable core; FEE-004..010 N/A with no fee code; ORN-010 N/A for Chainlink).
-- Coverage report (`forge coverage`), target 100% of core production code.
+## 3. Rules while building
 
-## 4. Indexer (`indexer/`)
+- The docs win. If code needs something the docs don't say, fix the docs in the same step and record it in
+  [DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md).
+- No contract is merged without its unit and fuzz tests ([TESTING.md](docs/TESTING.md) §0.2).
+- Margin may never come out below the reference beyond rounding (TESTING §3).
+- Values that must come from launch decisions (feeds, addresses, caps, signers) are required deploy inputs, never
+  silent defaults.
 
-Finality-depth log polling (viem), idempotent event store + derived tables in SQLite,
-reorg rollback, on-chain reconciliation, monitoring alerts (cash < required, ORACLE_STALLED,
-exposure near caps, restrictions), HTTP read API. Tests: reducers (unit) and an anvil
-end-to-end run. SECURITY §§78–79, LIQUIDATION §91, DEPLOYMENT §68.
+## 4. Progress
 
-## 5. Frontend (`frontend/`)
-
-Vite + React + wagmi/viem. Thin client layer in `src/lib/optara` with the function names
-planned for `@optara/sdk`, so the SDK swaps in later by changing imports. All margin and
-payoff numbers come from on-chain views (no local authoritative math). Screens: markets,
-series detail (terms, max payout, state, write/lock/close/cancel/redeem), portfolio
-(per-asset cash, required, free, groups, sync, deposit/withdraw), settlement (finalize
-with Chainlink round proof), disclosures (settlement-liveness before acquisition,
-ORACLE_STALLED state). Kuru trading stays in `@optara/kuru` (SDK repo); the frontend shows
-verified market metadata only. KURU_INTEGRATION §§50–54; SECURITY §§74–77.
-
-## 6. Local end-to-end
-
-Anvil deployment with mock stablecoins (6 and 18 decimals) and mock Chainlink feeds,
-seeded series, scripted lifecycle, indexer and frontend pointed at it.
-
-## 7. Values not invented
-
-Production oracle feeds, token addresses, limits, exposure caps, timelock delay and
-signers stay as required fields in `contract/deploy/production.json` (deployment fails
-if missing). Local/test values are labeled as such. PRD §20; DEPLOYMENT §84.
-
-## 8. Docs touch-up (only where the build makes them inaccurate)
-
-ARCHITECTURE §25 / README §14 / DEPLOYMENT §48: SDK packages live in a separate repo and
-consume `deployments/` + `test-vectors/`.
+| Step | Status | Notes |
+|---|---|---|
+| 1 | **Done** | `contract/` Foundry project, pinned submodules, profiles (default / ci / nightly / fork), CI (contracts, coverage gate, reference checks) |
+| 2 | **Done** | `FixedPoint`, `OptionPricer`. 59 tests: unit, fuzz (10k in CI), differential vs reference (vectors + 2k FFI runs), gas. 100% line/branch coverage. Mutation check: 3/3 injected bugs caught. Gas: Black-76 5.3k, CDF 1.3k, surface IV 3.5k. Spec changes: NR `erfcc` CDF (DD-19), per-second stale penalty (C-12) |
+| 3 | **Done** | `ProtocolControl` (roles, scoped pause bits, manual close-only), `UpgradeAdmin` (Transparent proxies, allowlist, 7-day / 24-hour paths, anyone executes), `OptaraModule` base (ERC-7201, transient reentrancy guard), shared `Errors.sol` (mirrored in PROTOCOL_SPEC §13 and enforced by the checker). Tests: unit, fuzz, invariant (with ghost model), storage-layout script. 100% coverage. Mutation check: 4/4 caught. Found and fixed: unbounded delay could wrap the uint64 eta. Spec changes: DD-20, DD-21 |
+| 4 | **Done** | `OptionSeriesRegistry` (settlement assets, products with bounds and overflow hard caps, write-once terms, ≤ 256 series per group), `ExternalOptionFactory` (deterministic clones), `ExternalOptionWrapper` (ERC-20 + permit; fixed minter and three burners), `SeriesNaming`. Tests: unit, fuzz (incl. independent calendar check), invariant (write-once terms, group membership, supply conservation). 100% coverage. Mutation check: 5/5 caught. Spec changes: DD-22 (dependencies fixed at initialize via predicted addresses), DD-23 (overflow caps, settlement price clamp), C-13 (LiquidationModule burns; tenor coverage checked at mint) |
+| 5 | **Done** | `SubAccounts`: accounts, operators, cash, signed balances; one write path `applyDelta` keeping totals (INV-2), minimum and multiple (INV-6), asset match (INV-5), bounded series/bucket indexes (INV-43) and the participant counter (INV-27); ledger events rebuild every balance; series data cached. Tests: unit, fuzz, invariant with ghost model, gas. 100% coverage. Mutation check: 6/6 caught. Gas: change 7.5k, close 15k, open 212k (cached) / 359k (first in series). Spec: DD-24 |
+| 6 | Next | |

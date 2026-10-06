@@ -1,30 +1,47 @@
-# Optara V2 contracts
+# Optara PM — Contracts
 
-Immutable, versioned financial core (ACCESS_CONTROL.md section 40). Targets Monad (128 KB code size limit:
-`OptaraCore` is ~30 KB, so local tools run with `--code-size-limit 131072`).
+Foundry project for the on-chain protocol specified in [`../docs`](../docs/README.md). Build order and status:
+[`../BUILD_PLAN.md`](../BUILD_PLAN.md).
 
-| Contract | Role |
-|---|---|
-| `core/OptaraCore.sol` (+ `OptaraCoreBase.sol`) | Accounts, stablecoin custody, bounded position indexes, exact margin, write/close/cancel/lock/unlock, finalize/sync/redeem, exposure caps, containment and verified-shortfall resolution |
-| `config/OptaraConfig.sol` | Roles (GOVERNANCE, CONFIG, SERIES_CREATOR, ORACLE_CONFIG, PAUSER, UNPAUSER), asset/underlying/pair approvals, series bounds, exposure caps, position limits, scoped pauses |
-| `oracle/OracleRegistry.sol` | Immutable oracle configs with signed-offset validation and new-series status |
-| `oracle/ChainlinkSettlementAdapter.sol` | Round-in-force settlement rule, direct and derived (U/USD ÷ S/USD) sources, precommitted primary→secondary selection |
-| `factory/SeriesFactory.sol` | Series validation, deterministic ids, CREATE2 option tokens with deterministic metadata |
-| `token/OptionToken.sol` | 18-decimal ERC-20 long claim; mint/burn only by the core |
-| `libraries/*` | Exact payoff numerators, critical-point worst case, single-rounding fixed point |
+## Layout
 
-Key properties: exact integer payoff numerators with one rounding per accounting boundary (MATH.md section 24),
-same-asset margin only, locked hedges only in custody, atomic group settlement, lazy sync, O(1) exposure release at
-finalization, asset-wide containment and a timelocked uniform recovery ratio, no upgrade or rescue path.
+```text
+src/
+  accounts/SubAccounts.sol        the ledger: cash, signed balances, totals, indexes, participants (PROTOCOL_SPEC §1)
+  governance/ProtocolControl.sol  roles, scoped pause bits, manual close-only flags (PROTOCOL_SPEC §11.1)
+  governance/UpgradeAdmin.sol     proxy deployment, implementation allowlist, timelocked upgrades (§11.2)
+  governance/OptaraModule.sol     base for every upgradeable module (ERC-7201, role/pause checks, reentrancy)
+  governance/Roles.sol, PauseBits.sol
+  libraries/Errors.sol     every custom error (mirrored in PROTOCOL_SPEC §13)
+  libraries/OptaraTypes.sol  shared structs and enums (series terms, products, groups)
+  series/OptionSeriesRegistry.sol   settlement assets, products, write-once series terms (PROTOCOL_SPEC §2)
+  series/ExternalOptionFactory.sol  one wrapper clone per series at a deterministic address
+  series/ExternalOptionWrapper.sol  ERC-20 + permit long token; fixed minter and burners
+  series/SeriesNaming.sol           display names and symbols
+  risk/FixedPoint.sol      units, conversions, rounding (MATH.md §1–§2)
+  risk/OptionPricer.sol    normal CDF, Black-76, surface IV, stale IV, position value (MATH.md §3, §5–§7)
+test/
+  unit/          per-function behavior, reverts, events, worked examples
+  fuzz/          properties over random inputs
+  invariant/     stateful random action sequences against a ghost model
+  differential/  Solidity vs the Python reference model (vectors + FFI)
+  gas/           gas benchmarks with regression ceilings
+  harness/       external wrappers around internal libraries (so tests can catch reverts)
+  mocks/, utils/ mock modules (V1/V2 upgrades) and the governance deployment fixture
+script/
+  coverage_gate.py   TESTING.md §7 thresholds on an lcov report
+  storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct
+```
 
-## Tests
+## Commands
 
-`forge test` runs 350+ tests: unit tests named by TEST_CASES.md id, fuzz tests, FFI differential tests against
-`../test-vectors/optara_ref.py`, shared JSON vectors, a weighted stateful invariant campaign (supply identities,
-exact pooled-vault identity, cap counters, solvency), hostile-token and reentrancy tests, max-portfolio gas tests,
-and deployment tests. Coverage of production contracts is 100% lines/statements/branches/functions.
-`test/TRACEABILITY.md` maps every TEST_CASES.md id.
+```bash
+git submodule update --init --recursive     # forge-std, OpenZeppelin (+ upgradeable), Solady
+forge build
+forge test                                  # default profile (fuzz 1,000 runs; FFI tests 200)
+FOUNDRY_PROFILE=ci forge test               # CI depth (fuzz 10,000 runs; FFI tests 2,000)
+forge test --match-path 'test/gas/*' -vv    # print gas benchmarks
+```
 
-## Deploy
-
-See [`deploy/README.md`](deploy/README.md). Production values are never defaulted: templates mark them `REQUIRED`.
+Differential tests run `python3 ../reference/ffi.py` (standard library only) and read `../reference/vectors/`.
+Regenerate the vectors with `python3 ../reference/gen_vectors.py` after changing the reference model.
