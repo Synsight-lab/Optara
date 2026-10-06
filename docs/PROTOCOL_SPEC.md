@@ -252,16 +252,40 @@ Views: `groupState(groupId)`, `settlementPrice(groupId)`, `recoveryRatio(groupId
 
 ## 8. FeeController and InsuranceFund
 
-| Function | Caller | Notes |
-|---|---|---|
-| `setFeeRates(sellerBps, buyerBps, minSellerFee)` | Governance (timelock) | ≤ hard caps |
-| `setSplit(insuranceBps, treasuryBps, keeperBps)` | Governance (timelock) | Sum = 10,000 |
-| `withdrawTreasury(asset, amount, to)` | Governance (timelock) | Treasury balance only |
-| `InsuranceFund.deposit(asset, amount)` | Anyone | Seed or recapitalization; credits no account |
-| `setMinimums(asset, insuranceSeed, keeperReserve)` | Governance | Lowering is timelocked; raising is immediate |
+Custody is push-then-notify (FEES.md §9, DD-29): the payer transfers, then notifies; every credit checks
+`held ≥ recorded + amount` (`TokensNotReceived`). `InvalidFeeConfig` reasons: 1 rate above `MAX_FEE_BPS` (1,000),
+2 split not summing to 10,000, 3 zero recipient.
 
-Views: `previewSellerFee(seriesId, qty)`, `previewBuyerFee(premium)`, `insuranceBalance(asset)`,
-`keeperReserve(asset)`, `treasury(asset)`.
+### 8.1 FeeController
+
+| Function | Caller | Checks | Effects | Event |
+|---|---|---|---|---|
+| `notifySellerFee(accountId, seriesId, asset, fee)` | `OptionClearing` | Tokens received | Split: insurance and keeper shares rounded down, treasury takes the remainder; insurance share pushed to `InsuranceFund` + `notifyDeposit` | `SellerFeeCharged`, `FeeSplit` |
+| `notifyBuyerFee(buyer, seriesId, asset, fee)` | `VenueRouter` | Tokens received | Same split | `BuyerFeeCharged`, `FeeSplit` |
+| `fundKeeperReserve(asset, amount)` | Anyone | `amount > 0`; exact transfer | Keeper reserve += amount | `KeeperReserveFunded` |
+| `payFinalizeReward(asset, keeper)` | `SettlementWindow` | — | Pay `min(finalizeRewardNative, reserve)`; 0 if keeper is zero | `KeeperRewardPaid` (if paid) |
+| `paySettleReward(asset, keeper, finalizedAt)` | `SettlementWindow` | — | Pay `min(settleRewardAt(asset, finalizedAt), reserve)` | `KeeperRewardPaid` (if paid) |
+| `setFeeRates(sellerBps, buyerBps)` | Governance (timelock) | Each ≤ 1,000 | Store | `FeeRatesSet` |
+| `setSplit(insuranceBps, treasuryBps, keeperBps)` | Governance (timelock) | Sum = 10,000 | Store | `SplitSet` |
+| `setMinSellerFee(asset, minSellerFeeNative)` | Governance (timelock) | — | Store | `MinSellerFeeSet` |
+| `setMinimums(asset, insuranceSeed, keeperMin)` | Raise: risk admin, guardian, governance; lower either: governance | — | Store | `MinimumsSet` |
+| `setRewards(asset, finalizeReward, settleReward)` | Governance (timelock) | — | Store | `RewardsSet` |
+| `withdrawTreasury(asset, amount, to)` | Governance (timelock) | `to ≠ 0`; `amount ≤ treasury` | Treasury only (INV-10) | `TreasuryWithdrawn` |
+
+Views: `previewSellerFee(seriesId, qty)` = `max(ceil(mark(qty) × sellerBps / 10,000), minSellerFeeNative)` with the
+mark at the mid IV rounded down; `previewBuyerFee(premium)` = `ceil(premium × buyerBps / 10,000)`;
+`settleRewardAt(asset, finalizedAt)`; `reservesHealthy(asset)`; `treasury(asset)`, `keeperReserve(asset)`,
+`insuranceBalance(asset)`, `feeRates()`, `split()`, `assetConfig(asset)`.
+
+### 8.2 InsuranceFund
+
+| Function | Caller | Checks | Effects | Event |
+|---|---|---|---|---|
+| `deposit(asset, amount)` | Anyone | `amount > 0`; exact transfer | Seed or recapitalization; credits no account | `InsuranceDeposited` |
+| `notifyDeposit(asset, amount)` | `FeeController`, `OptionClearing` | Tokens received | Balance += amount (fee share, liquidation penalty, swept dust) | `InsuranceDeposited` |
+| `cover(asset, amount)` | `LiquidationModule`, `SettlementWindow` | — | Pay `min(amount, balance)` to `OptionClearing` | `InsurancePaid` (if paid) |
+
+Views: `balanceOf(asset)`, `modules()`.
 
 ## 9. Oracles
 
@@ -431,6 +455,9 @@ error RiskSetExists(bytes32 riskParameterSetId);
 error RiskSetAlreadyAssigned(bytes32 productId);
 // ---- Fees and venues ----
 error FeeTooHigh(uint256 fee, uint256 max);
+error InvalidFeeConfig(uint8 reason);
+error InsufficientTreasury(uint256 requested, uint256 available);
+error TokensNotReceived(uint256 expected, uint256 available);
 error DeadlineExpired();
 error SlippageExceeded();
 error MarketNotVerified();
@@ -486,7 +513,8 @@ EmergencyModeSet, SurfaceConfigSet, SettlementConfigRegistered, SettlementConfig
 ProductCloseOnlySet, RiskSetCreated, RiskSetUpdated, RiskSetEnabled, ProductRiskSetAssigned, ProductShortCapSet,
 AuctionStarted, SliceLiquidated, WrapperLiquidated, BadDebtCovered, AuctionEnded,
 GroupFinalized, AccountSettled, RecoveryRatioSet, SettlementClaimed, WrapperRedeemed, DustSwept, OracleStalled,
-InsuranceDeposited, InsuranceCovered, TreasuryWithdrawn, KeeperRewardPaid,
+InsuranceDeposited, InsurancePaid, InsuranceCovered, TreasuryWithdrawn, KeeperRewardPaid, KeeperReserveFunded,
+FeeRatesSet, SplitSet, MinSellerFeeSet, MinimumsSet, RewardsSet,
 MarketRegistered, MarketStatusSet, AdapterRegistered, AdapterEnabled, VenueTrade,
 Paused, Unpaused, RoleGranted, RoleRevoked,
 ProxyDeployed, ImplementationAllowed, UpgradeScheduled, UpgradeExecuted, UpgradeCancelled,

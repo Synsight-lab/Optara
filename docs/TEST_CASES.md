@@ -143,16 +143,19 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| FEE-001 | Seller fee formula and minimum; charged before the IM check, so a fee can't consume margin (INV-44) |
+| FEE-001 | Seller fee formula and minimum (`MinSellerFeeSet`); charged before the IM check, so a fee can't consume margin (INV-44) |
 | FEE-002 | Fee > `maxSellerFeeNative` reverts (`FeeTooHigh`, INV-44) |
 | FEE-003 | Split exact; treasury takes the remainder (INV-9, `FeeSplit`) |
 | FEE-004 | Buyer fee on router buys from the actual premium; > max reverts; refunds exact (`BuyerFeeCharged`) |
 | FEE-005 | No Optara fee on router sells or direct transfers |
-| FEE-006 | `setFeeRates` above hard caps reverts; changes are timelocked (INV-44) |
+| FEE-006 | `setFeeRates` above hard caps reverts; changes are timelocked (INV-44, `FeeRatesSet`, `SplitSet`) |
 | FEE-007 | `withdrawTreasury` limited to the treasury balance (INV-10, `TreasuryWithdrawn`) |
-| FEE-008 | Keeper rewards paid and escalating; zero when the reserve is empty; never exceed the reserve (INV-37, `KeeperRewardPaid`) |
+| FEE-008 | Keeper rewards paid and escalating; zero when the reserve is empty; never exceed the reserve (INV-37, `RewardsSet`, `KeeperRewardPaid`) |
 | FEE-009 | `InsuranceFund.deposit` credits no account (`InsuranceDeposited`); insurance never goes negative (INV-37) |
-| FEE-010 | `setSplit` requires the sum to be 10,000; `setMinimums` raising is instant, lowering timelocked; falling below a minimum sets close-only |
+| FEE-010 | `setSplit` requires the sum to be 10,000; `setMinimums` raising is instant, lowering timelocked; falling below a minimum sets close-only (`MinimumsSet`, `reservesHealthy`) |
+| FEE-011 | Push-then-notify: `notifySellerFee` / `notifyBuyerFee` revert `TokensNotReceived` unless the tokens arrived; only `OptionClearing` / `VenueRouter` may notify; recorded balances equal tokens held (DD-29) |
+| FEE-012 | `InsuranceFund.notifyDeposit` only from `FeeController` / `OptionClearing` and only with tokens received; `cover` only from `LiquidationModule` / `SettlementWindow`, pays `min(amount, balance)` to `OptionClearing` (INV-37, `InsurancePaid`) |
+| FEE-013 | `fundKeeperReserve` pulls the exact amount (`ZeroAmount`, `NonExactTransfer`), credits no account (`KeeperReserveFunded`) |
 
 ## LIQ — Liquidation
 
@@ -291,7 +294,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | INV-6 | CLR-012, REF-002 |
 | INV-7 | CLR-015, REF-002 |
 | INV-8 | CLR-015, REF-002 |
-| INV-9 | CLR-004, FEE-003, REF-001 |
+| INV-9 | CLR-004, FEE-003, FEE-011, REF-001 |
 | INV-10 | FEE-007 |
 | INV-11 | CLR-004, CLR-009, CLR-011, CLR-002, REF-002 |
 | INV-12 | CLR-005, CLR-018, SPT-003 |
@@ -319,7 +322,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | INV-34 | UPG-001, UPG-003, SER-005 |
 | INV-35 | ACL-004 |
 | INV-36 | GAS-001, GAS-002, GAS-003 |
-| INV-37 | FEE-008, FEE-009, REF-002 |
+| INV-37 | FEE-008, FEE-009, FEE-012, REF-002 |
 | INV-38 | PRC-003, PRC-005, PRC-007, REF-001 |
 | INV-39 | PRC-001, PRC-002, REF-001 |
 | INV-40 | VOL-010, REF-001 |
@@ -380,11 +383,16 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | claimSettlement | STL-014, STL-018 |
 | redeemWrapper | STL-011, STL-013, STL-021 |
 | sweepDust | STL-016 |
-| setFeeRates | FEE-006 |
+| setFeeRates / feeRates | FEE-006 |
 | setSplit | FEE-010 |
 | withdrawTreasury | FEE-007 |
-| setMinimums | FEE-010 |
+| setMinimums / reservesHealthy / assetConfig | FEE-010 |
+| setMinSellerFee | FEE-001 |
+| setRewards / payFinalizeReward / paySettleReward / settleRewardAt | FEE-008 |
+| notifySellerFee / notifyBuyerFee | FEE-003, FEE-004, FEE-011 |
+| fundKeeperReserve | FEE-013 |
 | deposit (InsuranceFund) | FEE-009 |
+| notifyDeposit / cover (InsuranceFund) | FEE-012 |
 | update (LiveSpotOracle) / updateFee | SPT-001, SPT-002, SPT-004, SPT-006 |
 | spotPrice / requireFreshSpot / isSpotFresh | SPT-001, SPT-003 |
 | setSource | SPT-005 |
@@ -453,6 +461,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | PositionBelowMinimum | CLR-012 |
 | OpenInterestCap | CLR-019 |
 | FeeTooHigh | FEE-002 |
+| InvalidFeeConfig | FEE-006, FEE-007 |
+| InsufficientTreasury | FEE-007 |
+| TokensNotReceived | FEE-011, FEE-012 |
 | DeadlineExpired | VEN-004 |
 | SlippageExceeded | LIQ-009 |
 | MarketNotVerified | VEN-009 |

@@ -10,6 +10,10 @@ import {SubAccounts} from "../../src/accounts/SubAccounts.sol";
 import {LiveSpotOracle} from "../../src/oracle/LiveSpotOracle.sol";
 import {VolSurfaceOracle} from "../../src/oracle/VolSurfaceOracle.sol";
 import {PortfolioRiskManager} from "../../src/risk/PortfolioRiskManager.sol";
+import {FeeController} from "../../src/fees/FeeController.sol";
+import {InsuranceFund} from "../../src/insurance/InsuranceFund.sol";
+import {IInsuranceFund} from "../../src/interfaces/IInsuranceFund.sol";
+import {IPortfolioRiskManager as IPRM} from "../../src/interfaces/IPortfolioRiskManager.sol";
 import {OptionPricer} from "../../src/risk/OptionPricer.sol";
 import {FixedPoint} from "../../src/risk/FixedPoint.sol";
 import {IProtocolControl} from "../../src/interfaces/IProtocolControl.sol";
@@ -42,6 +46,9 @@ abstract contract RiskFixture is GovernanceFixture {
     LiveSpotOracle internal spot;
     VolSurfaceOracle internal surface;
     PortfolioRiskManager internal risk;
+    InsuranceFund internal insurance;
+    FeeController internal fees;
+    address internal router = makeAddr("VenueRouter");
     MockPyth internal pyth;
     MockSettlementConfigs internal settlementConfigs;
     MockSettlementState internal settlementState;
@@ -93,6 +100,8 @@ abstract contract RiskFixture is GovernanceFixture {
         address spotAddr = _nextProxy(3);
         address surfaceAddr = _nextProxy(4);
         address riskAddr = _nextProxy(5);
+        address insuranceAddr = _nextProxy(6);
+        address feesAddr = _nextProxy(7);
         IProtocolControl c = IProtocolControl(address(pc));
         registry = OptionSeriesRegistry(
             upgradeAdmin.deployProxy(
@@ -159,12 +168,41 @@ abstract contract RiskFixture is GovernanceFixture {
                         ILiveSpotOracle(spotAddr),
                         IVolSurfaceOracle(surfaceAddr),
                         ISettlementState(address(settlementState)),
-                        IReserveStatus(address(reserves))
+                        IReserveStatus(_useRealReserves() ? feesAddr : address(reserves))
+                    )
+                )
+            )
+        );
+        insurance = InsuranceFund(
+            upgradeAdmin.deployProxy(
+                address(new InsuranceFund()),
+                abi.encodeCall(InsuranceFund.initialize, (c, feesAddr, clearing, liquidationModule, settlementWindow))
+            )
+        );
+        fees = FeeController(
+            upgradeAdmin.deployProxy(
+                address(new FeeController()),
+                abi.encodeCall(
+                    FeeController.initialize,
+                    (
+                        c,
+                        IInsuranceFund(insuranceAddr),
+                        IPRM(riskAddr),
+                        IOptionSeriesRegistry(registryAddr),
+                        clearing,
+                        router,
+                        settlementWindow
                     )
                 )
             )
         );
         assertEq(address(risk), riskAddr, "address prediction");
+        assertEq(address(fees), feesAddr, "address prediction");
+    }
+
+    /// @dev Override to wire the risk manager's reserve check to the real FeeController instead of the mock.
+    function _useRealReserves() internal pure virtual returns (bool) {
+        return false;
     }
 
     function _configure() internal {

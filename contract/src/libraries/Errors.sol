@@ -55,6 +55,9 @@ error RiskSetAlreadyAssigned(bytes32 productId);
 
 // ---- Fees and venues ----
 error FeeTooHigh(uint256 fee, uint256 max);
+error InvalidFeeConfig(uint8 reason);
+error InsufficientTreasury(uint256 requested, uint256 available);
+error TokensNotReceived(uint256 expected, uint256 available);
 error DeadlineExpired();
 error SlippageExceeded();
 error MarketNotVerified();

@@ -8,6 +8,8 @@ Foundry project for the on-chain protocol specified in [`../docs`](../docs/READM
 ```text
 src/
   accounts/SubAccounts.sol        the ledger: cash, signed balances, totals, indexes, participants (PROTOCOL_SPEC §1)
+  fees/FeeController.sol          fees, split, treasury, keeper reserve and rewards, reserve minimums (PROTOCOL_SPEC §8.1)
+  insurance/InsuranceFund.sol     insurance balance per asset; bad-debt cover into OptionClearing (§8.2)
   governance/ProtocolControl.sol  roles, scoped pause bits, manual close-only flags (PROTOCOL_SPEC §11.1)
   governance/UpgradeAdmin.sol     proxy deployment, implementation allowlist, timelocked upgrades (§11.2)
   governance/OptaraModule.sol     base for every upgradeable module (ERC-7201, role/pause checks, reentrancy)

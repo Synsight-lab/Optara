@@ -95,13 +95,15 @@ Constraint: `maxBonusBps + liquidationPenaltyBps < 10_000`.
 | Name | Default | Hard cap | Unit |
 |---|---|---|---|
 | `sellerOpenFeeBps` | 300 | 1,000 | bps of minted mark value |
-| `minSellerFeeNative` | 0.10 USDC equivalent | — | native |
+| `minSellerFeeNative[asset]` | 0.10 USDC equivalent | — | native; `setMinSellerFee` |
 | `buyerTradeFeeBps` | 300 | 1,000 | bps of executed premium |
 | `insuranceShareBps` | 6,000 | — | bps of each fee |
 | `treasuryShareBps` | 3,000 | — | bps |
 | `keeperShareBps` | 1,000 | — | bps |
 
-Shares must sum to 10,000. Hard caps are constants in `FeeController`; changing them needs an upgrade.
+Shares must sum to 10,000. Hard caps are constants in `FeeController` (`MAX_FEE_BPS`); changing them needs an
+upgrade. `initialize` sets the rates and split above; per-asset values (`minSellerFeeNative`, §7 minimums and
+rewards) start at 0 and are set by the deployment script when the asset is approved.
 
 ## 7. Insurance and keepers
 
@@ -110,7 +112,8 @@ Shares must sum to 10,000. Hard caps are constants in `FeeController`; changing 
 | `minimumInsuranceSeed[asset]` | set at launch (suggest ≥ 5% of the asset's OI caps at max shock) | native |
 | `minimumKeeperReserve[asset]` | set at launch | native |
 | `settleRewardNative` | 0.50 USDC equivalent | native per account settled |
-| `settleRewardEscalationPerHour` | +25% | of base, capped at 4× |
+| `REWARD_ESCALATION_BPS_PER_HOUR` | 2,500 (+25% of base per full hour since finalization) | constant; upgrade to change |
+| `MAX_REWARD_MULTIPLE_BPS` | 40,000 (4× base) | constant; upgrade to change |
 | `finalizeRewardNative` | 2 USDC equivalent | native |
 
 ## 8. Governance

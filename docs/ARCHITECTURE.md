@@ -76,9 +76,11 @@ address list, never `tx.origin`.
 | `OptionClearing` | `ExternalOptionWrapper.mint/burn` | Wrap, unwrap, close |
 | `LiquidationModule` | `SubAccounts` write functions, `OptionClearing.pay*`, `ExternalOptionWrapper.burn` | Move slices and cash; wrapper-burn liquidation |
 | `SettlementWindow` | `SubAccounts` write functions, `OptionClearing.pay*`, `ExternalOptionWrapper.burn` | Settle and redeem |
-| `OptionClearing`, `LiquidationModule`, `SettlementWindow` | `FeeController.collect*` | Fees and penalties |
+| `OptionClearing` | `FeeController.notifySellerFee`; `InsuranceFund.notifyDeposit` (after pushing tokens) | Seller fees; liquidation penalties and swept dust |
+| `SettlementWindow` | `FeeController.payFinalizeReward`, `paySettleReward` | Keeper rewards |
+| `FeeController` | `InsuranceFund.notifyDeposit` (after pushing tokens) | Insurance share of each fee |
 | `SettlementWindow`, `LiquidationModule` | `InsuranceFund.cover` | Bad-debt coverage |
-| `VenueRouter` | `FeeController.collectBuyerFee`, adapters | Official trades |
+| `VenueRouter` | `FeeController.notifyBuyerFee` (after pushing tokens), adapters | Official trades |
 | `UpgradeAdmin` | `ProxyAdmin.upgradeAndCall`, `ProtocolControl.setProductCloseOnly(…, true)` | Upgrades; emergency close-only |
 | Every module | `ProtocolControl` views (`hasRole`, `requireNotPaused`, `isProductCloseOnly`) | Role and pause checks |
 | Everyone | All view functions | Reads |
@@ -104,8 +106,8 @@ callable by users or admins.
 | Latest surface header + root per product, proven nodes | `VolSurfaceOracle` | Anyone with a valid report |
 | Settlement price per group, recovery ratio, pools | `SettlementWindow` | Keepers (deterministic) |
 | Auctions | `LiquidationModule` | Liquidators |
-| Fee rates, treasury, keeper reserve | `FeeController` | Governance (timelocked) |
-| Insurance balances, seed minimums | `InsuranceFund` | Fees, deposits, governance |
+| Fee rates, treasury, keeper reserve, reserve minimums | `FeeController` | Governance (timelocked); minimums raised instantly by risk admin / guardian |
+| Insurance balances | `InsuranceFund` | Fees, deposits, penalties, dust; paid out only by `cover` |
 | Verified markets | `VenueRegistry` | Venue admin |
 
 ## 5. Data flow of the main actions
@@ -116,7 +118,7 @@ writer -> OptionClearing.mintExternalLong(accountId, seriesId, qty, recipient, m
    1. oracleUpdate -> LiveSpotOracle / VolSurfaceOracle (verify + cache)
    2. SubAccounts: balance -= qty
    3. FeeController.previewSellerFee -> fee; require fee <= maxSellerFee
-   4. SubAccounts: cash -= fee; FeeController.collect (split to insurance/treasury/keeper)
+   4. SubAccounts: cash -= fee; transfer fee to FeeController; FeeController.notifySellerFee (split to insurance/treasury/keeper)
    5. PortfolioRiskManager.requireHealthy(accountId)       // equity >= IM after everything
    6. ExternalOptionWrapper.mint(recipient, qty)
 ```
@@ -126,7 +128,7 @@ writer -> OptionClearing.mintExternalLong(accountId, seriesId, qty, recipient, m
 buyer -> VenueRouter.buyThroughVenue(adapterId, seriesId, qty, maxPremium, maxBuyerFee, maxVenueFee, recipient, deadline, data)
    1. pull premium + buyer fee + venue fee budget from buyer
    2. KuruAdapter executes the trade on Kuru
-   3. FeeController.collectBuyerFee
+   3. transfer buyer fee to FeeController; FeeController.notifyBuyerFee
    4. wrappers -> recipient; unused stablecoin refunded
 ```
 

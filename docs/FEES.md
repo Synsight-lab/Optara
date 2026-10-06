@@ -76,7 +76,11 @@ Paid from the keeper reserve of the settlement asset:
 | Action | Reward |
 |---|---|
 | `finalizeGroup` | `finalizeRewardNative` |
-| `settleAccountGroup` | `settleRewardNative`, rising `settleRewardEscalationPerHour` since finalization, capped at 4× |
+| `settleAccountGroup` | `settleRewardNative × min(10_000 + 2_500 × fullHoursSinceFinalization, 40_000) / 10_000` |
+
+The reward paid is `min(reward, keeperReserve)` (INV-37): a part-empty reserve pays what it has, and an empty
+reserve pays zero. A zero keeper address receives nothing. Anyone can top up the reserve with
+`fundKeeperReserve(asset, amount)` (exact transfer; fee-on-transfer tokens revert); it credits no account.
 
 If the reserve is empty, rewards drop to zero. Settlement still has to complete before redemption opens; anyone,
 including holders, can call it for free.
@@ -91,7 +95,11 @@ FeeController.keeperReserve(asset) ≥ minimumKeeperReserve[asset]
 ```
 
 Seed capital can come from governance deposits, grants or a treasury transfer. If either balance falls below its
-minimum, every product in that asset goes close-only until it is topped up.
+minimum, every product in that asset goes close-only until it is topped up (`PortfolioRiskManager` reads
+`FeeController.reservesHealthy(asset)`).
+
+`setMinimums(asset, insuranceSeed, keeperMin)`: raising both (or leaving one unchanged) is instant for the risk
+admin, guardian or governance, because it only blocks risk. Lowering **either** needs governance (timelocked).
 
 ## 7. Treasury withdrawals
 
@@ -108,3 +116,22 @@ minimum, every product in that asset goes close-only until it is topped up.
 | Seller fee is charged before the IM check | Fees never consume margin |
 | Fee rates ≤ hard caps (1,000 bps) | Governance can't set extreme fees |
 | Optara and venue fees are shown separately | Users see who charges what |
+| Recorded balances never exceed tokens held | No unbacked credit (§9) |
+
+## 9. Custody: push, then notify
+
+`FeeController` holds the treasury and keeper-reserve tokens; `InsuranceFund` holds the insurance tokens. Tokens
+arrive in one of two ways:
+
+| Path | Who | Check |
+|---|---|---|
+| Pull | Anyone: `InsuranceFund.deposit`, `FeeController.fundKeeperReserve` | Exact amount received, else `NonExactTransfer` |
+| Push, then notify | `OptionClearing` → `notifySellerFee`; `VenueRouter` → `notifyBuyerFee`; `FeeController` / `OptionClearing` → `InsuranceFund.notifyDeposit` | `held ≥ recorded + amount`, else `TokensNotReceived` |
+
+The caller transfers first and notifies in the same transaction. Because every credit checks the tokens are
+present, the recorded total never exceeds what the contract holds; any surplus (a stray transfer) stays unrecorded
+and cannot be withdrawn. `notifySellerFee` is callable only by `OptionClearing` and `notifyBuyerFee` only by
+`VenueRouter`, so a third party cannot claim someone else's pushed tokens. See DESIGN_DECISIONS.md DD-29.
+
+`InsuranceFund.cover(asset, amount)` (only `LiquidationModule` or `SettlementWindow`) pays `min(amount, balance)`
+and always to `OptionClearing` custody, never to the caller.
