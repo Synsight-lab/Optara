@@ -237,15 +237,50 @@ Views: `previewSellerFee(seriesId, qty)`, `previewBuyerFee(premium)`, `insurance
 
 ## 9. Oracles
 
-| Function | Caller | Notes |
-|---|---|---|
-| `LiveSpotOracle.update(bytes[] updates)` | Anyone (payable) | Provider-verified; never older than stored |
-| `LiveSpotOracle.setSource(productId, source)` | Governance (timelock) | |
-| `VolSurfaceOracle.submitReport(SurfaceReport r, bytes[] sigs)` | Anyone | Checks in [ORACLES.md](ORACLES.md) §3.4 |
-| `VolSurfaceOracle.proveNodes(NodeProof[] nodes)` | Anyone | Caches leaves |
-| `VolSurfaceOracle.addPublisher / removePublisher` | Governance (timelock) / guardian (remove only) | |
-| `VolSurfaceOracle.setEmergencyMode(productId, bool)` | Guardian | Also sets product close-only |
-| `SettlementOracle.registerConfig(SettlementOracleConfig c)` | Oracle admin | Immutable after registration |
+### 9.1 LiveSpotOracle
+
+| Function | Caller | Checks | Effect | Event |
+|---|---|---|---|---|
+| `update(bytes[] updates, bytes32[] productIds) payable → feePaid` | Anyone | `msg.value ≥` provider fee (`InsufficientProviderFee`); each product configured (`InvalidSpotSource`); price > 0, exponent in [−36, 0], WAD ≤ 1e36 (`InvalidSpotPrice`) | Pushes updates to Pyth, refreshes each product, stores the price only if strictly newer (INV-18); refunds the excess to the caller (`RefundFailed` if it can't) | `SpotUpdated(productId, priceWad, publishTime)` |
+| `setSource(productId, SpotSource)` | Governance (timelock) | Product exists; DIRECT = one feed; DERIVED = base/USD ÷ quote/USD, two distinct feeds; `0 < maxSpotAge ≤ 1 day` (`InvalidSpotSource(reason)`: 1 product, 2 kind, 3 feeds, 4 age) | Stored | `SpotSourceSet` |
+
+Views: `spotPrice(productId) → (priceWad, publishTime)`, `requireFreshSpot(productId)` (reverts
+`StaleSpot(productId, age)` if never set or `age > maxSpotAge`), `isSpotFresh`, `sourceOf`, `updateFee(updates)`,
+`pyth`. A derived price uses the **older** leg's publish time, so both legs must be fresh.
+
+### 9.2 VolSurfaceOracle
+
+| Function | Caller | Checks | Effect | Event |
+|---|---|---|---|---|
+| `submitReport(SurfaceReport, bytes[] sigs)` | Anyone | ORACLES.md §3.4 (`InvalidSurfaceReport(reason)`, `InvalidSignatures`) | Stores the header; stores `kNodes` only when they changed; flags low confidence | `SurfaceAccepted(productId, seq, root, validAfter, expiresAt, confidenceBps, lowConfidence)` |
+| `proveNodes(NodeProof[])` | Anyone | Leaf of the product's **current** report, valid index, Merkle proof (reason 10), leaf IV within the report's bounds (reason 9) | Caches the leaf; already-proven leaves are skipped | `NodeProven` |
+| `addPublisher(publisher, independent)` | Governance | Not zero, not already active (`InvalidPublisher`) | Added | `PublisherAdded` |
+| `removePublisher(publisher)` | Governance or guardian | Active (`InvalidPublisher`) | Removed | `PublisherRemoved` |
+| `setQuorum(n)` | Governance | `n ≥ 1` (`InvalidSurfaceConfig(10)`) | Set | `QuorumSet` |
+| `setSurfaceConfig(productId, SurfaceConfig)` | Governance | `InvalidSurfaceConfig(reason)`: 1 product, 2 lifetime (1 s – 1 day), 3 move / confidence, 4 IV floor < cap ≤ 1000%, 5 stale thresholds (`staleAfter ≤ maxLongTimeValueStale ≤ maxSurfaceStale`), 6 penalty | Set | `SurfaceConfigSet` |
+| `setEmergencyMode(productId, enabled)` | Enable: guardian or governance. Disable: governance | — | Waives `maxIvMoveBps`; the risk manager treats the product as close-only while on | `EmergencyModeSet` |
+
+Views: `header(productId)`, `kNodes(productId)`, `nodeValue(productId, tenorIndex, nodeIndex) → (proven, w)` for the
+current report, `surfaceStatus(productId) → (NONE | FRESH | STALE | EXPIRED_DATA, staleSeconds)`, `isEmergency`,
+`surfaceConfig`, `reportDigest(report)`, `isPublisher(account) → (active, independent)`, `quorum`, `registry`.
+
+### 9.3 SettlementOracle
+
+| Function | Caller | Checks | Effect | Event |
+|---|---|---|---|---|
+| `registerConfig(SettlementOracleConfig) → configId` | Oracle admin | `InvalidSettlementConfig(reason)`: 1 addresses, 2 primary missing, 3 source fields, 4 feed (no code, decimals, not live), 5 window (`−7 d ≤ start ≤ end ≤ 7 d`, `minDelay ≤ maxDelay ≤ 90 d`, `maxDelay > end`), 6 skew (required for, and only for, DERIVED); `SettlementConfigExists` | Stored forever under `keccak256(abi.encode("Optara.PM.SettlementConfig", config))`, approved | `SettlementConfigRegistered`, `SettlementConfigApproved` |
+| `setConfigApproved(configId, approved)` | Approve: governance. Revoke: governance or guardian | Exists (`UnknownSettlementConfig`) | Only affects new series | `SettlementConfigApproved` |
+
+`verify(configId, expiry, settlementData) → (priceWad, observationTime, sourceUsed)` (view): reverts
+`FinalizationTooEarly(earliest)` before `max(expiry + minFinalizationDelay, observationEnd + 1)`, otherwise
+`InvalidSettlementProof(reason)`: 1 round unavailable, 2 round after the observation end, 3 not the latest round,
+4 successor unavailable, 5 not the immediate successor, 6 successor not after the observation end, 7 primary
+observation invalid, 8 primary valid (fallback refused), 9 no fallback configured, 10 fallback invalid, 11 wrong
+proof count, 12 bad source index.
+
+Views: `getConfig`, `configExists`, `isConfigApproved`, `isConfigUsable(configId, underlying, settlementAsset)`,
+`computeConfigId`, `earliestFinalization(configId, expiry)`, `stalledAfter(configId, expiry)`,
+`isImmediateSuccessor(feed, round, next)`.
 
 ## 10. Venues
 
@@ -378,10 +413,19 @@ error RatioAlreadySet();
 error RatioNotSet();
 error NothingToClaim();
 // ---- Oracles ----
+error InvalidSpotSource(uint8 reason);
+error InvalidSpotPrice(bytes32 productId);
+error InsufficientProviderFee(uint256 required, uint256 provided);
+error RefundFailed();
 error InvalidSurfaceReport(uint8 reason);
 error InvalidSignatures();
+error InvalidSurfaceConfig(uint8 reason);
+error InvalidPublisher(address publisher);
 error InvalidSettlementProof(uint8 reason);
 error FinalizationTooEarly(uint64 earliest);
+error InvalidSettlementConfig(uint8 reason);
+error UnknownSettlementConfig(bytes32 configId);
+error SettlementConfigExists(bytes32 configId);
 // ---- Tokens ----
 error NonExactTransfer(uint256 expected, uint256 received);
 // ---- Upgrades ----
@@ -403,7 +447,8 @@ SettlementAssetApproved, ProductApproved, ProductEnabled, SeriesCreated, GroupCr
 CollateralDeposited, CollateralWithdrawn,
 ExternalLongMinted, LongWrapped, LongUnwrapped, ShortClosedWithWrapper, ShortClosedWithInternalLong,
 SellerFeeCharged, BuyerFeeCharged, FeeSplit,
-SpotUpdated, SurfaceAccepted, NodeProven, PublisherAdded, PublisherRemoved, EmergencyModeSet,
+SpotSourceSet, SpotUpdated, SurfaceAccepted, NodeProven, PublisherAdded, PublisherRemoved, QuorumSet,
+EmergencyModeSet, SurfaceConfigSet, SettlementConfigRegistered, SettlementConfigApproved,
 ProductCloseOnlySet, RiskParameterSetUpdated,
 AuctionStarted, SliceLiquidated, WrapperLiquidated, BadDebtCovered, AuctionEnded,
 GroupFinalized, AccountSettled, RecoveryRatioSet, SettlementClaimed, WrapperRedeemed, DustSwept, OracleStalled,

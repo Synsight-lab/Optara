@@ -91,30 +91,32 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| VOL-001 | A valid report with quorum is accepted; header stored; `SurfaceAccepted` |
-| VOL-002 | Wrong chainId / contract / product reverts (`InvalidSurfaceReport`) |
-| VOL-003 | Replayed or lower `surfaceSeq` reverts (INV-17) |
+| VOL-001 | A valid report with quorum is accepted; header and kNodes stored; `SurfaceAccepted`; status FRESH; a report signed with `cast` from JSON typed data is accepted (independent EIP-712 check, `reportDigest`) |
+| VOL-002 | Wrong chainId / contract (reason 1), unknown product, pair mismatch or product without `setSurfaceConfig` (reason 2) revert (`InvalidSurfaceReport`) |
+| VOL-003 | Replayed or lower `surfaceSeq`, or an older `validAfter`, reverts (reason 3, INV-17) |
 | VOL-004 | Expired or not-yet-valid report reverts; lifetime > max reverts |
-| VOL-005 | Duplicate signer, unknown signer, below quorum, no independent signer → revert (`InvalidSignatures`) |
-| VOL-006 | Calendar violation (ATM variance decreasing in tenor) reverts |
+| VOL-005 | Duplicate signer, unknown signer, unsorted signatures, malformed signature, below quorum, no independent signer → revert (`InvalidSignatures`); more than quorum is fine; changing any of the 21 signed fields changes the digest |
+| VOL-006 | Tenor and calendar checks (reason 5: no tenor, not increasing, not after validAfter, ATM variance zero or decreasing, unused tenor with data, ATM IV outside the report's bounds); kNodes checks (reason 6: empty, > 32, not strictly increasing); IV bounds vs the product floor and cap (reason 7) |
 | VOL-007 | ATM IV move > `maxIvMoveBps` reverts; accepted in emergency mode (`setEmergencyMode`, `EmergencyModeSet`, product goes close-only) |
-| VOL-008 | `confidenceBps > max` → product close-only |
-| VOL-009 | Bad Merkle proof reverts; a proven leaf is cached (`proveNodes`, `NodeProven`, INV-19) |
+| VOL-008 | `confidenceBps > maxConfidenceBps` → report stored with `lowConfidence` (the risk manager makes the product close-only); the next confident report clears it |
+| VOL-009 | `proveNodes`: valid proof caches the leaf (`nodeValue`, `NodeProven`, INV-19); already-proven leaves skipped; tampered value, wrong index, unused tenor, node beyond `kNodes`, old report → reason 10; leaf IV outside the report's bounds → reason 9 |
 | VOL-010 | Interpolation: exact tenor, between tenors, between nodes, beyond edge nodes (flat) vs reference (INV-40) |
-| VOL-011 | Stale handling: short IV up, long IV down, long intrinsic after `maxLongTimeValueStale` (INV-16) |
+| VOL-011 | `surfaceStatus`: FRESH while age ≤ `surfaceStaleAfter` and before `expiresAt`, then STALE with `staleSeconds`; pricing adjustments (short IV up, long IV down, long intrinsic after `maxLongTimeValueStale`) in the risk manager |
 | VOL-012 | Age > `maxSurfaceStale` → product close-only automatically |
 | VOL-013 | A needed leaf missing from cache and update reverts (`MissingSurfaceNode`) |
-| VOL-014 | `addPublisher` and quorum changes timelocked; `removePublisher` instant for the guardian (`PublisherAdded`, `PublisherRemoved`) |
+| VOL-014 | `addPublisher` and `setQuorum` governance only; `removePublisher` instant for the guardian; duplicates and unknown publishers rejected (`InvalidPublisher`); `isPublisher`, `quorum` views (`PublisherAdded`, `PublisherRemoved`, `QuorumSet`) |
+| VOL-015 | `setSurfaceConfig`: governance only, each bound enforced (`InvalidSurfaceConfig` 1–6) (`SurfaceConfigSet`); `kNodes` storage rewritten only when the grid changes |
 
 ## SPT — Spot oracle
 
 | ID | Case |
 |---|---|
-| SPT-001 | A fresh update is accepted and normalized to WAD (`SpotUpdated`) |
-| SPT-002 | An older update doesn't overwrite a newer one (INV-18) |
-| SPT-003 | Stale spot blocks risk-increasing actions only (`StaleSpot`) |
-| SPT-004 | Excess `msg.value` refunded; insufficient provider fee reverts |
-| SPT-005 | `setSource` timelocked; a derived source divides by the stablecoin/USD leg, never treats USD as the stablecoin |
+| SPT-001 | `update` accepts a fresh price normalized to WAD for direct and derived (base/USD ÷ quote/USD) sources and exponents 0 to −36 (`SpotUpdated`); `spotPrice`, `requireFreshSpot`, `isSpotFresh` |
+| SPT-002 | An older or equal-time update doesn't overwrite a newer one (INV-18) |
+| SPT-003 | Stale spot (`age > maxSpotAge`, or never set) reverts `requireFreshSpot` (`StaleSpot`); a derived price is as old as its older leg; stale spot blocks risk-increasing actions only |
+| SPT-004 | `updateFee` quotes the provider fee; `update` pays exactly that fee and refunds the rest to the caller; insufficient fee reverts (`InsufficientProviderFee`); a caller that can't take the refund reverts (`RefundFailed`) |
+| SPT-005 | `setSource` governance only (`SpotSourceSet`); a derived source divides by the stablecoin/USD leg, never treats USD as the stablecoin; each source check reverts with its reason (`InvalidSpotSource` 1–4) |
+| SPT-006 | Non-positive price, positive or too negative exponent, price above 1e36 or rounding to zero revert (`InvalidSpotPrice`); refreshing an unconfigured product reverts |
 
 ## MRG — Margin
 
@@ -174,9 +176,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| STL-001 | Finalize with a valid round-in-force proof; second finalize reverts (INV-26, `GroupFinalized`) |
-| STL-002 | Too early, wrong round, a non-latest round without a successor → revert (`FinalizationTooEarly`, `InvalidSettlementProof`) |
-| STL-003 | Fallback feed only after the primary is proven invalid |
+| STL-001 | Finalize with a valid round-in-force proof (successor or latest round); for any round history exactly one round is provable (`verify`); second finalize reverts (INV-26) |
+| STL-002 | Too early (`FinalizationTooEarly`, `earliestFinalization`), each wrong proof reverts with its reason (`InvalidSettlementProof` 1–12): earlier round, round after the end, skipped round, false latest claim, missing round or successor, wrong proof count; stale or non-positive observation is invalid; Chainlink phase boundaries handled (`isImmediateSuccessor`) |
+| STL-003 | Fallback feed only after the primary is proven invalid; refused while the primary is valid; derived sources: half-up division, leg skew limit, invalid leg |
 | STL-004 | `ORACLE_STALLED` after the deadline (`OracleStalled`); late valid finalize works |
 | STL-005 | Wrapper supply snapshot at finalization; supply only decreases afterwards (INV-33) |
 | STL-006 | `settleAccountGroup` nets all series; debt collected into the pool; unpaid recorded; balances zeroed; counter decremented (`AccountSettled`) |
@@ -195,7 +197,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | STL-019 | Rounding: debts round up, credits, ratio and payouts round down (INV-49) |
 | STL-020 | Any address can settle any participant; rewards escalate; settlement completes for every group (LIV-2) |
 | STL-021 | Redeem or claim before the ratio reverts (`RatioNotSet`); settle before finalization reverts (`GroupNotFinalized`) |
-| STL-022 | `registerConfig` stores a settlement oracle config that can never change |
+| STL-022 | `registerConfig` (oracle admin) stores an approved config under the hash of its contents that can never change; duplicates and each invalid config revert (`SettlementConfigExists`, `InvalidSettlementConfig` 1–6); `setConfigApproved`: governance approves, guardian may revoke, unknown id reverts (`UnknownSettlementConfig`); `isConfigUsable` matches the pair; `stalledAfter` (`SettlementConfigRegistered`, `SettlementConfigApproved`) |
 
 ## VEN — Venues
 
@@ -375,13 +377,18 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | withdrawTreasury | FEE-007 |
 | setMinimums | FEE-010 |
 | deposit (InsuranceFund) | FEE-009 |
-| update (LiveSpotOracle) | SPT-001, SPT-002, SPT-004 |
+| update (LiveSpotOracle) / updateFee | SPT-001, SPT-002, SPT-004, SPT-006 |
+| spotPrice / requireFreshSpot / isSpotFresh | SPT-001, SPT-003 |
 | setSource | SPT-005 |
 | submitReport | VOL-001 – VOL-008 |
-| proveNodes | VOL-009, VOL-013 |
+| proveNodes / nodeValue | VOL-009, VOL-013 |
+| header / kNodes / reportDigest / surfaceStatus | VOL-001, VOL-011, VOL-015 |
+| setQuorum / isPublisher | VOL-014 |
+| setSurfaceConfig | VOL-015 |
 | addPublisher / removePublisher | VOL-014 |
 | setEmergencyMode | VOL-007 |
-| registerConfig | STL-022 |
+| registerConfig / setConfigApproved / isConfigUsable / stalledAfter | STL-022 |
+| verify / earliestFinalization / isImmediateSuccessor | STL-001, STL-002, STL-003 |
 | registerMarket / setMarketStatus | VEN-001, VEN-009 |
 | buyThroughVenue | VEN-002, VEN-004, FEE-004 |
 | sellThroughVenue | VEN-003, FEE-005 |
@@ -452,6 +459,15 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | InvalidSettlementProof | STL-002 |
 | FinalizationTooEarly | STL-002 |
 | NonExactTransfer | CLR-001 |
+| InvalidSpotSource | SPT-005, SPT-006 |
+| InvalidSpotPrice | SPT-006 |
+| InsufficientProviderFee | SPT-004 |
+| RefundFailed | SPT-004 |
+| InvalidSurfaceConfig | VOL-014, VOL-015 |
+| InvalidPublisher | VOL-014 |
+| InvalidSettlementConfig | STL-022 |
+| UnknownSettlementConfig | STL-022 |
+| SettlementConfigExists | STL-022 |
 | ZeroAddress | UPG-008 |
 | NotAContract | UPG-009 |
 | InvalidScope | PAU-003 |

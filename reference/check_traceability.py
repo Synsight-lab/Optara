@@ -79,7 +79,7 @@ def main():
 
     # Functions and views (§1-§11)
     body = section(spec, r"^## 1\. ", r"^## 12\. ")
-    names = set(re.findall(r"`(?:\w+\.)?([a-z]\w*)\s*\(", body)) - {"floor", "ceil", "min", "max"}
+    names = set(re.findall(r"`(?:\w+\.)?([a-z]\w*)\s*\(", body)) - {"floor", "ceil", "min", "max", "keccak256"}
     names |= set(re.findall(r"`(\w+)`", section(spec, r"^## 10\. ", r"^## 11\. ")))
     names |= set(re.findall(r"\b(addPublisher|removePublisher)\b", body))
     app_b = appendix(tc_text, "B")

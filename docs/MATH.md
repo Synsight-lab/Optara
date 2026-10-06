@@ -425,13 +425,17 @@ claims plus net credits. If every debtor pays, the ratio is exactly 1 (checks M1
   | Cap | Value | Enforced by |
   |---|---|---|
   | `maxContractSizeWad × maxSettlementPriceWad` per product | ≤ 1e50 | `OptionSeriesRegistry.approveProduct` |
-  | `maxSettlementPriceWad` | ≤ 1e36 | `approveProduct`; settlement prices are clamped to it |
+  | `maxSettlementPriceWad` | ≤ 1e36 | `approveProduct` |
+  | Settlement price used for payoffs | `min(S*, min over the group's series of floor(1e50 / CS_i))` | `SettlementWindow` at finalization |
   | Strike | ≤ `maxSettlementPriceWad` | `approveProduct` |
   | Series per group | ≤ 256 | `createSeries` |
   | Open interest (total internal short) per series | ≤ 1e24 (1,000,000 options) | Risk parameters (hard cap) |
 
-  Per series, wrapper supply + internal longs = internal shorts ≤ 1e24, and `intrinsic × CS ≤ 1e50`, so each
-  series contributes at most 1e74 to a group sum; 256 series give at most 2.56e76 < `int256` max (5.79e76).
+  Per series, wrapper supply + internal longs = internal shorts ≤ 1e24, and `intrinsic × CS ≤ 1e50` (a call's
+  intrinsic ≤ the capped `S*` ≤ 1e50 / CS; a put's ≤ K ≤ `maxSettlementPrice` with `CS × maxSettlementPrice ≤ 1e50`
+  at creation), so each series contributes at most 1e74 to a group sum; 256 series give at most 2.56e76 < `int256`
+  max (5.79e76). The cap is computed per group from the series' own contract sizes, so later changes to product
+  bounds can't break it.
 - `spotShockBps ≥ −10_000` (spot never below 0).
 - `maxBonusBps + liquidationPenaltyBps < 10_000`.
 - `imBufferBps ≤ 5_000`.

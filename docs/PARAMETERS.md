@@ -60,8 +60,8 @@ calibration (`timeMode = 2`) is an open decision ([DESIGN_DECISIONS.md](DESIGN_D
 
 | Name | Default | Unit | Notes |
 |---|---|---|---|
-| `maxSpotAge` | 60 | seconds | Per product |
-| `surfaceStaleAfter` | 300 | seconds | After this, risk-increasing actions stop |
+| `maxSpotAge` | 60 | seconds | Per product, in `LiveSpotOracle` source (≤ 1 day) |
+| `surfaceStaleAfter` | 300 | seconds | After this, risk-increasing actions stop. This and the rows below (to `maxReportLifetime`) are per product in `VolSurfaceOracle.SurfaceConfig` |
 | `staleIvPenaltyBpsPerHour` | 1,000 | bps of IV per hour | Direction-aware |
 | `maxLongTimeValueStale` | 1,800 | seconds | Longs valued at intrinsic after this |
 | `maxSurfaceStale` | 21,600 (6 h) | seconds | Product close-only after this |

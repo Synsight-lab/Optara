@@ -70,10 +70,19 @@ error RatioNotSet();
 error NothingToClaim();
 
 // ---- Oracles ----
+error InvalidSpotSource(uint8 reason);
+error InvalidSpotPrice(bytes32 productId);
+error InsufficientProviderFee(uint256 required, uint256 provided);
+error RefundFailed();
 error InvalidSurfaceReport(uint8 reason);
 error InvalidSignatures();
+error InvalidSurfaceConfig(uint8 reason);
+error InvalidPublisher(address publisher);
 error InvalidSettlementProof(uint8 reason);
 error FinalizationTooEarly(uint64 earliest);
+error InvalidSettlementConfig(uint8 reason);
+error UnknownSettlementConfig(bytes32 configId);
+error SettlementConfigExists(bytes32 configId);
 
 // ---- Tokens ----
 error NonExactTransfer(uint256 expected, uint256 received);

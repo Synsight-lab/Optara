@@ -27,15 +27,19 @@ References: Monad oracles <https://monad.docsbot.app/tooling-and-infra/oracles>,
 
 Each product has one configured spot source (adapter interface `ISpotSource`).
 
-- **Default v1:** Pyth pull feed. The caller includes a signed price update in the transaction, so prices are fresh.
-- **Alternative:** a Chainlink Data Streams report.
-- **Push feeds** (e.g. Chainlink price feeds) are allowed only if their heartbeat is shorter than `maxSpotAge`.
+- **v1 (implemented):** Pyth pull feeds. The caller includes signed price updates in the transaction, so prices are
+  fresh. Two source kinds per product: `PYTH_DIRECT` (one underlying/asset feed) and `PYTH_DERIVED`
+  (underlying/USD ÷ asset/USD, both legs configured explicitly).
+- **Later, through an upgrade:** Chainlink Data Streams reports; push feeds only if their heartbeat is shorter than
+  `maxSpotAge`.
 
 ### 2.2 Rules
 
-- Price must be > 0, in settlement-asset units per underlying, normalized to WAD.
-- `now − publishTime ≤ maxSpotAge` for use in risk-increasing actions and liquidation.
-- An older update never overwrites a newer stored price.
+- Price must be > 0, in settlement-asset units per underlying, normalized to WAD (`price × 10^(18 + expo)`,
+  exponent in [−36, 0]) and at most 1e36.
+- `now − publishTime ≤ maxSpotAge` (inclusive) for use in risk-increasing actions and liquidation. A derived price
+  takes the **older** leg's publish time, so both legs must be fresh.
+- An older (or equal-time) update never overwrites the stored price (INV-18).
 - Derived pairs (e.g. ETH/USD ÷ USDC/USD) must be configured explicitly. A USD price is never treated as a
   stablecoin price.
 - Provider update fees are paid by the caller (`msg.value`); any excess is refunded.
@@ -79,14 +83,21 @@ and its hash is stored.
 leaf = keccak256(abi.encode(productId, surfaceSeq, tenorIndex, nodeIndex, totalVarianceWad))
 ```
 
-Proofs are standard sorted-pair Merkle proofs. A proven leaf is cached by
-`(productId, surfaceSeq, tenorIndex, nodeIndex)`, so it is proved at most once per report.
+Proofs are standard sorted-pair Merkle proofs (OpenZeppelin `MerkleProof`). A proven leaf is cached by
+`(productId, surfaceSeq, tenorIndex, nodeIndex)`, so it is proved at most once per report. Only leaves of the
+product's current report can be proved, and a leaf whose IV (`sqrt(w / (tenor − validAfter))`) is outside the
+report's bounds is rejected. `kNodes` are stored on acceptance only when they differ from the stored grid.
+
+Per-product settings live in the oracle (`SurfaceConfig`): report lifetime, IV move and confidence limits, IV floor
+and cap, and the staleness thresholds (`surfaceStaleAfter`, `maxSurfaceStale`, `staleIvPenaltyBpsPerHour`,
+`maxLongTimeValueStale`). `surfaceStatus` returns FRESH (age ≤ `surfaceStaleAfter` and before `expiresAt`), STALE
+(with seconds beyond `surfaceStaleAfter`) or EXPIRED_DATA (age > `maxSurfaceStale`).
 
 ### 3.3 Verification modes
 
-1. **Provider verifier.** If an approved provider offers an on-chain verifier for this exact format, the oracle calls
-   it.
-2. **Optara EIP-712 quorum** (default). At least `minPublisherQuorum` distinct approved publishers sign the EIP-712
+1. **Provider verifier** (not in v1; can be added by upgrade). If an approved provider offers an on-chain verifier for
+   this exact format, the oracle calls it.
+2. **Optara EIP-712 quorum** (implemented). At least `minPublisherQuorum` distinct approved publishers sign the EIP-712
    hash of the report.
 
 ```text
@@ -103,15 +114,20 @@ the independent group).
 ```text
 chainId == block.chainid and verifyingContract == this
 product exists and the report's underlying/settlementAsset match it
-surfaceSeq > stored surfaceSeq                       (no replays, no going back)
+surfaceSeq > stored surfaceSeq and validAfter ≥ stored validAfter   (no replays, no going back)
 validAfter ≤ now < expiresAt
 expiresAt − validAfter ≤ maxReportLifetime
-quorum valid
-tenorTimestamps increasing; ATM total variance non-decreasing with tenor (calendar sanity)
-surfaceMinIvBps ≥ product minIv floor and surfaceMaxIvBps ≤ maxIv
-ATM IV change vs stored report ≤ maxIvMoveBps        (unless emergency mode is on)
-kNodes increasing, length ≤ 32
-confidenceBps ≤ maxConfidenceBps    (otherwise the report is stored but the product becomes close-only)
+quorum valid (signatures sorted by signer, all active publishers, ≥ 1 independent)
+1–4 tenors, increasing, all after validAfter, unused trailing entries zero
+ATM total variance > 0 and non-decreasing with tenor (calendar sanity)
+every ATM IV within [surfaceMinIvBps, surfaceMaxIvBps]
+surfaceMinIvBps ≥ product IV floor, surfaceMaxIvBps ≤ product IV cap, min ≤ max
+ATM IV change ≤ maxIvMoveBps for every tenor        (unless emergency mode is on)
+    compared at the same expiry: the stored surface's ATM IV there (linear in total variance between its
+    tenors, the nearest tenor's IV outside them)
+kNodes strictly increasing, 1–32 nodes
+confidenceBps ≤ maxConfidenceBps    (otherwise the report is stored with lowConfidence = true and the risk manager
+                                     treats the product as close-only until a confident report arrives)
 ```
 
 Every leaf used must also satisfy `surfaceMinIvBps ≤ implied IV ≤ surfaceMaxIvBps` once converted.
@@ -119,7 +135,8 @@ Every leaf used must also satisfy `surfaceMinIvBps ≤ implied IV ≤ surfaceMax
 ### 3.5 Emergency mode
 
 The guardian may enable emergency mode for a product. It waives `maxIvMoveBps` so a sharp real volatility move can be
-accepted. Emergency mode also sets the product close-only until governance clears it.
+accepted. While it is on, the risk manager treats the product as close-only (an automatic cause, not a separate
+flag). Only governance turns it off.
 
 ### 3.6 Publishers
 
@@ -195,8 +212,13 @@ struct SettlementOracleConfig {
 - The finalizer proves it by naming that round and either its immediate successor (`updatedAt > end`) or showing it
   is the feed's latest round. Exactly one round satisfies this, so the caller cannot choose the price.
 - The round must also have `updatedAt ≥ expiry + observationStartOffset` and a positive answer.
-- The normalized price is clamped to the product's `maxSettlementPriceWad` ([MATH.md](MATH.md) §14). The bound
-  (default USD 10¹² per ETH) is never reached in practice; clamping keeps settlement live and every payoff bounded.
+- `SettlementOracle.verify` returns the proven price unclamped. `SettlementWindow` clamps it per group to
+  `min over the group's series of floor(1e50 / contractSizeWad)` ([MATH.md](MATH.md) §14). The cap is above every
+  product's `maxSettlementPriceWad`, so it only engages at absurd prices, and it keeps every payoff numerator bounded
+  for every series in the group, whatever product bounds were in force when each series was created.
+- **Trust assumption.** Chainlink stamps each round with the block time it is written in, so once
+  `now > observation end` every round with `updatedAt ≤ end` is already on chain and the in-force round can't
+  change. `minFinalizationDelay` adds a margin for reorgs.
 - **Fallback:** the fallback feed may be used only if the caller proves on-chain that the primary's in-force round
   is invalid (stale or non-positive). Omitting primary data proves nothing.
 - Finalization is allowed only when `now ≥ expiry + minFinalizationDelay` and `now > observation end`.

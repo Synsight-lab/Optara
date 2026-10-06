@@ -79,7 +79,8 @@ It needs governance for guardian-set causes and emergency mode.
 | FRESH | age ≤ `surfaceStaleAfter`, before `expiresAt` | Everything allowed |
 | STALE | `surfaceStaleAfter` < age ≤ `maxSurfaceStale` | No new risk; liquidation with direction-aware penalties; longs at intrinsic after `maxLongTimeValueStale` |
 | EXPIRED_DATA | age > `maxSurfaceStale` | Product CLOSE_ONLY |
-| EMERGENCY | guardian flag | Large IV moves accepted; product CLOSE_ONLY |
+| EMERGENCY | guardian flag in `VolSurfaceOracle` (governance clears) | Large IV moves accepted; product CLOSE_ONLY while on |
+| LOW_CONFIDENCE | current report's `confidenceBps > maxConfidenceBps` | Report stored; product CLOSE_ONLY until a confident report arrives |
 
 ## 6. Subaccount position in a group (for the participant counter)
 
