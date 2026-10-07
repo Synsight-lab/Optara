@@ -29,8 +29,8 @@ interface ISubAccounts {
     function applyDelta(uint256 accountId, bytes32 seriesId, int256 delta) external returns (int256 balance);
 
     // ---- governance ----
-    function setPositionLimits(uint256 maxSeriesPerAccount, uint256 maxBucketsPerAccount) external;
-    function setMinPositionQty(uint256 minPositionQty) external;
+    function setPositionLimits(uint256 maxSeries, uint256 maxBuckets) external;
+    function setMinPositionQty(uint256 qty) external;
 
     // ---- views ----
     function ownerOf(uint256 accountId) external view returns (address);

@@ -118,6 +118,7 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | SPT-004 | `updateFee` quotes the provider fee; `update` pays exactly that fee and refunds the rest to the caller; insufficient fee reverts (`InsufficientProviderFee`); a caller that can't take the refund reverts (`RefundFailed`) |
 | SPT-005 | `setSource` governance only (`SpotSourceSet`); a derived source divides by the stablecoin/USD leg, never treats USD as the stablecoin; each source check reverts with its reason (`InvalidSpotSource` 1–4) |
 | SPT-006 | Non-positive price, positive or too negative exponent, price above 1e36 or rounding to zero revert (`InvalidSpotPrice`); refreshing an unconfigured product reverts |
+| SPT-007 | A Pyth leg whose confidence band exceeds `maxConfidenceBps` is rejected, direct or either derived leg; the limit itself is accepted; `setSource` requires `0 < maxConfidenceBps ≤ 10,000` (`SpotConfidenceTooWide`, `InvalidSpotSource(5)`, DD-34) |
 
 ## MRG — Margin
 
@@ -255,10 +256,10 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | GAS-001 | Risk check at max positions ≤ `maxRiskCheckGas` |
 | GAS-002 | Settlement batch of 20 within the block limit |
 | GAS-003 | Every function containing a loop is benchmarked at its configured maximum; no loop depends on user count (INV-36) |
-| E2E-001 | F1 → F2 → F9 → F13 full lifecycle, ratio 1 |
-| E2E-002 | Market crash/rally, liquidation, expiry with shortfall, insurance, ratio < 1 |
-| E2E-003 | Publisher outage → close-only → recovery |
-| E2E-004 | Oracle stall at expiry → late finalize |
+| E2E-001 | F1 → F2 → F3 → F9 → F17 → F4/F11 → F6 → F5 → F7 → F10/F13 on the production deployment (`script/OptaraDeploy.sol`), listing per F18, publishers per F19: full lifecycle, ratio 1, custody = cash + pool |
+| E2E-002 | F8 → F12 (slice and wrapper burn) → F14: rally, liquidation, expiry with a shortfall beyond insurance, ratio < 1, payouts at the ratio |
+| E2E-003 | F16 → F19: publisher outage, stale surface blocks risk, close-only beyond `maxSurfaceStale` while deposits and closes work, fresh report restores trading |
+| E2E-004 | F15: settlement oracle stall at expiry (`ORACLE_STALLED`, `flagOracleStalled`), closes still work, nothing redeemable, late finalize with the authentic round, full payout |
 | EVT-001 | Every event in [PROTOCOL_SPEC.md](PROTOCOL_SPEC.md) §14 is emitted by at least one test with all fields asserted (generated checklist) |
 
 ## SVC — Off-chain services
@@ -506,8 +507,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | InvalidSettlementProof | STL-002 |
 | FinalizationTooEarly | STL-002 |
 | NonExactTransfer | CLR-001 |
-| InvalidSpotSource | SPT-005, SPT-006 |
+| InvalidSpotSource | SPT-005, SPT-006, SPT-007 |
 | InvalidSpotPrice | SPT-006 |
+| SpotConfidenceTooWide | SPT-007 |
 | InsufficientProviderFee | SPT-004 |
 | RefundFailed | SPT-004 |
 | InvalidSurfaceConfig | VOL-014, VOL-015 |

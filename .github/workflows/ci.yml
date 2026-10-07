@@ -1,6 +1,6 @@
 name: CI
 
-# Optara PM. Jobs are added as the build plan (BUILD_PLAN.md) adds components: Slither (step 13), indexer, keepers,
+# Optara PM. Jobs are added as the build plan (BUILD_PLAN.md) adds components: indexer, keepers,
 # publisher (step 15) and frontend (step 16). The V2 workflow is in git history.
 on:
   push:
@@ -153,10 +153,40 @@ jobs:
   # -----------------------------------------------------------------------------------------------
   # Single required check for branch protection
   # -----------------------------------------------------------------------------------------------
+  # -----------------------------------------------------------------------------------------------
+  # Static analysis (TESTING.md §8): Slither over src/. Reviewed findings are recorded in slither.db.json with their
+  # rationale in SECURITY.md §8; any new finding fails the job.
+  # -----------------------------------------------------------------------------------------------
+  slither:
+    name: Contracts · Slither
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Slither
+        run: pip install slither-analyzer==0.11.5
+
+      - name: Slither (fails on any finding not in the triage database)
+        run: slither . --config-file slither.config.json --triage-database slither.db.json
+
   ci-success:
     name: CI passed
     if: always()
-    needs: [contracts, coverage, reference]
+    needs: [contracts, coverage, reference, slither]
     runs-on: ubuntu-latest
     steps:
       - name: All blocking jobs succeeded

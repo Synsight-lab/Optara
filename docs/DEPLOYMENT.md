@@ -10,6 +10,9 @@
 
 ## 2. Deployment order
 
+Implemented by `contract/script/OptaraDeploy.sol` (shared by the broadcast script and the E2E tests, so the tests
+run exactly what ships); it checks every predicted address and that the deployer ends with nothing.
+
 1. `UpgradeAdmin` (timelock + allowlist), with governance and guardian multisigs.
 2. Implementations and proxies, each deployed by `UpgradeAdmin.deployProxy` and initialized in the same transaction
    (no takeover window). Proxy addresses are computed in advance from `UpgradeAdmin`'s nonce (one `CREATE` per proxy),

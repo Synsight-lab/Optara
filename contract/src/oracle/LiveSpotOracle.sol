@@ -14,6 +14,7 @@ import {
     StaleSpot,
     InvalidSpotSource,
     InvalidSpotPrice,
+    SpotConfidenceTooWide,
     InsufficientProviderFee,
     RefundFailed
 } from "../libraries/Errors.sol";
@@ -33,6 +34,8 @@ contract LiveSpotOracle is OptaraModule, ILiveSpotOracle {
     uint8 internal constant SRC_KIND = 2;
     uint8 internal constant SRC_FEEDS = 3;
     uint8 internal constant SRC_AGE = 4;
+    uint8 internal constant SRC_CONFIDENCE = 5;
+    uint256 internal constant BPS = 10_000;
 
     struct StoredPrice {
         uint192 priceWad;
@@ -102,6 +105,7 @@ contract LiveSpotOracle is OptaraModule, ILiveSpotOracle {
             revert InvalidSpotSource(SRC_KIND);
         }
         if (source.maxSpotAge == 0 || source.maxSpotAge > MAX_SPOT_AGE_CAP) revert InvalidSpotSource(SRC_AGE);
+        if (source.maxConfidenceBps == 0 || source.maxConfidenceBps > BPS) revert InvalidSpotSource(SRC_CONFIDENCE);
         _s().sources[productId] = source;
         emit SpotSourceSet(productId, source);
     }
@@ -145,9 +149,9 @@ contract LiveSpotOracle is OptaraModule, ILiveSpotOracle {
         SpotSource storage src = $.sources[productId];
         if (src.kind == SourceKind.NONE) revert InvalidSpotSource(SRC_KIND);
 
-        (uint256 price, uint256 publishTime) = _read(src.baseFeedId, productId);
+        (uint256 price, uint256 publishTime) = _read(src.baseFeedId, productId, src.maxConfidenceBps);
         if (src.kind == SourceKind.PYTH_DERIVED) {
-            (uint256 quote, uint256 quoteTime) = _read(src.quoteFeedId, productId);
+            (uint256 quote, uint256 quoteTime) = _read(src.quoteFeedId, productId, src.maxConfidenceBps);
             price = M.fullMulDiv(price, 1e18, quote); // underlying/USD ÷ asset/USD, rounded down
             if (quoteTime < publishTime) publishTime = quoteTime; // the older leg decides freshness
         }
@@ -163,11 +167,20 @@ contract LiveSpotOracle is OptaraModule, ILiveSpotOracle {
     }
 
     /// @dev One Pyth leg normalized to WAD: price × 10^(18 + expo). Non-positive prices are invalid.
-    function _read(bytes32 feedId, bytes32 productId) private view returns (uint256 wad, uint256 publishTime) {
+    /// @dev One Pyth leg in WAD. Rejects a confidence interval wider than `maxConfidenceBps` of the price (DD-34):
+    ///      Pyth publishes `conf` in the price's own units, so the comparison needs no scaling.
+    function _read(bytes32 feedId, bytes32 productId, uint16 maxConfidenceBps)
+        private
+        view
+        returns (uint256 wad, uint256 publishTime)
+    {
         IPyth.Price memory p = _s().pyth.getPriceUnsafe(feedId);
         if (p.price <= 0 || p.expo > 0 || p.expo < -36) revert InvalidSpotPrice(productId);
         // forge-lint: disable-next-line(unsafe-typecast)
         uint256 raw = uint256(uint64(p.price)); // p.price > 0
+        if (uint256(p.conf) * BPS > raw * maxConfidenceBps) {
+            revert SpotConfidenceTooWide(productId, (uint256(p.conf) * BPS + raw - 1) / raw);
+        }
         int256 shift = 18 + int256(p.expo);
         // forge-lint: disable-next-line(unsafe-typecast)
         wad = shift >= 0 ? raw * 10 ** uint256(shift) : raw / 10 ** uint256(-shift);

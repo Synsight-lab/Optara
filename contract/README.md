@@ -39,9 +39,12 @@ test/
   invariant/     stateful random action sequences against a ghost model
   differential/  Solidity vs the Python reference model (vectors + FFI)
   gas/           gas benchmarks with regression ceilings
+  e2e/           user journeys on the production deployment (E2E-001..004, UPG-003)
+  fork/          live Monad mainnet (Kuru), FOUNDRY_PROFILE=fork
   harness/       external wrappers around internal libraries (so tests can catch reverts)
   mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk, clearing, liquidation, settlement and venue stacks; mock Kuru)
 script/
+  OptaraDeploy.sol   the production deployment (DEPLOYMENT.md §2), also used by test/e2e
   coverage_gate.py   TESTING.md §7 thresholds on an lcov report
   storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct
 ```
@@ -55,6 +58,7 @@ forge test                                  # default profile (fuzz 1,000 runs; 
 FOUNDRY_PROFILE=ci forge test               # CI depth (fuzz 10,000 runs; FFI tests 2,000)
 forge test --match-path 'test/gas/*' -vv    # print gas benchmarks
 FOUNDRY_PROFILE=fork forge test             # fork tests vs live Monad mainnet (FORK_RPC_URL, default rpc.monad.xyz)
+slither . --config-file slither.config.json --triage-database slither.db.json   # static analysis (SECURITY.md §8)
 ```
 
 Differential tests run `python3 ../reference/ffi.py` (standard library only) and read `../reference/vectors/`.

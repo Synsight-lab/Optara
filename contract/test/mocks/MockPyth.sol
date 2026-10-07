@@ -38,6 +38,14 @@ contract MockPyth is IPyth {
     function encode(bytes32 id, int64 price, int32 expo, uint256 publishTime) external pure returns (bytes memory) {
         return abi.encode(id, price, uint64(0), expo, publishTime);
     }
+
+    function encodeWithConf(bytes32 id, int64 price, uint64 conf, int32 expo, uint256 publishTime)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return abi.encode(id, price, conf, expo, publishTime);
+    }
 }
 
 /// @notice A caller that cannot receive native refunds.

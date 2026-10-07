@@ -15,6 +15,7 @@ import {
     StaleSpot,
     InvalidSpotSource,
     InvalidSpotPrice,
+    SpotConfidenceTooWide,
     InsufficientProviderFee,
     RefundFailed
 } from "../../src/libraries/Errors.sol";
@@ -123,6 +124,57 @@ contract LiveSpotOracleTest is SpotFixture {
         _push(u);
         (uint256 p,) = spot.spotPrice(ethUsdc);
         assertEq(p, 4123.456789e18);
+    }
+
+    // ------------------------------------------------------------------ SPT-007: confidence (DD-34)
+
+    function test_SPT007_confidenceBoundValidated() public {
+        ILiveSpotOracle.SpotSource memory s = _direct();
+        s.maxConfidenceBps = 0;
+        vm.startPrank(governance);
+        vm.expectRevert(abi.encodeWithSelector(InvalidSpotSource.selector, 5));
+        spot.setSource(ethUsdc, s);
+        s.maxConfidenceBps = 10_001;
+        vm.expectRevert(abi.encodeWithSelector(InvalidSpotSource.selector, 5));
+        spot.setSource(ethUsdc, s);
+        s.maxConfidenceBps = 10_000;
+        spot.setSource(ethUsdc, s);
+        vm.stopPrank();
+        assertEq(spot.sourceOf(ethUsdc).maxConfidenceBps, 10_000);
+    }
+
+    /// @dev 100 bps on a 4,000 price: a band of exactly 40 passes, one unit more is rejected.
+    function test_SPT007_directConfidence() public {
+        vm.prank(governance);
+        spot.setSource(ethUsdc, _direct());
+        bytes[] memory u = new bytes[](1);
+        u[0] = pyth.encodeWithConf(ETH_USDC, 4000_00000000, 40_00000000, -8, T0);
+        _push(u);
+        (uint256 p,) = spot.spotPrice(ethUsdc);
+        assertEq(p, 4000e18, "a band at the limit is accepted");
+        u[0] = pyth.encodeWithConf(ETH_USDC, 4000_00000000, 40_00000001, -8, T0 + 1);
+        vm.expectRevert(abi.encodeWithSelector(SpotConfidenceTooWide.selector, ethUsdc, 101));
+        this.pushExternal(u);
+    }
+
+    /// @dev Each leg of a derived price is checked: a wide USDC/USD band blocks the ETH/USDC price.
+    function test_SPT007_derivedLegConfidence() public {
+        bytes[] memory u = _two(
+            pyth.encodeWithConf(ETH_USD, 4000_00000000, 1_00000000, -8, T0),
+            pyth.encodeWithConf(USDC_USD, 1_00000000, 2_000000, -8, T0)
+        );
+        vm.expectRevert(abi.encodeWithSelector(SpotConfidenceTooWide.selector, ethUsdc, 200));
+        this.pushExternal(u);
+        u = _two(
+            pyth.encodeWithConf(ETH_USD, 4000_00000000, 50_00000000, -8, T0),
+            pyth.encodeWithConf(USDC_USD, 1_00000000, 0, -8, T0)
+        );
+        vm.expectRevert(abi.encodeWithSelector(SpotConfidenceTooWide.selector, ethUsdc, 125));
+        this.pushExternal(u);
+    }
+
+    function pushExternal(bytes[] memory u) external {
+        _push(u);
     }
 
     function test_exponentEdges() public {

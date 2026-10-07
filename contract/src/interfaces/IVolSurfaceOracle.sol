@@ -102,7 +102,7 @@ interface IVolSurfaceOracle {
 
     function addPublisher(address publisher, bool independent) external;
     function removePublisher(address publisher) external;
-    function setQuorum(uint256 quorum) external;
+    function setQuorum(uint256 newQuorum) external;
     function setSurfaceConfig(bytes32 productId, SurfaceConfig calldata config) external;
     function setEmergencyMode(bytes32 productId, bool enabled) external;
 

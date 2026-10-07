@@ -75,3 +75,25 @@ Kuru is **not** trusted for anything in clearing.
 | Settlement progress | Participants > 0 one hour after finalization |
 | Custody | INV-7 violated |
 | Governance | Any `UpgradeScheduled`, publisher change, or parameter change |
+
+## 8. Static analysis (Slither)
+
+CI runs Slither 0.11.5 over `src/` (`contract/slither.config.json`) and fails on any finding not in the reviewed
+triage database (`contract/slither.db.json`). Excluded detectors: `calls-loop` (every loop calls only the protocol's own
+modules, fixed at deployment, with bounded counts: GAS-003) and `timestamp` (time is the protocol's subject: freshness,
+auctions, expiry, timelocks). Review of the 77 recorded findings (step 13):
+
+| Detector | Count | Verdict |
+|---|---|---|
+| `reentrancy-eth`, `reentrancy-balance`, `reentrancy-no-eth`, `reentrancy-events` | 19 | Every state-changing entry point is `nonReentrant` (transient-storage guard per module); external calls go to protocol modules fixed at deployment, to Pyth (no callbacks) or to an adapter whose effects the router measures by balance; the only ETH sent to the caller (the provider-fee refund) is the last step. The "stale balance" reports are the deliberate before/after snapshots around the venue call. |
+| `unused-return` | 35 | Intended: e.g. `requireHealthy` returns the risk the caller doesn't need; `applyDelta` returns the new balance; Kuru and adapter outputs are measured by balance instead; `insurance.cover` pays exactly the computed top-up (≤ its balance). |
+| `uninitialized-local` | 14 | Locals intentionally zero-initialized (accumulators, flags, `Slice` structs filled field by field). |
+| `divide-before-multiply` | 3 | Fixed-point steps of the normal-CDF approximation (verified to 1e-9 against the reference model) and the intended round-down of a slice to a `minPositionQty` multiple. |
+| `incorrect-equality` | 3 | Comparisons with zero (`fee == 0`, `s.left == 0`, `paid == 0`), not balance equalities. |
+| `pyth-unchecked-publishtime` | 1 | Checked: the stored `publishTime` gates freshness (`maxSpotAge`) and ordering (INV-18). |
+| `pyth-unchecked-confidence` | 1 | **Fixed** (DD-34): the confidence band is now checked per leg; Slither still reports it because it doesn't follow `conf` through the `uint256` cast. |
+| `missing-zero-check` | 1 | `UpgradeAdmin`'s `deployer` may be zero (no deployer seat). |
+
+`shadowing-local` reports (interface parameter names equal to getter names) were fixed by renaming the parameters.
+A finding is added to the database only after the same kind of review, recorded here.
+

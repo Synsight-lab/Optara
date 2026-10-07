@@ -395,7 +395,7 @@ Views: `balanceOf(asset)`, `modules()`.
 | Function | Caller | Checks | Effect | Event |
 |---|---|---|---|---|
 | `update(bytes[] updates, bytes32[] productIds) payable → feePaid` | Anyone | `msg.value ≥` provider fee (`InsufficientProviderFee`); each product configured (`InvalidSpotSource`); price > 0, exponent in [−36, 0], WAD ≤ 1e36 (`InvalidSpotPrice`) | Pushes updates to Pyth, refreshes each product, stores the price only if strictly newer (INV-18); refunds the excess to the caller (`RefundFailed` if it can't) | `SpotUpdated(productId, priceWad, publishTime)` |
-| `setSource(productId, SpotSource)` | Governance (timelock) | Product exists; DIRECT = one feed; DERIVED = base/USD ÷ quote/USD, two distinct feeds; `0 < maxSpotAge ≤ 1 day` (`InvalidSpotSource(reason)`: 1 product, 2 kind, 3 feeds, 4 age) | Stored | `SpotSourceSet` |
+| `setSource(productId, SpotSource)` | Governance (timelock) | Product exists; DIRECT = one feed; DERIVED = base/USD ÷ quote/USD, two distinct feeds; `0 < maxSpotAge ≤ 1 day`; `0 < maxConfidenceBps ≤ 10,000` (`InvalidSpotSource(reason)`: 1 product, 2 kind, 3 feeds, 4 age, 5 confidence) | Stored | `SpotSourceSet` |
 
 Views: `spotPrice(productId) → (priceWad, publishTime)`, `requireFreshSpot(productId)` (reverts
 `StaleSpot(productId, age)` if never set or `age > maxSpotAge`), `isSpotFresh`, `sourceOf`, `updateFee(updates)`,
@@ -599,6 +599,7 @@ error PayoutsOutstanding(bytes32 groupId);
 // ---- Oracles ----
 error InvalidSpotSource(uint8 reason);
 error InvalidSpotPrice(bytes32 productId);
+error SpotConfidenceTooWide(bytes32 productId, uint256 confidenceBps);
 error InsufficientProviderFee(uint256 required, uint256 provided);
 error RefundFailed();
 error InvalidOracleUpdate();

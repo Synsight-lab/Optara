@@ -89,6 +89,7 @@ error PayoutsOutstanding(bytes32 groupId);
 // ---- Oracles ----
 error InvalidSpotSource(uint8 reason);
 error InvalidSpotPrice(bytes32 productId);
+error SpotConfidenceTooWide(bytes32 productId, uint256 confidenceBps);
 error InsufficientProviderFee(uint256 required, uint256 provided);
 error RefundFailed();
 error InvalidOracleUpdate();

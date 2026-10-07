@@ -19,6 +19,7 @@ interface ILiveSpotOracle {
         bytes32 baseFeedId; // DIRECT: underlying/asset. DERIVED: underlying/USD.
         bytes32 quoteFeedId; // DERIVED only: settlementAsset/USD.
         uint32 maxSpotAge; // seconds
+        uint16 maxConfidenceBps; // Pyth confidence interval / price, per leg (1–10,000); wider prices are rejected
     }
 
     event SpotSourceSet(bytes32 indexed productId, SpotSource source);

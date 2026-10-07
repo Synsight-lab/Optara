@@ -1,0 +1,464 @@
+[
+ {
+  "id": "25de856ec0dd0d6faa9d4f11f65b65c142c6c30a67cce7347cf26a6c5306aaa5",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#213-250):"
+ },
+ {
+  "id": "51c3dd67aef4243ca722299e11f538ff2d6e6a984aaea574e9f6482554c9c408",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in VenueRouter._buy(VenueRouter.Order,bytes) (src/venues/VenueRouter.sol#117-143):"
+ },
+ {
+  "id": "6038074ab312f104f72743c43583ff428b4d044f718e20786f0cb68aad831262",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210):"
+ },
+ {
+  "id": "c871d75adea774a753eea1070e67513d95093e468ce3ada0015deaa9ca43121e",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in KuruAdapter.sell(address,uint256,uint256,address,bytes) (src/venues/kuru/KuruAdapter.sol#91-115):"
+ },
+ {
+  "id": "e09584874d302db5d0e2ab0dd53efd6e691af53e1ae9cc672812083203a576d9",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in KuruAdapter.buy(address,uint256,uint256,address,bytes) (src/venues/kuru/KuruAdapter.sol#64-88):"
+ },
+ {
+  "id": "e1b0a15d63f762142a127cf33545878e57706291399bb4811bc404ecc52c3aa9",
+  "check": "reentrancy-balance",
+  "impact": "High",
+  "description": "Reentrancy in VenueRouter._sell(VenueRouter.Order,bytes) (src/venues/VenueRouter.sol#145-162):"
+ },
+ {
+  "id": "0e3cfc0b5535584420d7f4e35cd90bbb7dda32572c747aaf6b4e9d288a52aa21",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in OptionClearing.mintExternalLong(uint256,bytes32,uint256,address,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#127-156):"
+ },
+ {
+  "id": "4e54446309f82e02434efa12962155b1af8ff5b7d57f58595af1085ccbf33a21",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#213-250):"
+ },
+ {
+  "id": "4fdd4fe92f861f5631659ee5e3f219a607b19e85988267fead1ffb200aaa6c03",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiveSpotOracle.update(bytes[],bytes32[]) (src/oracle/LiveSpotOracle.sol#66-86):"
+ },
+ {
+  "id": "6ced8f45e5dedab462929806a7ceca5d7f27bffdd42d12bb7ef3c71938e725c4",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210):"
+ },
+ {
+  "id": "9e59c46de8fcb280c66981670ee5841ea6c6d16effd9208b4188802066b211f7",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#213-250):"
+ },
+ {
+  "id": "9fbb30bc09f906816a4a2d1d0b82f3de490fe679ffca50b41b8eb6e0007d42f9",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210):"
+ },
+ {
+  "id": "da0ac68684ddf3fb881c0292f58bfad746af2a6ee72a388ac626c919d201f208",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.startAuction(uint256,address,OracleUpdate) (src/liquidation/LiquidationModule.sol#136-152):"
+ },
+ {
+  "id": "dc5d597b8d08b927e02b41cd853339c14fb05119e85cfbe36ed5e42a23dc8608",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.endAuction(uint256,address,OracleUpdate) (src/liquidation/LiquidationModule.sol#253-265):"
+ },
+ {
+  "id": "dcca9293dd3504b94bcd8311a4c2db37940304738103d7c7f0f57573a1db6988",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210):"
+ },
+ {
+  "id": "f89a2b1f4e69321e1a119b63b75a85a06d6760c5d313322c4ee532093b944fcd",
+  "check": "reentrancy-eth",
+  "impact": "High",
+  "description": "Reentrancy in LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#213-250):"
+ },
+ {
+  "id": "c7d09d5070da5f84a4f910340d592b1646b11b4d5f68ec5931d82b5ffee9f40e",
+  "check": "divide-before-multiply",
+  "impact": "Medium",
+  "description": "OptionPricer._halfErfc(uint256) (src/risk/OptionPricer.sol#56-80) performs a multiplication on the result of a division:"
+ },
+ {
+  "id": "d3469e22613354e3f9fb657f49f0affce05dc8526a223e7b4b683d5fa706cfd2",
+  "check": "divide-before-multiply",
+  "impact": "Medium",
+  "description": "OptionPricer._halfErfc(uint256) (src/risk/OptionPricer.sol#56-80) performs a multiplication on the result of a division:"
+ },
+ {
+  "id": "ec5597ecf09402c21be447fabc137d2718272feab815062e99822777d6520054",
+  "check": "divide-before-multiply",
+  "impact": "Medium",
+  "description": "LiquidationModule._legs(uint256,address,uint16,LiquidationModule.Slice) (src/liquidation/LiquidationModule.sol#376-399) performs a multiplication on the result of a division:"
+ },
+ {
+  "id": "353c524a2c63445e0a14822c71eb9722ff175cac8ff57794db39c9cc79385a46",
+  "check": "incorrect-equality",
+  "impact": "Medium",
+  "description": "FeeController._payReward(address,address,uint256,bool) (src/fees/FeeController.sol#161-169) uses a dangerous strict equality:"
+ },
+ {
+  "id": "48dbff08179545b94a6bec499d68970acca48328a740d47c53b12678414d81a0",
+  "check": "incorrect-equality",
+  "impact": "Medium",
+  "description": "LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210) uses a dangerous strict equality:"
+ },
+ {
+  "id": "cc2d9369b62440cc7205c789e2487819d4c3b45a15d997a41a08220f2667cd69",
+  "check": "incorrect-equality",
+  "impact": "Medium",
+  "description": "VenueRouter._pullExact(IERC20,uint256) (src/venues/VenueRouter.sol#210-216) uses a dangerous strict equality:"
+ },
+ {
+  "id": "475f4922ddfd6addb39c15e856f69c9c88f749216a0c81c76b38e9dffb500af5",
+  "check": "pyth-unchecked-confidence",
+  "impact": "Medium",
+  "description": "Pyth price conf field is not checked in LiveSpotOracle._read(bytes32,bytes32,uint16) (src/oracle/LiveSpotOracle.sol#172-188)"
+ },
+ {
+  "id": "3c26b4dc2b38ae13fddb357639740a57681afe8c53d977ee3d59bc1e1005054f",
+  "check": "pyth-unchecked-publishtime",
+  "impact": "Medium",
+  "description": "Pyth price publishTime field is not checked in LiveSpotOracle._read(bytes32,bytes32,uint16) (src/oracle/LiveSpotOracle.sol#172-188)"
+ },
+ {
+  "id": "2c4e3941f65767b740517316fd9543ff23bb165e4cba735f49b00224e619c350",
+  "check": "reentrancy-no-eth",
+  "impact": "Medium",
+  "description": "Reentrancy in OptionSeriesRegistry.createSeries(SeriesParams) (src/series/OptionSeriesRegistry.sol#157-178):"
+ },
+ {
+  "id": "36ed96a971e121ac6495bedd714ddf9e67043b6059e4529dc9af7e86073ce1ce",
+  "check": "reentrancy-no-eth",
+  "impact": "Medium",
+  "description": "Reentrancy in SettlementWindow._settle(uint256,bytes32,address,ISettlementWindow.GroupAccounting) (src/settlement/SettlementWindow.sol#319-344):"
+ },
+ {
+  "id": "2b8895d592838920ddc1cbdef2f6f61df723e96428829ae3e01a20f4b1d57c8a",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "SettlementWindow._settle(uint256,bytes32,address,ISettlementWindow.GroupAccounting).collected (src/settlement/SettlementWindow.sol#326) is a local variable never initialized"
+ },
+ {
+  "id": "3135850e366de89a5abf44f1a7b2bbad63e8cc2d9ece5d3c2e394ef892e3d85f",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "VolSurfaceOracle._legIv(VolSurfaceOracle.IvContext,uint256,uint64).q (src/oracle/VolSurfaceOracle.sol#445) is a local variable never initialized"
+ },
+ {
+  "id": "3d15896cfd652645005d93835773f05a958d4d1a41734fc415a3a7d2cc062fd8",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._assignVols(PortfolioRiskManager.Bucket,PortfolioRiskManager.Work,PortfolioRiskManager.RiskSet,PortfolioRiskManager.Mode).a (src/risk/PortfolioRiskManager.sol#560) is a local variable never initialized"
+ },
+ {
+  "id": "59c54569a06ac0919e02290abb67da8160e298bcf47cf18ab06866725a90a094",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._assignVols(PortfolioRiskManager.Bucket,PortfolioRiskManager.Work,PortfolioRiskManager.RiskSet,PortfolioRiskManager.Mode).adj (src/risk/PortfolioRiskManager.sol#556) is a local variable never initialized"
+ },
+ {
+  "id": "5d5ed76d2d037799d9b1f565fbd5cef5e7d1614c4645a199847ff64fef318acd",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "SettlementWindow._settle(uint256,bytes32,address,ISettlementWindow.GroupAccounting).unpaid (src/settlement/SettlementWindow.sol#327) is a local variable never initialized"
+ },
+ {
+  "id": "60b0c6b1abf2e2a0164ac0a9ef9d7633eae71dc2391dcd1bfa6578ac8b8fbabe",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._positions(uint256,PortfolioRiskManager.Delta).found (src/risk/PortfolioRiskManager.sol#728) is a local variable never initialized"
+ },
+ {
+  "id": "6f16a94ff79b4fe3bac1504c1daded50adb8dfacf028549943041990ea182b23",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "SettlementOracle._inForce(address,ISettlementOracle.RoundProof,uint64).latestId (src/oracle/SettlementOracle.sol#315) is a local variable never initialized"
+ },
+ {
+  "id": "82b0da3a83dcbc72176627d8a2c9a0057de5331c019f8bc2901c2f6be7d3094b",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "LiquidationModule.previewSlice(uint256,address,uint16).s (src/liquidation/LiquidationModule.sol#289) is a local variable never initialized"
+ },
+ {
+  "id": "c29c8df20a06b3a7dfb35ac7e05a79de38cc51086587ef63884a95d86df4a055",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._ivs(LedgerSeries,uint256).b (src/risk/PortfolioRiskManager.sol#687) is a local variable never initialized"
+ },
+ {
+  "id": "ca542ba663f009dcfa86d9e76fe49940a1d3acfadd02576786a2e8d7c3aa06af",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "VolSurfaceOracle._checkSignatures(bytes32,bytes[]).independent (src/oracle/VolSurfaceOracle.sol#310) is a local variable never initialized"
+ },
+ {
+  "id": "dcfe85c1f1668f577b99c859d53b57fc91cae6c3741b98112f76b491f4aa9f0c",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "VolSurfaceOracle._checkSignatures(bytes32,bytes[]).previous (src/oracle/VolSurfaceOracle.sol#309) is a local variable never initialized"
+ },
+ {
+  "id": "eb417d12fcc06cca79d1a490bc76a3df89cb9a35ad0163b54a80a87f34f23854",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._positions(uint256,PortfolioRiskManager.Delta).nAdded (src/risk/PortfolioRiskManager.sol#724) is a local variable never initialized"
+ },
+ {
+  "id": "f6902658393ca6f0950b1f0cce0235032e3655fdd1d7ccaef3fc6a16f6917c6f",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate).s (src/liquidation/LiquidationModule.sol#222) is a local variable never initialized"
+ },
+ {
+  "id": "fb7d03b8ff8678261b30120b3f09b48940ccf04a0e9e183958fb053e8151d7cc",
+  "check": "uninitialized-local",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._losses(PortfolioRiskManager.Bucket,PortfolioRiskManager.Work,PortfolioRiskManager.RiskSet).base (src/risk/PortfolioRiskManager.sol#590) is a local variable never initialized"
+ },
+ {
+  "id": "055a01bc45b738b46142a5444aa67de3f8f99861a47c7863eb32f9c2895870e7",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "VolSurfaceOracle._checkSignatures(bytes32,bytes[]) (src/oracle/VolSurfaceOracle.sol#306-320) ignores return value by (signer,err,None) = ECDSA.tryRecover(digest,signatures[i]) (src/oracle/VolSurfaceOracle.sol#312)"
+ },
+ {
+  "id": "10a76bec6c288472549a9f1daec7da88ebad0cdcf05b43efedd275fa9417ba12",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "LiquidationModule._moveCash(uint256,uint256,address,LiquidationModule.Flows) (src/liquidation/LiquidationModule.sol#445-464) ignores return value by $.insurance.cover(asset,f.topUp) (src/liquidation/LiquidationModule.sol#456)"
+ },
+ {
+  "id": "15afde0b6e49d7ecb3c2223b855a94d519e7efd053d8a492103646e75b945000",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementOracle._inForce(address,ISettlementOracle.RoundProof,uint64) (src/oracle/SettlementOracle.sol#305-332) ignores return value by (id) = IAggregatorV3(feed).latestRoundData() (src/oracle/SettlementOracle.sol#316-320)"
+ },
+ {
+  "id": "15d86c4cc64b1a5d57d482c76f2b6b40aa864375ac81749089e6ccc1773dbd17",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementWindow.finalizeGroup(bytes32,bytes) (src/settlement/SettlementWindow.sol#83-99) ignores return value by (price,observationTime,None) = $.settlementOracle.verify(g.settlementOracleConfigId,g.expiry,settlementData) (src/settlement/SettlementWindow.sol#89-90)"
+ },
+ {
+  "id": "15df601772e0ac2010113b3de9ba222e79ba680bf880b31b2babaa0a2e205a60",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementOracle._tryRound(address,uint80) (src/oracle/SettlementOracle.sol#335-345) ignores return value by (returnedId,a,u,answeredInRound) = IAggregatorV3(feed).getRoundData(id) (src/oracle/SettlementOracle.sol#337-344)"
+ },
+ {
+  "id": "21f1b2d5d838740b8b71f85af798cb94dad62f50687e75b1f371c59e9374d25a",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.mintExternalLong(uint256,bytes32,uint256,address,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#127-156) ignores return value by $.risk.requireHealthy(accountId) (src/clearing/OptionClearing.sol#151)"
+ },
+ {
+  "id": "28b90f452a8a5551de487593210426a8a099f40f94860833cfaac018c0998488",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._clampedIv(LedgerSeries,uint256,PortfolioRiskManager.RiskSet) (src/risk/PortfolioRiskManager.sol#697-708) ignores return value by (sig,status,None,tIdx,nIdx) = _s().surface.impliedVols(info.productId,spot,strikes,expiries) (src/risk/PortfolioRiskManager.sol#701-702)"
+ },
+ {
+  "id": "2935a8a70764c2dc371bc549c31b792c094904cf762fa31a92383b4bdc9e5958",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementOracle._validateFeed(address,uint8) (src/oracle/SettlementOracle.sol#238-250) ignores return value by (answer,updatedAt) = IAggregatorV3(feed).latestRoundData() (src/oracle/SettlementOracle.sol#245-249)"
+ },
+ {
+  "id": "30ba9102e61b535c807f4109d18a61cbcbce219f74f18fa49246dfe0c6e1853f",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing._closableSeries(bytes32) (src/clearing/OptionClearing.sol#302-309) ignores return value by (finalized,None) = $.settlementState.settlementPriceOf(groupId) (src/clearing/OptionClearing.sol#307)"
+ },
+ {
+  "id": "3a72412dcc1d23a95b93b4b8824aff3798a54a721df26edc1ace775b2d439d5c",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.withdrawCollateral(uint256,uint256,address,OracleUpdate) (src/clearing/OptionClearing.sol#105-122) ignores return value by $.risk.requireHealthy(accountId) (src/clearing/OptionClearing.sol#118)"
+ },
+ {
+  "id": "4367b3ed3e3d9e0435585ad2889cba60573e84930fe0fa8d504d1083cdd65fe6",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementWindow.finalizeGroup(bytes32,bytes) (src/settlement/SettlementWindow.sol#83-99) ignores return value by $.fees.payFinalizeReward(g.settlementAsset,msg.sender) (src/settlement/SettlementWindow.sol#98)"
+ },
+ {
+  "id": "48fd988b79d7c12e785318569e2bfc85e75ef312bcba63c3b18ef4d6c2841e9b",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager.checkOpenRisk(bytes32,bool) (src/risk/PortfolioRiskManager.sol#281-292) ignores return value by (None,shorts) = $.ledger.totals(seriesId) (src/risk/PortfolioRiskManager.sol#287)"
+ },
+ {
+  "id": "58b375b491638d64dec460e1ac66573da5380069b3fde97ca0f42460f13e757b",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.unwrapLong(uint256,bytes32,uint256) (src/clearing/OptionClearing.sol#182-193) ignores return value by $.ledger.applyDelta(accountId,seriesId,qty.toInt256()) (src/clearing/OptionClearing.sol#191)"
+ },
+ {
+  "id": "5c25d4f43cad047fc52ad5bdbe43d54ab0c11d2362de01e4779066a71fa00881",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "KuruAdapter.sell(address,uint256,uint256,address,bytes) (src/venues/kuru/KuruAdapter.sol#91-115) ignores return value by IKuruOrderBook(market).placeAndExecuteMarketSell(size.toUint96(),0,false,false) (src/venues/kuru/KuruAdapter.sol#105)"
+ },
+ {
+  "id": "6a949072a66ae7c8c46de69370cf7832117f913ece53a660f2c403d13772a05a",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OracleUpdates.applyUpdate(OracleUpdate,ILiveSpotOracle,IVolSurfaceOracle) (src/oracle/OracleUpdates.sol#30-46) ignores return value by spot.update{value: feePaid}(u.spotUpdates,u.spotProductIds) (src/oracle/OracleUpdates.sol#37)"
+ },
+ {
+  "id": "6f23ec38411eea97b8aa60ed441309267f45f0e1e5dec216249c62c06dd00869",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.closeShortWithInternalLong(uint256,uint256,bytes32,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#209-232) ignores return value by $.ledger.applyDelta(fromAccountId,seriesId,- q) (src/clearing/OptionClearing.sol#227)"
+ },
+ {
+  "id": "6f3891a421187dff3ec1401ecc5d25a93543cba806a734888f01c64994b06c91",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "VenueRouter._fillBuy(VenueRouter.Order,VenueRouter.Trade,bytes) (src/venues/VenueRouter.sol#165-175) ignores return value by (None,venueFee) = IVenueAdapter(t.adapter).buy(t.market,o.amount,o.maxVenueFee,address(this),adapterData) (src/venues/VenueRouter.sol#172)"
+ },
+ {
+  "id": "6fbeea61114ba0cf1b9bef377e62bacc0c768779ffef79b59df330e8aa48b83b",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.closeShortWithWrapper(uint256,bytes32,uint256) (src/clearing/OptionClearing.sol#196-206) ignores return value by $.ledger.applyDelta(accountId,seriesId,qty.toInt256()) (src/clearing/OptionClearing.sol#204)"
+ },
+ {
+  "id": "71d01879c5f4c6e3ad6314b63dc98d53d27c364fffe2ae3e56a4506471c3158c",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementOracle.isImmediateSuccessor(address,uint80,uint80) (src/oracle/SettlementOracle.sol#203-218) ignores return value by (u) = IAggregatorV3(feed).getRoundData(round + 1) (src/oracle/SettlementOracle.sol#211-215)"
+ },
+ {
+  "id": "75a0f5161fb1a0231839d4f698863352e0d07b5e8da56a4f4bbc0c246940de40",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.wrapLong(uint256,bytes32,uint256,address,OracleUpdate) (src/clearing/OptionClearing.sol#159-179) ignores return value by $.ledger.applyDelta(accountId,seriesId,- qty.toInt256()) (src/clearing/OptionClearing.sol#174)"
+ },
+ {
+  "id": "7955c4c22c91c0bb7115d219b4ef06019ce36d57101aa1eaf374fd389115a1ad",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.closeShortWithInternalLong(uint256,uint256,bytes32,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#209-232) ignores return value by $.risk.requireHealthy(fromAccountId) (src/clearing/OptionClearing.sol#229)"
+ },
+ {
+  "id": "8186c67fdc0ae88b478fa6632fdd8f29806c4a4fa432ab5e0ee1bf792ee698b7",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210) ignores return value by $.ledger.applyDelta(accountId,s.ids[i],- s.moves[i]) (src/liquidation/LiquidationModule.sol#174)"
+ },
+ {
+  "id": "8d5946ddb56bb57ca586fca6f9ac38a8ae51b2752a42eabf7021b8c4e03ef630",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "KuruAdapter.buy(address,uint256,uint256,address,bytes) (src/venues/kuru/KuruAdapter.sol#64-88) ignores return value by IKuruOrderBook(market).placeAndExecuteMarketBuy(quoteSize.toUint96(),0,false,false) (src/venues/kuru/KuruAdapter.sol#78)"
+ },
+ {
+  "id": "8e94f4f3d8345810d9d60674c77be87b20665f049d795dc065f8da40234c0682",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "FeeController.previewSellerFee(bytes32,uint256) (src/fees/FeeController.sol#229-240) ignores return value by (mid,None,None) = $.risk.priceOf(seriesId) (src/fees/FeeController.sol#232)"
+ },
+ {
+  "id": "b29928dbbddedd4c3539d13d07ab49930d3e866d339223d8afc2a49e1a6fbd48",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementWindow._settle(uint256,bytes32,address,ISettlementWindow.GroupAccounting) (src/settlement/SettlementWindow.sol#319-344) ignores return value by $.ledger.applyDelta(accountId,ps[i].seriesId,- ps[i].balance) (src/settlement/SettlementWindow.sol#324)"
+ },
+ {
+  "id": "b4858debde709b3ecbc6997a3f01a4f7756f21d363fea406693dc0121e4f99c8",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "LiquidationModule.liquidateSlice(uint256,address,uint256,uint16,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#155-210) ignores return value by $.ledger.applyDelta(liquidatorAccountId,s.ids[i],s.moves[i]) (src/liquidation/LiquidationModule.sol#175)"
+ },
+ {
+  "id": "c3d338431dec3144b03a0354e18b68de3cbcddd4407e4615a0e4cfc8c1a488eb",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.mintExternalLong(uint256,bytes32,uint256,address,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#127-156) ignores return value by $.ledger.applyDelta(accountId,seriesId,- qty.toInt256()) (src/clearing/OptionClearing.sol#146)"
+ },
+ {
+  "id": "ca517884d977526ceed58f74378fd44f3ba1339189e597d62e612146526eeb5b",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager._isProductCloseOnly(bytes32) (src/risk/PortfolioRiskManager.sol#769-779) ignores return value by (status,None) = so.surfaceStatus(productId) (src/risk/PortfolioRiskManager.sol#773)"
+ },
+ {
+  "id": "d1c56dfe92345aa6a158d1ca119ba761546f1a4909d206669fc12f43a6f87981",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.closeShortWithInternalLong(uint256,uint256,bytes32,uint256,OracleUpdate) (src/clearing/OptionClearing.sol#209-232) ignores return value by $.ledger.applyDelta(toAccountId,seriesId,q) (src/clearing/OptionClearing.sol#228)"
+ },
+ {
+  "id": "d60aeccff3102d3ddf4126c54573efd4ef009c214aad1def353075e9a43dfba8",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "LiquidationModule.liquidateWithWrapper(uint256,bytes32,uint256,uint256,uint256,OracleUpdate) (src/liquidation/LiquidationModule.sol#213-250) ignores return value by $.ledger.applyDelta(accountId,seriesId,qty.toInt256()) (src/liquidation/LiquidationModule.sol#240)"
+ },
+ {
+  "id": "e20dda8a469f75773f3b48af3ff0c2d7a43df9d254290556e78d0797e64e29e5",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "VenueRouter._fillSell(VenueRouter.Order,VenueRouter.Trade,bytes) (src/venues/VenueRouter.sol#178-188) ignores return value by (None,venueFee) = IVenueAdapter(t.adapter).sell(t.market,o.amount,o.maxVenueFee,address(this),adapterData) (src/venues/VenueRouter.sol#185)"
+ },
+ {
+  "id": "e56597d6fe2301b29394e0ed6f552c86adcdb96965839c0c1a5332725387d897",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager.ivOf(bytes32) (src/risk/PortfolioRiskManager.sol#407-411) ignores return value by (spot,None) = _s().spot.spotPrice(info.productId) (src/risk/PortfolioRiskManager.sol#409)"
+ },
+ {
+  "id": "efadbc05a95eb235a07f5804111a092ae90925cbedcca672f3c9c51a4b2d0343",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "OptionClearing.wrapLong(uint256,bytes32,uint256,address,OracleUpdate) (src/clearing/OptionClearing.sol#159-179) ignores return value by $.risk.requireHealthy(accountId) (src/clearing/OptionClearing.sol#175)"
+ },
+ {
+  "id": "f159e520bb472b39e623b468599362090d8c9b4c0706ce557569672af4ecd625",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "PortfolioRiskManager.priceOf(bytes32) (src/risk/PortfolioRiskManager.sol#384-404) ignores return value by (spot,None) = _s().spot.spotPrice(info.productId) (src/risk/PortfolioRiskManager.sol#392)"
+ },
+ {
+  "id": "fa8cfebc58f0c25c884be0802a64ba96f93de10ad93991e45446f29b0bf96b18",
+  "check": "unused-return",
+  "impact": "Medium",
+  "description": "SettlementWindow._settle(uint256,bytes32,address,ISettlementWindow.GroupAccounting) (src/settlement/SettlementWindow.sol#319-344) ignores return value by $.fees.paySettleReward(asset,msg.sender,a.finalizedAt) (src/settlement/SettlementWindow.sol#343)"
+ },
+ {
+  "id": "1641a0320144b3cc72139c492e519cfe86b4736757a57b88bca0d20decf0c355",
+  "check": "missing-zero-check",
+  "impact": "Low",
+  "description": "UpgradeAdmin.constructor(address,address,address,uint256,uint256).deployer_ (src/governance/UpgradeAdmin.sol#70) lacks a zero-check on :"
+ },
+ {
+  "id": "64ff477e01417b274270f830c521fe7ef6396e78c234faea58f9503d78b01daf",
+  "check": "reentrancy-events",
+  "impact": "Low",
+  "description": "Reentrancy in UpgradeAdmin.executeUpgrade(bytes32) (src/governance/UpgradeAdmin.sol#145-158):"
+ }
+]

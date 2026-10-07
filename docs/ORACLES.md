@@ -40,6 +40,9 @@ Each product has one configured spot source (adapter interface `ISpotSource`).
 - `now − publishTime ≤ maxSpotAge` (inclusive) for use in risk-increasing actions and liquidation. A derived price
   takes the **older** leg's publish time, so both legs must be fresh.
 - An older (or equal-time) update never overwrites the stored price (INV-18).
+- Each Pyth leg's confidence interval must be within `maxConfidenceBps` of its price (`conf × 10,000 ≤ price ×
+  maxConfidenceBps`), or the refresh reverts `SpotConfidenceTooWide(productId, confidenceBps)` and the stored price is
+  left alone (DD-34). A wide band means the publishers disagree; such a price must not drive margin or liquidation.
 - Derived pairs (e.g. ETH/USD ÷ USDC/USD) must be configured explicitly. A USD price is never treated as a
   stablecoin price.
 - Provider update fees are paid by the caller (`msg.value`); any excess is refunded.

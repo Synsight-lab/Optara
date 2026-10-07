@@ -419,7 +419,11 @@ abstract contract RiskFixture is GovernanceFixture {
 
     function _direct(bytes32 feed) internal pure returns (ILiveSpotOracle.SpotSource memory) {
         return ILiveSpotOracle.SpotSource({
-            kind: ILiveSpotOracle.SourceKind.PYTH_DIRECT, baseFeedId: feed, quoteFeedId: 0, maxSpotAge: 60
+            kind: ILiveSpotOracle.SourceKind.PYTH_DIRECT,
+            baseFeedId: feed,
+            quoteFeedId: 0,
+            maxSpotAge: 60,
+            maxConfidenceBps: 100
         });
     }
 

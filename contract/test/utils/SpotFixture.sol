@@ -46,13 +46,18 @@ abstract contract SpotFixture is SeriesFixture {
             kind: ILiveSpotOracle.SourceKind.PYTH_DERIVED,
             baseFeedId: ETH_USD,
             quoteFeedId: USDC_USD,
-            maxSpotAge: MAX_AGE
+            maxSpotAge: MAX_AGE,
+            maxConfidenceBps: 100
         });
     }
 
     function _direct() internal pure returns (ILiveSpotOracle.SpotSource memory) {
         return ILiveSpotOracle.SpotSource({
-            kind: ILiveSpotOracle.SourceKind.PYTH_DIRECT, baseFeedId: ETH_USDC, quoteFeedId: 0, maxSpotAge: MAX_AGE
+            kind: ILiveSpotOracle.SourceKind.PYTH_DIRECT,
+            baseFeedId: ETH_USDC,
+            quoteFeedId: 0,
+            maxSpotAge: MAX_AGE,
+            maxConfidenceBps: 100
         });
     }
 

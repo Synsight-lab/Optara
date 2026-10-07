@@ -170,15 +170,31 @@ insurance paid; per-group collected and paid. After each run, assert every invar
 
 Run profiles: CI 256 runs × depth 100; nightly 5,000 runs × depth 300.
 
+**Implementation.** Each module has its own invariant suite (`test/invariant/<Contract>.invariant.t.sol`), and
+`test/invariant/System.invariant.t.sol` runs the list above across the whole protocol as deployed by
+`script/OptaraDeploy.sol`: 3 writers (one with two accounts), 2 buyers with accounts, a liquidator/keeper and a
+guardian; spot moves of −6%..+15% plus rare +40..+80% shocks, IV ±20%, time jumps up to 12 hours, starting 12 hours
+before the 30-day group expires so runs reach settlement. Checked after every call: INV-1/2 (before finalization),
+INV-7 (custody = Σ cash + pool), INV-26/27/28/29/31/33, INV-50; in handlers: INV-11, 13, 21, 22, 23, 46. A handler
+may revert only with `ActionPaused` (anything else counts as a violation), and suites run clean with
+`fail_on_revert = true`. Rules for handler suites, learned while building them:
+
+- Measure progress offline (replay a few dozen seeds with `vm.snapshotState`) instead of asserting it per run: a
+  per-run progress assertion is flaky and Foundry shrinks and caches its "failure".
+- Build anything that makes external calls (oracle updates, view reads) **before** `vm.prank`; a prank applies to the
+  next call, including calls inside argument expressions.
+- Never add a `uint8` fuzz input to a literal (`(b + 1) % 2` overflows at 255); widen it first.
+
 ## 6. Gas benchmarks (launch gate)
 
 | Benchmark | Setup | Target |
 |---|---|---|
-| Risk check | `maxSeriesPerAccount` positions across `maxBucketsPerAccount` underlyings, 24 + 12 scenarios | ≤ `maxRiskCheckGas` |
-| `mintExternalLong` | Same account, including surface report verification and 4 leaf proofs | Record |
-| `liquidateSlice` | Max positions in the bucket | Record |
-| `settleAccountsGroup` | Batch of 20 accounts | Record |
-| `submitReport` | Quorum 2, 32 nodes | Record |
+| Risk check | `maxSeriesPerAccount` positions across `maxBucketsPerAccount` underlyings, 24 + 12 scenarios | ≤ `maxRiskCheckGas` (measured 4.76M) |
+| `mintExternalLong` | To 16 legs, including a surface report and 6 leaf proofs | Record (5.80M) |
+| `liquidateSlice` | 8-leg bucket of a 16-leg account | Record (12.3M) |
+| `settleAccountsGroup` | Batch of 20 accounts × 2 series | Record (3.3M) |
+| `finalizeGroup` | 64 series in the group | Record (2.4M) |
+| `submitReport` / `proveNodes` | Quorum 2, 32 nodes × 4 tenors; 4 of 128 leaves | Record (1.16M / 0.23M) |
 
 If the risk check exceeds the target: lower `maxSeriesPerAccount`, curate fewer scenarios, or adopt the signed
 price-table fallback ([ORACLES.md](ORACLES.md) §3.9) with a spec update.
@@ -197,7 +213,7 @@ price-table fallback ([ORACLES.md](ORACLES.md) §3.9) with a spec update.
 ## 8. CI pipeline
 
 ```text
-forge fmt --check → forge build → slither
+forge fmt --check → forge build → slither (triage database; SECURITY.md §8)
 → forge test: unit → fuzz (10,000 runs) → invariant (CI profile) → e2e
 → reference checks (verify_math, verify_invariants, check_traceability) → reference vectors (python) → differential tests → upgrade/storage tests → gas snapshot diff
 → services tests → frontend tests
