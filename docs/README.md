@@ -50,7 +50,7 @@ ERC-20 and basic options vocabulary (call, put, strike, expiry, premium). Everyt
 | 20 | [INDEXER_AND_KEEPERS.md](INDEXER_AND_KEEPERS.md) | Indexer, settlement keeper, liquidation bot, surface publisher |
 | 21 | [TESTING.md](TESTING.md) | How to test: tools, reference model, invariants, gas, gates |
 | 22 | [TEST_CASES.md](TEST_CASES.md) | The required test catalog with IDs |
-| 23 | [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment order, configuration, launch gates |
+| 23 | [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment order, configuration, manifests, runbook, launch gates |
 | 24 | [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) | Why each choice was made, corrections to the plan, open decisions |
 
 Smart-contract engineers: read 1–17 before writing code, and 21–22 before opening a pull request. Every contract

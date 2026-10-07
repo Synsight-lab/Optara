@@ -74,6 +74,7 @@ calibration (`timeMode = 2`) is an open decision ([DESIGN_DECISIONS.md](DESIGN_D
 | `maxTenors` / `maxMoneynessNodes` per check | 4 / 4 | count | Per series |
 | `minFinalizationDelay` | 300 | seconds | Per settlement oracle config |
 | `maxFinalizationDelay` | 604,800 (7 days) | seconds | `ORACLE_STALLED` after this |
+| `maxLegSkew` (DERIVED settlement) | ≥ the slower leg's heartbeat (86,400 for a 24 h USDC/USD feed) | seconds | Per settlement oracle config; a smaller value refuses valid rounds whenever the slow leg has not moved |
 
 ## 5. Liquidation
 

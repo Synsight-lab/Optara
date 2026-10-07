@@ -1,0 +1,173 @@
+{
+  "chainId": 31337,
+  "deployedAtBlock": 0,
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "extra": {
+    "ethUsdcProductId": "0x13b29886067be9abaebfde9746388a1260928b2eeec53267c8369deb9912b359",
+    "ethUsdcPythFeedId": "0x9ed39a164ca2dbe1f5af2a71ca3dd18439d59c38179a3f39652d31a6910c5447",
+    "ethUsdcRiskSetId": "0x545d5d3157698880e23b59583b58fdcabc8827f0be633128cd0c16b4f7c24679",
+    "ethUsdcSettlementConfigId": "0x7d81b9981782d56a4606c4ac8d79bae523a6cb113abf879f6339d0ae533d8f7f",
+    "ethUsdcSettlementFeed": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "expiries": [
+      1791532800,
+      1792137600
+    ],
+    "governance": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "keeper": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+    "kuruBooks": [
+      "0x82e01223d51Eb87e16A03E24687EDF0F294da6f1",
+      "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0",
+      "0xc351628EB244ec633d5f21fBD6621e1a683B1181",
+      "0xcbEAF3BDe82155F56486Fb5a1072cb8baAf547cc",
+      "0xB0D4afd8879eD9F52b28595d31B441D079B2Ca07",
+      "0x922D6956C99E12DFeB3224DEA977D0939758A1Fe",
+      "0x1fA02b2d6A771842690194Cf62D91bdd92BfE28d",
+      "0x04C89607413713Ec9775E14b954286519d836FEf",
+      "0x21dF544947ba3E8b3c32561399E88B52Dc8b2823",
+      "0xD8a5a9b31c3C0232E196d518E89Fd8bF83AcAd43",
+      "0x51A1ceB83B83F1985a81C295d1fF28Afef186E02",
+      "0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7",
+      "0x202CCe504e04bEd6fC0521238dDf04Bc9E8E15aB",
+      "0x172076E0166D1F9Cc711C77Adf8488051744980C",
+      "0xBEc49fA140aCaA83533fB00A2BB19bDdd0290f25",
+      "0x2B0d36FACD61B71CC05ab8F3D2355ec3631C0dd5"
+    ],
+    "kuruRouter": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+    "publisherA": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "publisherB": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    "pyth": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "seriesIds": [
+      "0x30b1746eaf65f4c09c2eba0a93952e6d9d6b275f6a01a14781fc4db4532bb2a6",
+      "0x86ca2104dd9378cef9cd4a253a63dfa0a5a512d42d0489b0e9ec880e5e0275d7",
+      "0xc83ff9f12ab56234b08bb9e4e8f3d54bb7be220e635e64ce7eca11f764e03747",
+      "0x2a7d712a8c5331989a32b4c6e43df8cadd26e3bb6c27fe822416aa03dfb6df5a",
+      "0x75eb8af623d2b3cccf618fab8e8c9b4eff69d20a8a3daa4eaa653ce9678e497d",
+      "0x773f8b578a2402fe09f1502bebad25bcfbff6af62db444b339fe772706b4d4f0",
+      "0x7bab1f1aa9469d4c3bd2c6380ba900c7f30626e4575d44d4adff8834c811ca5d",
+      "0x4e879787fcc912aeb81b5c528811ae6088ca3d09bd8c4dbb2b1638c57b11fd44",
+      "0xf70ebb868690bfcb44f45d3ce71590f4b2ad5661318903468445320bc5095c36",
+      "0xa4363a35047e92c13453584326965a0d967bdcd93d4012496abf3ce72563b27e",
+      "0x0b386276b49f9ff30b95b38dacf40febf1f75362967ec69ca7896e334b58ca20",
+      "0x1bf5d8ba1f7787e26af2c267d719d711b4e7cd5148d9e4340d0df7310c363dd6",
+      "0x4b16efb1e0856b06c6f22c79bf87ef237956248f2b487607efd58d75a626825f",
+      "0x2d0548d5b4b53188716c1aa665bcf2c143e3215204397323f4f8e006c62f2ef4",
+      "0x434bab9eca4b53732046862c837306cc78d05fcc3ecedfa0b6fa83fe1d06d5f4",
+      "0x5701ad3e7174231229def4a775a9fb802e8a4cd8d23d421c478da6a47ea2026d"
+    ],
+    "usdc": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "users": [
+      "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+      "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
+      "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f",
+      "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+    ],
+    "weth": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+  },
+  "kuruAdapter": "0x9d4454B023096f34B160D6B654540c56A1F81688",
+  "network": "local",
+  "proxies": {
+    "ExternalOptionFactory": {
+      "implementation": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
+      "implementationCodeHash": "0x2e92f817f3a843cb07f2cdab13bb76112cd8a5ccb2722942d23716e74d0eb3c8",
+      "proxy": "0x7ab4C4804197531f7ed6A6bc0f0781f706ff7953",
+      "proxyAdmin": "0x5238Bbbc85ca6C128CBa435Ac7B3E6444333fCB3"
+    },
+    "FeeController": {
+      "implementation": "0x9E545E3C0baAB3E08CdfD552C960A1050f373042",
+      "implementationCodeHash": "0xbc716bb742762aec8f8f698bcb103f8f9c7d4f6440e451b93dd417f2cbc8b006",
+      "proxy": "0xD6A92bCABC5ce884fD7322959dFc6E3066CD62de",
+      "proxyAdmin": "0xD3C7B79a4Ada9b06a7111BEFe0BA6B6c8dAf3FE1"
+    },
+    "InsuranceFund": {
+      "implementation": "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690",
+      "implementationCodeHash": "0xf88a40664aeab33e5ff2f5120febdc80cd49960f902888af7d47f6ca5c792e90",
+      "proxy": "0x09F428b7D940ED8Bff862e81a103bf022F5E50F0",
+      "proxyAdmin": "0xBcfEd906c2AE29887f2F04797c462D3095F5B854"
+    },
+    "LiquidationModule": {
+      "implementation": "0xf5059a5D33d5853360D16C683c16e67980206f36",
+      "implementationCodeHash": "0x02e6210044d87ef74aabd30e1811e4329ea6cb506ebefdcd8baf8b7394bbe399",
+      "proxy": "0xa886b05719FE95475c94cd740b7206Cbee481A46",
+      "proxyAdmin": "0xecF7Ce32bCAdfAcbD7e490c6CD44516DfdEC5819"
+    },
+    "LiveSpotOracle": {
+      "implementation": "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
+      "implementationCodeHash": "0x82a06ab3cdccbb0f6cee1716674b44459306ee47ad07a9f7a22d1dc3539c3721",
+      "proxy": "0xD79aE87F2c003Ec925fB7e9C11585709bfe41473",
+      "proxyAdmin": "0x069a87735aaC8Dec5778464108C9515b273D4B31"
+    },
+    "OptionClearing": {
+      "implementation": "0x1613beB3B2C4f22Ee086B2b38C1476A3cE7f78E8",
+      "implementationCodeHash": "0x61786e4fc64c776c0a713c7037ea243f2f010a0510d5c1fcb9930524991abbe9",
+      "proxy": "0x333008b49f3Cd34CCEf370296B384A336364155A",
+      "proxyAdmin": "0x666EfdD6032b00804Ec37AFAe111B64F00352Aa5"
+    },
+    "OptionSeriesRegistry": {
+      "implementation": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
+      "implementationCodeHash": "0x97bdb9565fb070574ba4358f0c4c33ff8e2b235900ebab169fcdb01f2b5f80c1",
+      "proxy": "0xBA12646CC07ADBe43F8bD25D83FB628D29C8A762",
+      "proxyAdmin": "0x65646DD9B9dAddCaB371e9D909c9Cc12d6B8ff64"
+    },
+    "PortfolioRiskManager": {
+      "implementation": "0x67d269191c92Caf3cD7723F116c85e6E9bf55933",
+      "implementationCodeHash": "0xf3923b652d867a4476f39759de5a448ac854caf1ee3df4fc82d92231cb919073",
+      "proxy": "0xCaA29B65446aBF1A513A178402A0408eB3AEee75",
+      "proxyAdmin": "0x2dfD7a47c6312e2A6D2cd762e20bDFE12C5cC02a"
+    },
+    "ProtocolControl": {
+      "implementation": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+      "implementationCodeHash": "0xdebd8d59d36cfa58912e624ea442f61cc610660ea72a67eb5288d866c29d52c9",
+      "proxy": "0x3B02fF1e626Ed7a8fd6eC5299e2C54e1421B626B",
+      "proxyAdmin": "0xB877880CAf59Ad50d8800F382fe47b45A8861330"
+    },
+    "SettlementOracle": {
+      "implementation": "0x09635F643e140090A9A8Dcd712eD6285858ceBef",
+      "implementationCodeHash": "0x10436563a10ae65b161da98d3a2277c56f19f328c1c82c22b558cbbd2d3a41ca",
+      "proxy": "0x12653A08808F651D5BB78514F377d3BD5E17934C",
+      "proxyAdmin": "0x2617a4e69ACdFDA2BB872C2c77b4b7123a0E535a"
+    },
+    "SettlementWindow": {
+      "implementation": "0x998abeb3E57409262aE5b751f60747921B33613E",
+      "implementationCodeHash": "0x892f363ecd3c48d09048aba610d8286c2cc5f4d9c72445932e3debd542ab8802",
+      "proxy": "0x492a72624a270837f1FC746546715C9c18670466",
+      "proxyAdmin": "0x69998CACAa88c5aAE8116ED6Ae86D67923E95512"
+    },
+    "SubAccounts": {
+      "implementation": "0x59b670e9fA9D0A427751Af201D676719a970857b",
+      "implementationCodeHash": "0xa43b8a1aa6c9314f27ab3c58a22201ee5fc8eb956e44f53d45e6af4c47eed6d9",
+      "proxy": "0xc8CB5439c767A63aca1c01862252B2F3495fDcFE",
+      "proxyAdmin": "0x5b68087C4270860412A59DCf8e114cbcbeF4493F"
+    },
+    "VenueRegistry": {
+      "implementation": "0x4826533B4897376654Bb4d4AD88B7faFD0C98528",
+      "implementationCodeHash": "0x168b6a6d4938bb87663e74ad723154dda154e4ca6b55bca05005f7574de0fd33",
+      "proxy": "0x751D41Adc9d0ee5bf329fEDf838c4DeED53B77Fd",
+      "proxyAdmin": "0xb70675c13E358c11ae193DFabBd831549C9268E6"
+    },
+    "VenueRouter": {
+      "implementation": "0x0E801D84Fa97b50751Dbf25036d067dCf18858bF",
+      "implementationCodeHash": "0xe11dc2e3515ae865ab953716c2c12f4b59a6e7f42f0fca6fc1234f1b681d0ede",
+      "proxy": "0x0882CaAF5EdF502F9E2EC4a12642e8f57921826a",
+      "proxyAdmin": "0x59A0cB43CeFEe23eF24bbb1736C983C68D9593fb"
+    },
+    "VolSurfaceOracle": {
+      "implementation": "0x4A679253410272dd5232B3Ff7cF5dbB88f295319",
+      "implementationCodeHash": "0x445dadaabd7bcf82506977aadd29b03f11cf424dcccde4f3a228095353f6d1b4",
+      "proxy": "0xB7aa4c318000BB9bD16108F81C40D02E48af1C42",
+      "proxyAdmin": "0x44542076A052c47bD965035E2ca7988DD1071be1"
+    }
+  },
+  "roles": {
+    "council": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "emergencyDelay": 86400,
+    "governance": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "guardian": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "oracleAdmin": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "riskAdmin": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "seriesCreator": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "upgradeDelay": 604800,
+    "venueAdmin": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  },
+  "upgradeAdmin": "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+}

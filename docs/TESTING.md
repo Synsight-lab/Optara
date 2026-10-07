@@ -217,6 +217,7 @@ forge fmt --check → forge build → slither (triage database; SECURITY.md §8)
 → forge test: unit → fuzz (10,000 runs) → invariant (CI profile) → e2e
 → reference checks (verify_math, verify_invariants, check_traceability) → reference vectors (python) → differential tests → upgrade/storage tests → gas snapshot diff
 → services tests → frontend tests
-nightly: fuzz 100,000 runs, invariant deep profile, fork tests
+→ exported ABIs match the build → local deployment on anvil (LocalStack, Verify, Smoke; DEPLOYMENT.md §4.1)
+nightly: fuzz 100,000 runs, invariant deep profile, fork tests, deployment rehearsal on a mainnet fork (§4.2)
 Any failing stage blocks the merge.
 ```

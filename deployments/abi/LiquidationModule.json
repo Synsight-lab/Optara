@@ -1,0 +1,1642 @@
+[
+  {
+    "inputs": [],
+    "name": "MAX_AUCTION_DURATION",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      }
+    ],
+    "name": "auctionStart",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "control",
+    "outputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      }
+    ],
+    "name": "currentBonus",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "bonusBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "wholeBucket",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "endAuction",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "control_",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "ledger",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "registry",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "risk",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "insurance",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "clearing",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "spot",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "surface",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct ILiquidationModule.Modules",
+        "name": "m",
+        "type": "tuple"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "liquidatorAccountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint16",
+        "name": "sliceBps",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minCashToLiquidator",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxCashFromLiquidator",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "liquidateSlice",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "liquidatorAccountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minCashToLiquidator",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "liquidateWithWrapper",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidationParams",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "startBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "auctionDuration",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "targetHealthBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "liquidationPenaltyBps",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct ILiquidationModule.LiquidationParams",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      }
+    ],
+    "name": "maxInsurancePerLiquidation",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "modules",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "ledger",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "registry",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "risk",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "insurance",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "clearing",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "spot",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "surface",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct ILiquidationModule.Modules",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "internalType": "uint16",
+        "name": "sliceBps",
+        "type": "uint16"
+      }
+    ],
+    "name": "previewSlice",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "sliceMark",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sliceMM",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "discount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "cashToLiquidator",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "startBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "auctionDuration",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "targetHealthBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "liquidationPenaltyBps",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct ILiquidationModule.LiquidationParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "setLiquidationParams",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMaxInsurancePerLiquidation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "startAuction",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "AuctionEnded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "equity",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maintenanceMargin",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "startTime",
+        "type": "uint64"
+      }
+    ],
+    "name": "AuctionStarted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "insuranceAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "unpaid",
+        "type": "uint256"
+      }
+    ],
+    "name": "BadDebtCovered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "startBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxBonusBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint32",
+            "name": "auctionDuration",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint16",
+            "name": "minSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxSliceBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "targetHealthBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint16",
+            "name": "liquidationPenaltyBps",
+            "type": "uint16"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ILiquidationModule.LiquidationParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "LiquidationParamsSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "MaxInsurancePerLiquidationSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "liquidatorAccountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "sliceBps",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "sliceMark",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "sliceMM",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "discount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "cashToLiquidator",
+        "type": "int256"
+      }
+    ],
+    "name": "SliceLiquidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "liquidatorAccountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "cashToLiquidator",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      }
+    ],
+    "name": "WrapperLiquidated",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "AssetMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "AuctionActive",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "AuctionNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "decimals",
+        "type": "uint8"
+      }
+    ],
+    "name": "DecimalsTooLarge",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      }
+    ],
+    "name": "EmptyBucket",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "HealthNotImproved",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "required",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "provided",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientProviderFee",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "balance",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientShort",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidLiquidationParams",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOracleUpdate",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidRecipient",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotAuthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "equity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "initialMargin",
+        "type": "uint256"
+      }
+    ],
+    "name": "NotHealthy",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "equity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "threshold",
+        "type": "uint256"
+      }
+    ],
+    "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RefundFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "SeriesNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "sliceBps",
+        "type": "uint16"
+      }
+    ],
+    "name": "SliceOutOfBounds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SlippageExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAmount",
+    "type": "error"
+  }
+]

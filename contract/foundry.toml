@@ -14,7 +14,10 @@ code_size_limit = 131072
 bytecode_hash = "none"
 # Differential tests call the Python reference model (reference/) through FFI.
 ffi = true
-fs_permissions = [{ access = "read", path = "../reference/vectors" }]
+fs_permissions = [
+    { access = "read", path = "../reference/vectors" },
+    { access = "read-write", path = "../deployments" }, # manifests, proposal batches (step 14)
+]
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",

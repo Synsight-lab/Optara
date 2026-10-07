@@ -51,6 +51,9 @@ GET /system                                  (oracle freshness, close-only flags
 - Pushes Pyth (or the configured provider) updates every `maxSpotAge / 2` for products with open interest, so
   passive views stay fresh.
 - Optional: users and bots also include updates in their own transactions.
+- Source: Pyth Hermes (`/v2/updates/price/latest`), which needs an API key (401 without one, observed 2026-10-07).
+  On Monad mainnet a third party pushes ETH/USD and USDC/USD every ~30–60 s, which helps but cannot be relied on;
+  on testnet nobody pushes them, so the updater is required there (DEPLOYMENT.md §4.2).
 
 ## 3. Settlement keeper
 

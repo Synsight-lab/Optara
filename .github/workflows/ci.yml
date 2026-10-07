@@ -56,6 +56,9 @@ jobs:
       - name: Storage layout (upgradeable modules use ERC-7201 only; slot constants correct)
         run: python3 script/storage_check.py
 
+      - name: Exported ABIs match the build (deployments/abi)
+        run: python3 script/export_abis.py --check
+
       - name: Tests (CI depth)
         env:
           FOUNDRY_PROFILE: ci
@@ -66,7 +69,7 @@ jobs:
   # must not block pushes on RPC availability. Not part of ci-success.
   # -----------------------------------------------------------------------------------------------
   fork:
-    name: Contracts · fork tests (Monad mainnet)
+    name: Contracts · fork tests and deployment rehearsal (Monad mainnet)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -87,6 +90,49 @@ jobs:
           FOUNDRY_PROFILE: fork
           FORK_RPC_URL: ${{ secrets.MONAD_RPC_URL || 'https://rpc.monad.xyz' }}
         run: forge test -vvv
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Deployment rehearsal on a mainnet fork (DEPLOYMENT.md §4.2)
+        run: script/rehearse_fork.sh monad-mainnet ${{ secrets.MONAD_RPC_URL || 'https://rpc.monad.xyz' }}
+
+  # -----------------------------------------------------------------------------------------------
+  # Local deployment (DEPLOYMENT.md §4.1): the production deploy + listing batch on anvil, then the on-chain
+  # verification and a deposit / mint / router round trip, all through real transactions.
+  # -----------------------------------------------------------------------------------------------
+  deploy:
+    name: Contracts · local deployment (anvil)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - name: Start anvil (Monad's 128 KB code size limit)
+        run: |
+          anvil --code-size-limit 131072 --silent &
+          for _ in $(seq 1 30); do cast chain-id >/dev/null 2>&1 && break; sleep 1; done
+
+      - name: Local stack
+        run: forge script script/local/LocalStack.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --disable-code-size-limit
+
+      - name: Verify the deployment against its manifest
+        env:
+          NETWORK: local
+        run: forge script script/Verify.s.sol --rpc-url http://127.0.0.1:8545
+
+      - name: Smoke (deposit, mint with a fresh oracle update, router sell and buy)
+        run: forge script script/local/Smoke.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 
   # -----------------------------------------------------------------------------------------------
   # Coverage gate (TESTING.md §7): core 100% lines and branches; other src/ files >= 95% / 90%
@@ -186,7 +232,7 @@ jobs:
   ci-success:
     name: CI passed
     if: always()
-    needs: [contracts, coverage, reference, slither]
+    needs: [contracts, deploy, coverage, reference, slither]
     runs-on: ubuntu-latest
     steps:
       - name: All blocking jobs succeeded

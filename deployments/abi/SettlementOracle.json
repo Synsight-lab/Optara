@@ -1,0 +1,827 @@
+[
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "underlying",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementAsset",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "primary",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "fallbackSource",
+            "type": "tuple"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationStartOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationEndOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "minFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxLegSkew",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct ISettlementOracle.SettlementOracleConfig",
+        "name": "c",
+        "type": "tuple"
+      }
+    ],
+    "name": "computeConfigId",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "configExists",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "control",
+    "outputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiry",
+        "type": "uint64"
+      }
+    ],
+    "name": "earliestFinalization",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getConfig",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "underlying",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementAsset",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "primary",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "fallbackSource",
+            "type": "tuple"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationStartOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationEndOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "minFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxLegSkew",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct ISettlementOracle.SettlementOracleConfig",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "control_",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isConfigApproved",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "underlying",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "settlementAsset",
+        "type": "address"
+      }
+    ],
+    "name": "isConfigUsable",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "feed",
+        "type": "address"
+      },
+      {
+        "internalType": "uint80",
+        "name": "round",
+        "type": "uint80"
+      },
+      {
+        "internalType": "uint80",
+        "name": "next",
+        "type": "uint80"
+      }
+    ],
+    "name": "isImmediateSuccessor",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "underlying",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementAsset",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "primary",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "fallbackSource",
+            "type": "tuple"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationStartOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationEndOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "minFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxLegSkew",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct ISettlementOracle.SettlementOracleConfig",
+        "name": "c",
+        "type": "tuple"
+      }
+    ],
+    "name": "registerConfig",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      }
+    ],
+    "name": "setConfigApproved",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiry",
+        "type": "uint64"
+      }
+    ],
+    "name": "stalledAfter",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "expiry",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bytes",
+        "name": "settlementData",
+        "type": "bytes"
+      }
+    ],
+    "name": "verify",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "priceWad",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "observationTime",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "sourceUsed",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      }
+    ],
+    "name": "SettlementConfigApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "underlying",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementAsset",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "primary",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "enum ISettlementOracle.FeedKind",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "feed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "feedDecimals",
+                "type": "uint8"
+              },
+              {
+                "internalType": "address",
+                "name": "quoteFeed",
+                "type": "address"
+              },
+              {
+                "internalType": "uint8",
+                "name": "quoteFeedDecimals",
+                "type": "uint8"
+              }
+            ],
+            "internalType": "struct ISettlementOracle.FeedSource",
+            "name": "fallbackSource",
+            "type": "tuple"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationStartOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "int64",
+            "name": "observationEndOffset",
+            "type": "int64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "minFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "maxFinalizationDelay",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxLegSkew",
+            "type": "uint32"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ISettlementOracle.SettlementOracleConfig",
+        "name": "config",
+        "type": "tuple"
+      }
+    ],
+    "name": "SettlementConfigRegistered",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "earliest",
+        "type": "uint64"
+      }
+    ],
+    "name": "FinalizationTooEarly",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidSettlementConfig",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidSettlementProof",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotAuthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "SettlementConfigExists",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "configId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "UnknownSettlementConfig",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  }
+]

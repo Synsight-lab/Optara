@@ -44,9 +44,18 @@ test/
   harness/       external wrappers around internal libraries (so tests can catch reverts)
   mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk, clearing, liquidation, settlement and venue stacks; mock Kuru)
 script/
-  OptaraDeploy.sol   the production deployment (DEPLOYMENT.md §2), also used by test/e2e
-  coverage_gate.py   TESTING.md §7 thresholds on an lcov report
-  storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct
+  OptaraDeploy.sol      the production deployment (DEPLOYMENT.md §2), also used by test/e2e
+  Deploy.s.sol          broadcast to a network from deployments/config/<network>.json; writes the manifest (§3.2)
+  Verify.s.sol          checks a manifest against the chain: implementations, admins, code hashes, roles, delays
+  ListingCalls.sol      the ordered role-holder calls that list a product (§3.3)
+  ProposeListing.s.sol  writes those calls for a network to deployments/<network>.<listing>.proposals.json
+  Manifest.sol          writes deployments/<network>.json
+  local/                LocalStack.s.sol (anvil environment), Smoke.s.sol, LocalMarketData.sol (signed surfaces)
+  rehearsal/            stand-in assets and smoke for rehearse_fork.sh
+  rehearse_fork.sh      the production scripts end to end on an anvil fork (§4.2)
+  export_abis.py        ABIs to deployments/abi (--check in CI)
+  coverage_gate.py      TESTING.md §7 thresholds on an lcov report
+  storage_check.py      upgradeable modules use ERC-7201 storage only; slot constants correct
 ```
 
 ## Commands
@@ -59,6 +68,18 @@ FOUNDRY_PROFILE=ci forge test               # CI depth (fuzz 10,000 runs; FFI te
 forge test --match-path 'test/gas/*' -vv    # print gas benchmarks
 FOUNDRY_PROFILE=fork forge test             # fork tests vs live Monad mainnet (FORK_RPC_URL, default rpc.monad.xyz)
 slither . --config-file slither.config.json --triage-database slither.db.json   # static analysis (SECURITY.md §8)
+python3 script/export_abis.py               # refresh deployments/abi after an interface change
+```
+
+Deployment (docs/DEPLOYMENT.md §4): contracts exceed 24 KB, so anvil needs `--code-size-limit 131072` and
+`forge script` needs `--disable-code-size-limit`.
+
+```bash
+anvil --code-size-limit 131072
+forge script script/local/LocalStack.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --disable-code-size-limit
+NETWORK=local forge script script/Verify.s.sol --rpc-url http://127.0.0.1:8545
+forge script script/local/Smoke.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+script/rehearse_fork.sh monad-mainnet https://rpc.monad.xyz     # full production flow on a mainnet fork
 ```
 
 Differential tests run `python3 ../reference/ffi.py` (standard library only) and read `../reference/vectors/`.

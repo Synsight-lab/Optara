@@ -1,0 +1,1633 @@
+[
+  {
+    "inputs": [],
+    "name": "MAX_IM_BUFFER_BPS",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_IV",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_OPEN_INTEREST",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_SCENARIOS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "int32",
+            "name": "spotShockBps",
+            "type": "int32"
+          },
+          {
+            "internalType": "int32",
+            "name": "volShockBps",
+            "type": "int32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "timeMode",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "timeShiftSeconds",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Scenario[]",
+        "name": "initialAdd",
+        "type": "tuple[]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "int32",
+            "name": "spotShockBps",
+            "type": "int32"
+          },
+          {
+            "internalType": "int32",
+            "name": "volShockBps",
+            "type": "int32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "timeMode",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "timeShiftSeconds",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Scenario[]",
+        "name": "maintenanceAdd",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "addScenarios",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      }
+    ],
+    "name": "assignProductRiskSet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "checkCaps",
+        "type": "bool"
+      }
+    ],
+    "name": "checkOpenRisk",
+    "outputs": [],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "control",
+    "outputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "imBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "nearExpiryFloorSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxOpenInterestPerSeries",
+            "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "initialSet",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "maintenanceSet",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.RiskParams",
+        "name": "p",
+        "type": "tuple"
+      }
+    ],
+    "name": "createRiskSet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "equityOf",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getRiskSet",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "imBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "nearExpiryFloorSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxOpenInterestPerSeries",
+            "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "initialSet",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "maintenanceSet",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.RiskParams",
+        "name": "params",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "healthOf",
+    "outputs": [
+      {
+        "internalType": "enum IPortfolioRiskManager.HealthState",
+        "name": "state",
+        "type": "uint8"
+      },
+      {
+        "internalType": "int256",
+        "name": "equity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "initialMargin",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maintenanceMargin",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "fresh",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "control_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract ISubAccounts",
+        "name": "ledger_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract IOptionSeriesRegistry",
+        "name": "registry_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract ILiveSpotOracle",
+        "name": "spot_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract IVolSurfaceOracle",
+        "name": "surface_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract ISettlementState",
+        "name": "settlement_",
+        "type": "address"
+      },
+      {
+        "internalType": "contract IReserveStatus",
+        "name": "reserves_",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isProductCloseOnly",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isRiskSetForProduct",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ivOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "sigma",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sigmaShort",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sigmaLong",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "marginOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "initialMargin",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maintenanceMargin",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "maxWithdrawable",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "int256",
+        "name": "qtyDelta",
+        "type": "int256"
+      },
+      {
+        "internalType": "int256",
+        "name": "cashDeltaNative",
+        "type": "int256"
+      }
+    ],
+    "name": "previewWithDelta",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "equity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maintenanceMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "fresh",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Risk",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "seriesIds",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "int256[]",
+        "name": "qtyDeltas",
+        "type": "int256[]"
+      },
+      {
+        "internalType": "int256",
+        "name": "cashDeltaNative",
+        "type": "int256"
+      }
+    ],
+    "name": "previewWithDeltas",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "equity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maintenanceMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "fresh",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Risk",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "previewWithdraw",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "equityAfter",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "imAfter",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "ok",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "previewWrap",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "equityAfter",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "imAfter",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "ok",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "priceOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "mid",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "shortPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "longPrice",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "productRiskSet",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "productShortCap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint16",
+        "name": "bps",
+        "type": "uint16"
+      }
+    ],
+    "name": "raiseImBuffer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minIv",
+        "type": "uint256"
+      }
+    ],
+    "name": "raiseMinIv",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requireHealthy",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "equity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maintenanceMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "fresh",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Risk",
+        "name": "risk",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "riskForLiquidation",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "equity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maintenanceMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "fresh",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Risk",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      }
+    ],
+    "name": "riskOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "equity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "initialMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maintenanceMargin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "fresh",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.Risk",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "cap",
+        "type": "uint256"
+      }
+    ],
+    "name": "setOpenInterestCap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "capWad",
+        "type": "uint256"
+      }
+    ],
+    "name": "setProductShortCap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "setRiskSetEnabled",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "imBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "nearExpiryFloorSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxOpenInterestPerSeries",
+            "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "initialSet",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "maintenanceSet",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IPortfolioRiskManager.RiskParams",
+        "name": "p",
+        "type": "tuple"
+      }
+    ],
+    "name": "updateRiskSet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ProductRiskSetAssigned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxShortUnderlyingWad",
+        "type": "uint256"
+      }
+    ],
+    "name": "ProductShortCapSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "imBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "nearExpiryFloorSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxOpenInterestPerSeries",
+            "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "initialSet",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "maintenanceSet",
+            "type": "tuple[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct IPortfolioRiskManager.RiskParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "RiskSetCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "RiskSetEnabled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "imBufferBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxIv",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "nearExpiryFloorSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxOpenInterestPerSeries",
+            "type": "uint256"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "initialSet",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "int32",
+                "name": "spotShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "int32",
+                "name": "volShockBps",
+                "type": "int32"
+              },
+              {
+                "internalType": "uint8",
+                "name": "timeMode",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint32",
+                "name": "timeShiftSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IPortfolioRiskManager.Scenario[]",
+            "name": "maintenanceSet",
+            "type": "tuple[]"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct IPortfolioRiskManager.RiskParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "RiskSetUpdated",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "decimals",
+        "type": "uint8"
+      }
+    ],
+    "name": "DecimalsTooLarge",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidRiskParams",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidStrike",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tenorIndex",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "nodeIndex",
+        "type": "uint8"
+      }
+    ],
+    "name": "MissingSurfaceNode",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotAuthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "equity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "initialMargin",
+        "type": "uint256"
+      }
+    ],
+    "name": "NotHealthy",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "key",
+        "type": "bytes32"
+      }
+    ],
+    "name": "OpenInterestCap",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ProductCloseOnly",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RiskSetAlreadyAssigned",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RiskSetExists",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "SeriesNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "SeriesNotPriceable",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "age",
+        "type": "uint64"
+      }
+    ],
+    "name": "StaleSpot",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "productId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "age",
+        "type": "uint64"
+      }
+    ],
+    "name": "StaleSurface",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "riskParameterSetId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "UnknownRiskSet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  }
+]

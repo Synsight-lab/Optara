@@ -1,0 +1,19 @@
+{
+  "_comment": "Optara deployment config for monad-mainnet (DEPLOYMENT.md §2-§3). Role addresses are the multisigs/timelock and MUST be filled in before deploying; Deploy.s.sol refuses zero addresses. pyth: verified on-chain 2026-10-07 (getUpdateFee, MON/USD feed). kuruRouter: Kuru's mainnet Router (verified on a mainnet fork, test/fork/KuruAdapter.fork.t.sol); zero on testnet, whose Kuru 'Spot V2' needs its own adapter.",
+  "chainId": 143,
+  "governance": "0x0000000000000000000000000000000000000000",
+  "guardian": "0x0000000000000000000000000000000000000000",
+  "council": "0x0000000000000000000000000000000000000000",
+  "riskAdmin": "0x0000000000000000000000000000000000000000",
+  "oracleAdmin": "0x0000000000000000000000000000000000000000",
+  "seriesCreator": "0x0000000000000000000000000000000000000000",
+  "venueAdmin": "0x0000000000000000000000000000000000000000",
+  "pyth": "0x2880aB155794e7179c9eE2e38200202908C17B43",
+  "kuruRouter": "0xd651346d7c789536ebf06dc72aE3C8502cd695CC",
+  "upgradeDelay": 604800,
+  "emergencyDelay": 86400,
+  "surfaceQuorum": 2,
+  "maxSeriesPerAccount": 16,
+  "maxBucketsPerAccount": 4,
+  "minPositionQty": 10000000000000000
+}

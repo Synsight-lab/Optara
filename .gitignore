@@ -47,6 +47,10 @@ coverage/
 deployments/e2e*.json
 deployments/fe2e*.json
 deployments/demo*.json
+deployments/*.dry-run.json
+# Fork rehearsals (script/rehearse_fork.sh): configs, manifests and proposals with throwaway anvil roles
+deployments/rehearsal*
+deployments/config/rehearsal*
 deployments/.invariant-stats.log
 *.log
 npm-debug.log*
@@ -55,8 +59,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 # ---------------------------------------------------------------------------
-# Secrets and local configuration: never commit keys, RPC credentials or
-# filled-in production deploy configs
+# Secrets and local configuration: never commit keys or RPC credentials
+# (deployments/config/*.json hold only public addresses and are committed)
 # ---------------------------------------------------------------------------
 .env
 .env.*
@@ -64,8 +68,6 @@ pnpm-debug.log*
 *.pem
 *.key
 keystore/
-contract/deploy/*.json
-!contract/deploy/*.template.json
 
 # ---------------------------------------------------------------------------
 # Editors and OS

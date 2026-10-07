@@ -1,0 +1,49 @@
+{
+  "_comment": "ETH/USDC listing for monad-mainnet (DEPLOYMENT.md §3; values from PARAMETERS.md). Read by script/ProposeListing.s.sol (LISTING=eth-usdc), which refuses zero addresses: fill in the WETH and USDC token addresses, the Chainlink-compatible ETH/USD and USDC/USD settlement feeds (and their decimals), and the publisher addresses before proposing. Pyth feed ids are Pyth's ETH/USD and USDC/USD (checked against Hermes 2026-10-07). maxLegSkew must cover the slower leg's heartbeat. insuranceSeed and keeperReserveMin come from the risk review (PARAMETERS.md §7) and must be non-zero. Amounts are in USDC's 6 decimals; strikes and caps in 1e18.",
+  "underlying": "0x0000000000000000000000000000000000000000",
+  "asset": "0x0000000000000000000000000000000000000000",
+  "underlyingSymbol": "ETH",
+  "assetSymbol": "USDC",
+  "minStrikeWad": 100000000000000000000,
+  "maxStrikeWad": 1000000000000000000000000,
+  "maxReportLifetime": 900,
+  "riskSet": "ETH/USDC default",
+  "shortCapUnderlyingWad": 1000000000000000000000,
+  "pythBaseFeed": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+  "pythQuoteFeed": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+  "settlement": {
+    "primary": {
+      "kind": "DERIVED",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "feedDecimals": 8,
+      "quoteFeed": "0x0000000000000000000000000000000000000000",
+      "quoteFeedDecimals": 8
+    },
+    "fallback": {
+      "kind": "NONE"
+    },
+    "observationStartOffset": -3600,
+    "observationEndOffset": 0,
+    "minFinalizationDelay": 300,
+    "maxFinalizationDelay": 604800,
+    "maxLegSkew": 86400
+  },
+  "publishers": [
+    "0x0000000000000000000000000000000000000000",
+    "0x0000000000000000000000000000000000000000",
+    "0x0000000000000000000000000000000000000000"
+  ],
+  "independent": [
+    true,
+    false,
+    false
+  ],
+  "minSellerFee": 100000,
+  "insuranceSeed": 0,
+  "keeperReserveMin": 0,
+  "finalizeReward": 2000000,
+  "settleReward": 500000,
+  "maxInsurancePerLiquidation": 0,
+  "approveAsset": true,
+  "enableKuru": true
+}

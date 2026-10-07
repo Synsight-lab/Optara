@@ -1,0 +1,1667 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fromAccountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "toAccountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "closeShortWithInternalLong",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "closeShortWithWrapper",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "control",
+    "outputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "depositCollateral",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IProtocolControl",
+        "name": "control_",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "ledger",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "registry",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "risk",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "fees",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "insurance",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "spot",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "surface",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementState",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "liquidationModule",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementWindow",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct IOptionClearing.Modules",
+        "name": "m",
+        "type": "tuple"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxSellerFeeNative",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "mintExternalLong",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "modules",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "ledger",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "registry",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "risk",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "fees",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "insurance",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "spot",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "surface",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementState",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "liquidationModule",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "settlementWindow",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct IOptionClearing.Modules",
+        "name": "m",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "payInsurance",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "payOut",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "previewMint",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "equityAfter",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "imAfter",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "ok",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "unwrapLong",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "updateOracles",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "withdrawCollateral",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes[]",
+            "name": "spotUpdates",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "bytes32[]",
+            "name": "spotProductIds",
+            "type": "bytes32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "chainId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "verifyingContract",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "address",
+                "name": "underlying",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "settlementAsset",
+                "type": "address"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "validAfter",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "expiresAt",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "spotReferenceId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "surfaceRoot",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64[4]",
+                "name": "tenorTimestamps",
+                "type": "uint64[4]"
+              },
+              {
+                "internalType": "uint256[4]",
+                "name": "atmTotalVarianceByTenor",
+                "type": "uint256[4]"
+              },
+              {
+                "internalType": "int256[]",
+                "name": "kNodes",
+                "type": "int256[]"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMinIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surfaceMaxIvBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "confidenceBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint16",
+                "name": "sourceCount",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint32",
+                "name": "liquidityScore",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "maxBidAskWidthBps",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "lastCalibrationTime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "riskParameterSetId",
+                "type": "bytes32"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.SurfaceReport[]",
+            "name": "reports",
+            "type": "tuple[]"
+          },
+          {
+            "internalType": "bytes[][]",
+            "name": "reportSignatures",
+            "type": "bytes[][]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "productId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "surfaceSeq",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint8",
+                "name": "tenorIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint8",
+                "name": "nodeIndex",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "totalVarianceWad",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bytes32[]",
+                "name": "proof",
+                "type": "bytes32[]"
+              }
+            ],
+            "internalType": "struct IVolSurfaceOracle.NodeProof[]",
+            "name": "nodes",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct OracleUpdate",
+        "name": "u",
+        "type": "tuple"
+      }
+    ],
+    "name": "wrapLong",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "CollateralDeposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "CollateralWithdrawn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "ExternalLongMinted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      }
+    ],
+    "name": "LongUnwrapped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      }
+    ],
+    "name": "LongWrapped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "fromAccountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "toAccountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "ShortClosedWithInternalLong",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "accountId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "ShortClosedWithWrapper",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "max",
+        "type": "uint256"
+      }
+    ],
+    "name": "FeeTooHigh",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "groupId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "GroupAlreadyFinalized",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "balance",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientLong",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "required",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "provided",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientProviderFee",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "balance",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "qty",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientShort",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "asset",
+        "type": "address"
+      }
+    ],
+    "name": "InsuranceBelowMinimum",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOracleUpdate",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidRecipient",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "received",
+        "type": "uint256"
+      }
+    ],
+    "name": "NonExactTransfer",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "NotAuthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RefundFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "SafeERC20FailedOperation",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "seriesId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "SeriesNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAmount",
+    "type": "error"
+  }
+]
