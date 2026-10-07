@@ -1,0 +1,22 @@
+{
+  "name": "@optara/publisher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optara surface publisher: calibrate, validate, grid, Merkle, sign (quorum), serve (INDEXER_AND_KEEPERS.md §5).",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@optara/sdk": "workspace:*",
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.0"
+  }
+}

@@ -25,6 +25,11 @@ contract/lcov.info
 contract/coverage/
 contract/report/
 
+# Services (step 15)
+indexer/config.e2e*.yaml
+indexer/generated/
+contract/cache/services-e2e/
+
 # Python (test-vectors/)
 __pycache__/
 *.py[cod]

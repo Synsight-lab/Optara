@@ -51,7 +51,9 @@ Before any risk-increasing transaction the app must:
 1. Fetch a fresh `OracleUpdate`: a Pyth price update, the latest signed surface report, and proofs for the leaves
    the account needs (publisher API).
 2. Re-run the preview with that data.
-3. Send the transaction with the update attached and `value` = the provider fee.
+3. Send the transaction with the update attached and `value` = the provider fee (`LiveSpotOracle.updateFee` of the
+   update's spot blobs), and a gas limit above the estimate (`withGasBuffer`, DD-36: execution gas depends on the
+   block timestamp, so an exact estimate can run out of gas a second later).
 
 ## 5. Health display
 

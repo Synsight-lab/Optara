@@ -1,0 +1,216 @@
+# Optara indexer schema (INDEXER_AND_KEEPERS.md §1.1). Rebuilt from events only; nothing here is authoritative:
+# safety-critical flows read the chain. Absolute values from events (CashUpdated.cash, BalanceUpdated.balance,
+# ParticipantsUpdated.participants) are stored as is; delta-based tallies (wrapper supply and balances, fee and
+# insurance totals) go through a processed-log guard keyed by (txHash, logIndex), so a duplicated delivery is a no-op.
+
+type Product {
+  id: ID! # productId
+  underlying: String!
+  settlementAsset: String!
+  underlyingSymbol: String!
+  assetSymbol: String!
+  enabled: Boolean!
+  closeOnly: Boolean!
+  emergency: Boolean!
+  spotPriceWad: BigInt!
+  spotPublishTime: BigInt!
+  surfaceSeq: BigInt!
+  surfaceValidAfter: BigInt!
+  surfaceExpiresAt: BigInt!
+  surfaceLowConfidence: Boolean!
+  shortCapUnderlyingWad: BigInt!
+  riskParameterSetId: String!
+}
+
+type SettlementGroup {
+  id: ID! # groupId
+  underlying: String!
+  settlementAsset: String!
+  expiry: BigInt! @index
+  settlementOracleConfigId: String!
+  participants: BigInt!
+  finalized: Boolean!
+  finalizedAt: BigInt!
+  priceWad: BigInt!
+  observationTime: BigInt!
+  participantsAtFinalization: BigInt!
+  stalled: Boolean!
+  ratioSet: Boolean!
+  ratioWad: BigInt!
+  grossClaim: BigInt!
+  collected: BigInt!
+  insurance: BigInt!
+  dustSwept: BigInt!
+  series: [Series!]! @derivedFrom(field: "group")
+}
+
+type Series {
+  id: ID! # seriesId
+  group: SettlementGroup!
+  productId: String! @index
+  underlying: String!
+  settlementAsset: String!
+  wrapper: String! @index
+  optionType: Int! # 0 call, 1 put
+  strikeWad: BigInt!
+  contractSizeWad: BigInt!
+  expiry: BigInt! @index
+  settlementOracleConfigId: String!
+  riskParameterSetId: String!
+  createdAt: BigInt!
+  wrapperSupply: BigInt!
+  internalLong: BigInt!
+  internalShort: BigInt!
+}
+
+type Account {
+  id: ID! # accountId (decimal)
+  accountId: BigInt! @index
+  owner: String! @index
+  settlementAsset: String!
+  cash: BigInt!
+  createdAt: BigInt!
+  positions: [Position!]! @derivedFrom(field: "account")
+}
+
+type Operator {
+  id: ID! # accountId-operator
+  account: Account!
+  operator: String! @index
+  approved: Boolean!
+}
+
+type Position {
+  id: ID! # accountId-seriesId
+  account: Account!
+  accountId: BigInt! @index
+  series: Series!
+  seriesId: String! @index
+  balance: BigInt!
+  updatedAt: BigInt!
+}
+
+type WrapperBalance {
+  id: ID! # wrapper-holder
+  series: Series!
+  holder: String! @index
+  balance: BigInt!
+}
+
+type Surface {
+  id: ID! # productId-seq
+  productId: String! @index
+  seq: BigInt!
+  root: String!
+  validAfter: BigInt!
+  expiresAt: BigInt!
+  confidenceBps: Int!
+  lowConfidence: Boolean!
+  acceptedAt: BigInt!
+  acceptedBlock: BigInt!
+  transaction: String!
+  nodesProven: Int!
+}
+
+type Auction {
+  id: ID! # accountId-underlying
+  accountId: BigInt! @index
+  underlying: String!
+  active: Boolean! @index
+  startTime: BigInt!
+  startEquity: BigInt!
+  startMaintenanceMargin: BigInt!
+  slices: Int!
+  wrapperLiquidations: Int!
+  endedAt: BigInt!
+  endReason: Int!
+}
+
+type Liquidation {
+  id: ID! # txHash-logIndex
+  kind: String! # SLICE | WRAPPER | BAD_DEBT
+  accountId: BigInt! @index
+  underlying: String!
+  seriesId: String!
+  liquidatorAccountId: BigInt!
+  sliceBps: Int!
+  qty: BigInt!
+  sliceMark: BigInt!
+  sliceMM: BigInt!
+  discount: BigInt!
+  penalty: BigInt!
+  cashToLiquidator: BigInt!
+  insurance: BigInt!
+  unpaid: BigInt!
+  timestamp: BigInt!
+}
+
+type Fee {
+  id: ID! # txHash-logIndex
+  kind: String! # SELLER | BUYER | KEEPER_REWARD
+  asset: String! @index
+  accountId: BigInt!
+  payer: String!
+  seriesId: String!
+  amount: BigInt!
+  toInsurance: BigInt!
+  toTreasury: BigInt!
+  toKeeper: BigInt!
+  timestamp: BigInt!
+}
+
+type Insurance {
+  id: ID! # asset
+  deposited: BigInt!
+  fromFees: BigInt!
+  paid: BigInt!
+  minimumSeed: BigInt!
+  minimumKeeperReserve: BigInt!
+}
+
+type Market {
+  id: ID! # venueId-seriesId
+  venueId: String!
+  seriesId: String! @index
+  market: String!
+  status: Int!
+}
+
+type Trade {
+  id: ID! # txHash-logIndex
+  venueId: String!
+  seriesId: String! @index
+  trader: String! @index
+  recipient: String!
+  isBuy: Boolean!
+  qty: BigInt!
+  premium: BigInt!
+  buyerFee: BigInt!
+  venueFee: BigInt!
+  timestamp: BigInt!
+}
+
+type SettlementEvent {
+  id: ID! # txHash-logIndex
+  kind: String! # SETTLED | CLAIMED | REDEEMED
+  groupId: String! @index
+  accountId: BigInt!
+  seriesId: String!
+  holder: String!
+  netNumerator: BigInt!
+  amount: BigInt!
+  unpaid: BigInt!
+  timestamp: BigInt!
+}
+
+type GovernanceEvent {
+  id: ID! # txHash-logIndex
+  kind: String! @index # UPGRADE_SCHEDULED, ROLE_GRANTED, PUBLISHER_ADDED, PAUSED, ...
+  contract: String!
+  detail: String!
+  timestamp: BigInt! @index
+}
+
+type ProcessedLog {
+  id: ID! # txHash-logIndex of a delta-based event already applied
+}

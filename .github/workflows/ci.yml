@@ -135,6 +135,58 @@ jobs:
         run: forge script script/local/Smoke.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 
   # -----------------------------------------------------------------------------------------------
+  # Off-chain services (INDEXER_AND_KEEPERS.md, TESTING.md §2 "Services"): sdk, publisher, keepers and indexer,
+  # each against the local stack on anvil; the indexer e2e runs the real Envio indexer on Postgres.
+  # -----------------------------------------------------------------------------------------------
+  services:
+    name: Services · sdk, publisher, keepers, indexer
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18.3
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testing
+          POSTGRES_DB: envio-dev
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Build contracts (the services deploy the local stack)
+        working-directory: contract
+        run: forge build
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generated code is current (SDK ABIs; indexer types)
+        run: |
+          pnpm --filter @optara/sdk check:abi
+          pnpm --filter @optara/indexer codegen
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Tests (one package at a time)
+        run: pnpm -r --workspace-concurrency=1 test
+
+  # -----------------------------------------------------------------------------------------------
   # Coverage gate (TESTING.md §7): core 100% lines and branches; other src/ files >= 95% / 90%
   # -----------------------------------------------------------------------------------------------
   coverage:
@@ -232,7 +284,7 @@ jobs:
   ci-success:
     name: CI passed
     if: always()
-    needs: [contracts, deploy, coverage, reference, slither]
+    needs: [contracts, deploy, services, coverage, reference, slither]
     runs-on: ubuntu-latest
     steps:
       - name: All blocking jobs succeeded

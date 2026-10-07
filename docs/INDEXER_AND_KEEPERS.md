@@ -38,6 +38,8 @@ GET /liquidatable                            (accounts with equity < MM, sorted 
 GET /surfaces/:productId/latest
 GET /markets
 GET /system                                  (oracle freshness, close-only flags, insurance)
+GET /positions                               (every non-zero position: keepers' participant source)
+GET /alerts                                  (SECURITY.md §5, plus INDEX_MISMATCH and INDEX_LAG)
 ```
 
 ### 1.3 Reliability
@@ -49,7 +51,8 @@ GET /system                                  (oracle freshness, close-only flags
 ## 2. Spot updater
 
 - Pushes Pyth (or the configured provider) updates every `maxSpotAge / 2` for products with open interest, so
-  passive views stay fresh.
+  passive views stay fresh. When a publisher has a newer signed report, it pushes that report with the leaves of
+  every listed unexpired series in the same `updateOracles` call (the leaves stay cached for everyone).
 - Optional: users and bots also include updates in their own transactions.
 - Source: Pyth Hermes (`/v2/updates/price/latest`), which needs an API key (401 without one, observed 2026-10-07).
   On Monad mainnet a third party pushes ETH/USD and USDC/USD every ~30–60 s, which helps but cannot be relied on;
@@ -127,3 +130,55 @@ GET /oracle-update?account=:id            -> complete OracleUpdate for an accoun
 | Settlement keeper | ≥ 2 | Different operators eventually |
 | Liquidation bot | ≥ 1 (open source; others encouraged) | Funded accounts |
 | Surface publishers | ≥ 3 operators | Independent infrastructure |
+
+## 7. Implementation (step 15)
+
+Workspace (pnpm, TypeScript, viem; `pnpm -r typecheck`, `pnpm -r test`):
+
+| Package | What it is |
+|---|---|
+| `sdk/` | Manifests, ABIs generated from `deployments/abi` (`gen:abi`, checked in CI), EIP-712 surface reports, Merkle leaves and proofs (OpenZeppelin sorted pairs), `OracleUpdate` JSON codecs, the round-in-force settlement proof builder, Pyth sources (Hermes, MockPyth), the series catalog and ledger directory (from events), revert decoding, gas buffer; `sdk/testing`: the local stack on anvil for every service test |
+| `publisher/` | §5: inputs (Deribit public summaries; a synthetic smile for local stacks and products without options markets), SVI per expiry, grid on `kNodes` (default 13 nodes over ±1.2), validation, quorum signing with cosigners (`POST /cosign`), the §5.2 API. `pnpm --filter @optara/publisher start` |
+| `keepers/` | §2–§4: `oracle`, `settle`, `liquidate` loops (`tsx src/main.ts oracle settle liquidate`). Stateless; participant and candidate lists from the indexer (`INDEXER_URL`) or the ledger's events |
+| `indexer/` | §1: Envio HyperIndex (`config.yaml` generated per network from the manifest: `pnpm gen:config <network>`; `envio start`) and `api/` (`pnpm api`): health worker, reconciliation, alerts, the §1.2 API, reading Envio's Postgres directly |
+
+Rules the implementation settles (DD-35, DD-36):
+
+- **Publisher validation** mirrors every on-chain acceptance check (sequence, time window, lifetime, tenors, ATM
+  calendar, `kNodes`, IV bounds, ATM move against the stored surface) and requires every leaf to be provable
+  (inside the report's IV bounds). It adds calendar arbitrage on every node and butterfly arbitrage on the surface
+  the contract evaluates (total variance linear in `k` between nodes): no concave kink at an interior node and
+  Durrleman's `g(k) ≥ 0` on every segment. A cosigner re-runs the same validation on the full grid, after checking it
+  hashes to `surfaceRoot`, before signing. The report's IV bounds are the product's (`minIvBps`, `maxIvBps`);
+  `validAfter` is the latest block time (never ahead of the chain).
+- **`confidenceBps`** = max(50, worst slice fit RMSE ÷ its ATM vol, half the median bid-ask width in vol terms
+  (price width ÷ Black-76 vega, relative to the IV)), in bps; 2,000 (close-only) when no expiry could be fitted or a
+  tenor lies more than 30 days outside the fitted expiries. On the 2026-10-07 Deribit ETH snapshot: 347 bps, fit
+  RMSE under one vol point on every expiry.
+- **Node selection** (`/oracle-update`): the tenors around each series' expiry and the nodes around its
+  log-moneyness at the on-chain spot, widened by one node on each side for spot moves before inclusion; leaves the
+  chain already caches are left out.
+- **Indexer idempotency**: ledger events carry absolute values (cash, balance, participants), so replays are
+  harmless; series totals move by the stored-versus-new balance difference; delta-based tallies (wrapper supply and
+  holders, fee and insurance totals, counters) are applied once per log. Envio itself delivers each
+  (block, log index) once, commits batches atomically and rolls back reorgs (verified on anvil: a replaced branch's
+  account disappears). Monad uses HyperSync (`ENVIO_API_TOKEN`) with the public RPC as fallback
+  (`interval_ceiling: 100`: its `eth_getLogs` covers at most 100 blocks).
+- **Reconciliation** (every 5 minutes): every account's cash, every series' long and short totals (catches any
+  missing or wrong position), wrapper supplies, participant counts and the account count against the chain, and
+  INV-7 custody per asset (clearing balance = Σ cash + Σ group pools). Mismatches are `INDEX_MISMATCH` / `CUSTODY`
+  alerts.
+- **Liquidation bot profit**: a slice's gain at mark is its `discount` (the liquidator takes legs worth `sliceMark`
+  and receives `−sliceMark + discount`); the bot slices when it clears `MIN_PROFIT`, applying the oracle update
+  first so `previewSlice` equals execution (PRV-004).
+- **Transactions** carry a gas limit 10% above the estimate (`GAS_BUFFER_BPS`, DD-36).
+
+Operational facts found while building (2026-10-07):
+
+- Pyth Hermes' update endpoint needs an API key (401 without one). On Monad mainnet a third party pushes ETH/USD
+  and USDC/USD every ~30–60 s; testnet has no pusher, so the oracle keeper must run there.
+- Pyth (and the mock) only take a price newer than the stored one: two updates stamped in the same second keep the
+  first.
+- Monad's public RPC limits `eth_getLogs` to 100 blocks: the catalog and ledger directory scan in 100-block chunks;
+  the indexer uses HyperSync.
+

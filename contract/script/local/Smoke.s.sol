@@ -41,7 +41,8 @@ contract Smoke is LocalMarketData {
     }
 
     function run() external {
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/../deployments/local.json"));
+        string memory network = vm.envOr("NETWORK", string("local"));
+        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/../deployments/", network, ".json"));
         (Stack memory s, Market memory m) = _load(json);
         uint256 mm = vm.deriveKey(MNEMONIC, 0);
 

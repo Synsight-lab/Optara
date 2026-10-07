@@ -1,0 +1,27 @@
+{
+  "name": "@optara/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Optara client code: manifests, ABIs, surface reports (EIP-712, Merkle leaves), oracle updates, settlement proofs, local-chain test helpers.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./testing/globalSetup": "./src/testing/globalSetup.ts"
+  },
+  "scripts": {
+    "gen:abi": "tsx scripts/gen-abi.ts",
+    "check:abi": "tsx scripts/gen-abi.ts --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@optara/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optara indexer: Envio HyperIndex (events -> Postgres/GraphQL) plus the health worker and REST API (INDEXER_AND_KEEPERS.md \u00a71).",
+  "type": "module",
+  "scripts": {
+    "gen:config": "tsx scripts/gen-config.ts",
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "start": "envio start",
+    "api": "tsx api/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@optara/sdk": "workspace:*",
+    "envio": "3.14.0",
+    "viem": "2.57.3",
+    "postgres": "3.4.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.0",
+    "@optara/keepers": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  }
+}
