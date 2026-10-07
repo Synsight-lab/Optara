@@ -81,6 +81,60 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export const useToasts = () => useContext(ToastCtx);
 
+// ------------------------------------------------------------------ trading mode (simple / pro)
+
+export type TradingMode = "simple" | "pro";
+
+const ModeCtx = createContext<{ mode: TradingMode; setMode(m: TradingMode): void; toggle(): void }>({
+  mode: "simple",
+  setMode: () => {},
+  toggle: () => {},
+});
+
+export function ModeProvider({ children }: { children: ReactNode }) {
+  const [mode, setModeState] = useState<TradingMode>(() => {
+    try {
+      return (localStorage.getItem("optara.tradingMode") as TradingMode) ?? "simple";
+    } catch {
+      return "simple";
+    }
+  });
+
+  const setMode = useCallback((m: TradingMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem("optara.tradingMode", m);
+    } catch {
+      // storage unavailable
+    }
+  }, []);
+
+  const toggle = useCallback(() => {
+    setMode(mode === "simple" ? "pro" : "simple");
+  }, [mode, setMode]);
+
+  return <ModeCtx.Provider value={{ mode, setMode, toggle }}>{children}</ModeCtx.Provider>;
+}
+
+export const useTradingMode = () => useContext(ModeCtx);
+
+// ------------------------------------------------------------------ educational guide modal
+
+const GuideCtx = createContext<{ isOpen: boolean; open(): void; close(): void }>({
+  isOpen: false,
+  open: () => {},
+  close: () => {},
+});
+
+export function GuideProvider({ children }: { children: ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const open = useCallback(() => setIsOpen(true), []);
+  const close = useCallback(() => setIsOpen(false), []);
+  return <GuideCtx.Provider value={{ isOpen, open, close }}>{children}</GuideCtx.Provider>;
+}
+
+export const useQuickGuide = () => useContext(GuideCtx);
+
 // ------------------------------------------------------------------ theme
 
 export function useTheme(): ["dark" | "light", () => void] {
@@ -101,3 +155,4 @@ export function useTheme(): ["dark" | "light", () => void] {
   }, [theme]);
   return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
 }
+

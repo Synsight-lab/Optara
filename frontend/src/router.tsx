@@ -12,12 +12,12 @@ export const router = createBrowserRouter([
       { path: "/", element: <MarketsPage /> },
       { path: "/series/:id", lazy: async () => ({ Component: (await import("./pages/Series.tsx")).SeriesPage }) },
       {
-        // `/trade/:id` opens the series page on its trading panel.
+        path: "/trade",
+        lazy: async () => ({ Component: (await import("./pages/Trade.tsx")).TradePage }),
+      },
+      {
         path: "/trade/:id",
-        lazy: async () => {
-          const { SeriesPage } = await import("./pages/Series.tsx");
-          return { Component: () => <SeriesPage initialTab="buy" /> };
-        },
+        lazy: async () => ({ Component: (await import("./pages/Trade.tsx")).TradePage }),
       },
       { path: "/portfolio", lazy: async () => ({ Component: (await import("./pages/Portfolio.tsx")).PortfolioPage }) },
       { path: "/settlement", lazy: async () => ({ Component: (await import("./pages/Settlement.tsx")).SettlementPage }) },
