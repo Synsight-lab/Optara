@@ -129,3 +129,49 @@ redeemable amount.
 - Components: each action button's enable/disable logic for every state in [STATE_MACHINE.md](STATE_MACHINE.md).
 - Integration (local chain): F1–F13 from [USER_FLOWS.md](USER_FLOWS.md), with a mock publisher and a mock Kuru.
 - Disclosure gating: the buy and mint flows can't proceed until acknowledged.
+
+## 12. Implementation (step 16)
+
+`frontend/` (React 19, TypeScript, Vite, Tailwind 4, wagmi 3 + viem, TanStack Query, React Router). Run everything
+locally with one command from the repo root:
+
+```bash
+pnpm install && (cd contract && forge build)
+pnpm dev        # anvil + local stack + quoted Kuru books + publishers + keepers + the app on http://localhost:5173
+```
+
+On the local devnet, "Connect wallet" offers five funded test wallets (Alice…Erin, anvil accounts 5–9; signed by
+anvil, never offered elsewhere). Real networks: `VITE_NETWORK` (`monad-testnet` | `monad-mainnet`), `VITE_RPC_URL`,
+`VITE_PUBLISHER_URL` (required to open positions), `VITE_INDEXER_URL` (optional: lists otherwise come from events).
+
+| Path | What it is |
+|---|---|
+| `src/lib/optara/` | The §1 client: `reads` (views, lists, quotes, liquidation-spot estimate), `actions` (step builders for every flow), `oracle` (`fetchOracleUpdate`), `tx` (simulate → send with gas buffer), `availability` (FE-001), `errors` (FE-004), `disclosures` (FE-003), `health`, `format` |
+| `src/components/` | `TxButton` (disclosures, stepper, toasts), `PayoffChart`, `HealthBar`, `ConnectButton`, `DisclosureModal`, UI primitives |
+| `src/pages/` | Markets, Series (and `/trade/:id`), Portfolio, Settlement, Liquidations, System; all but Markets load on first visit |
+| `scripts/devnet.ts` | `pnpm dev` |
+
+Design: Monad palette (purple `#836EF9` primary, deep purple `#200052`, berry `#A0055D`, off-white `#FBFAF9`,
+near-black `#0E100F`) as theme tokens, dark by default with a light theme; semantic green/amber/red only for health
+and gains/losses. Interactions: a live option chain (buy/write toggle, ITM shading, spot marker; Calls/Puts list on
+phones), a payoff chart that reads out the result at any settlement price, previews that update as you type (fees as
+three lines, equity and IM after), one-click account setup and deposit, a stepper per transaction (approvals skipped
+when not needed), plain-language tooltips for margin terms, and disabled actions that say why.
+
+Decisions taken while building:
+
+- **Liquidation spot estimate** (§5): `healthOf` called with the spot oracle's stored price overridden (`eth_call`
+  state override on `LiveSpotOracle`'s ERC-7201 slot), bisected for equity = MM up to ×3 and down to ×0.2. Where
+  the surface has no proven leaves that far out, the views can't price and the page says how far it searched.
+- **Re-preview** (FE-002): a risk-increasing step fetches `/oracle-update` when it runs and simulates the exact
+  transaction with it before the wallet opens; a revert becomes the §9 message.
+- **Gas**: estimate plus 10% (DD-36). **Wallet**: fetched when the button is pressed (no stale client).
+- **Lists without an indexer**: series from `SeriesCreated`, accounts from `SubAccountCreated` (indexed by owner),
+  participants from `BalanceUpdated`; the read client never caches the block number, so a just-created account
+  shows up at once.
+- **Kuru quotes**: the book's `bestBidAsk()` (Kuru's own view, 1e18 per whole token; the local mock implements it).
+
+Tests: `pnpm --filter @optara/frontend test` runs units, FE-001 (every group state × health), FE-002, FE-003
+(component test of the disclosure gate), FE-004 (checked against `Errors.sol`), then the F1–F13 flows through the
+app's own builders against the local stack with a real publisher.
+

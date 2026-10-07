@@ -3,7 +3,7 @@
  *   tsx scripts/gen-config.ts <network> [out]       (default out: config.yaml for local, else config.<network>.yaml)
  */
 import { writeFileSync } from "node:fs";
-import { loadManifest } from "@optara/sdk";
+import { loadManifest } from "@optara/sdk/node";
 import { configYaml } from "./config.ts";
 
 const network = process.argv[2] ?? "local";

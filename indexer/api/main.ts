@@ -4,7 +4,8 @@
  *   ENVIO_PG_HOST/PORT/USER/PASSWORD/DATABASE, ENVIO_PG_SCHEMA    the indexer's Postgres (Envio's variables)
  *   PORT (8787), HEALTH_INTERVAL_SECONDS (15), RECONCILE_INTERVAL_SECONDS (300)
  */
-import { connect, loadManifest } from "@optara/sdk";
+import { connect } from "@optara/sdk";
+import { loadManifest } from "@optara/sdk/node";
 import { Db } from "./db.ts";
 import { Monitor } from "./monitor.ts";
 import { startApi } from "./server.ts";

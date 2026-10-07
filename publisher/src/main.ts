@@ -13,7 +13,8 @@
 import { readFileSync } from "node:fs";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { connect, HermesSource, loadManifest, RestampMockPythSource, optionSeriesRegistryAbi, type SpotSource } from "@optara/sdk";
+import { connect, HermesSource, RestampMockPythSource, optionSeriesRegistryAbi, type SpotSource } from "@optara/sdk";
+import { loadManifest } from "@optara/sdk/node";
 import { SeriesCatalog } from "@optara/sdk";
 import { DeribitInputs, SyntheticInputs, skewSmile, type VolInputs } from "./inputs.ts";
 import { Publisher, type ProductSpec, type PublishResult } from "./publisher.ts";

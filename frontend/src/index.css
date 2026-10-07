@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/*
+ * Monad palette: purple #836EF9, deep purple #200052, berry #A0055D, off-white #FBFAF9, near-black #0E100F.
+ * Semantic colors (health, gains/losses) are tuned to sit with it. Dark is the default; light via data-theme.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-monad-purple: #836ef9;
+  --color-monad-deep: #200052;
+  --color-monad-berry: #a0055d;
+  --color-monad-offwhite: #fbfaf9;
+  --color-monad-black: #0e100f;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  --radius-card: 1.25rem;
+  --shadow-glow: 0 0 0 1px rgb(131 110 249 / 0.25), 0 12px 40px -12px rgb(131 110 249 / 0.45);
+}
+
+:root {
+  --bg: #0e100f;
+  --surface: #16131f;
+  --surface-2: #1f1838;
+  --line: rgb(131 110 249 / 0.16);
+  --ink: #fbfaf9;
+  --muted: #a9a3bd;
+  --primary: #836ef9;
+  --primary-soft: rgb(131 110 249 / 0.14);
+  --accent: #d0368a; /* berry, lifted for contrast on dark */
+  --good: #3ccf91;
+  --warn: #f5b84b;
+  --bad: #f0506e;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #fbfaf9;
+  --surface: #ffffff;
+  --surface-2: #f2effe;
+  --line: rgb(32 0 82 / 0.12);
+  --ink: #0e100f;
+  --muted: #5b5670;
+  --primary: #6c52f5;
+  --primary-soft: rgb(131 110 249 / 0.12);
+  --accent: #a0055d;
+  --good: #108a5a;
+  --warn: #b7780a;
+  --bad: #c4264b;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgb(131 110 249 / 0.18), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgb(160 5 93 / 0.12), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility card {
+  @apply rounded-[var(--radius-card)] border border-line bg-surface/80 backdrop-blur-sm;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+    disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2
+    focus-visible:outline-primary;
+}
+@utility btn-primary {
+  @apply btn bg-primary text-white hover:brightness-110 active:scale-[0.98];
+}
+@utility btn-accent {
+  @apply btn bg-accent text-white hover:brightness-110 active:scale-[0.98];
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-transparent text-ink hover:bg-primary-soft;
+}
+@utility input {
+  @apply w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-base outline-none transition
+    placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/30;
+}
+@utility pill {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+@utility label {
+  @apply text-xs font-medium uppercase tracking-wider text-muted;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.25s ease-out both;
+}

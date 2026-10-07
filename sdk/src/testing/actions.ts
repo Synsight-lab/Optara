@@ -1,6 +1,6 @@
 /** User actions on the local stack for service tests: accounts, deposits, mints, oracle pushes. */
 import { erc20Abi, parseEventLogs, type TransactionReceipt, type Abi, type Address, type ContractFunctionArgs, type ContractFunctionName, type Hex, type LocalAccount } from "viem";
-import { liveSpotOracleAbi, optionClearingAbi, subAccountsAbi, volSurfaceOracleAbi } from "../abi.ts";
+import { liveSpotOracleAbi, optionClearingAbi, portfolioRiskManagerAbi, subAccountsAbi, volSurfaceOracleAbi } from "../abi.ts";
 import type { OracleUpdate } from "../oracleUpdate.ts";
 import { decodeRevert } from "../errors.ts";
 import { withGasBuffer } from "../chain.ts";
@@ -124,4 +124,41 @@ export async function freshOracleUpdate(s: LocalStack, opts: { price: number; iv
   const nodes = [];
   for (let t = 0; t < tenors.length; t++) for (let j = 0; j < kNodes.length; j++) nodes.push(grid.nodeProof(t, j));
   return { ...u, reports: [report], reportSignatures: [signatures], nodes };
+}
+
+const mockBookAbi = [
+  { type: "function", name: "setBid", stateMutability: "nonpayable", inputs: [{ type: "uint256" }, { type: "uint256" }], outputs: [] },
+  { type: "function", name: "setAsk", stateMutability: "nonpayable", inputs: [{ type: "uint256" }, { type: "uint256" }], outputs: [] },
+] as const;
+const mintableAbi = [{ type: "function", name: "mint", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [] }] as const;
+
+/**
+ * A market maker (stack account 0) quotes the mock Kuru books of the stack's series (all, or `indices`) `spreadBps`
+ * around the protocol's mark (`priceOf`), `size` options each side: bids funded with USDC, asks with options it
+ * writes straight into the book (each mint with a fresh spot update at `price`). Returns the maker's account id.
+ */
+export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint } = {}): Promise<bigint> {
+  const p = stackProduct(s.manifest);
+  const px = s.manifest.proxies;
+  const mm = stackAccount(0);
+  const size = opts.size ?? 5n * 10n ** 18n;
+  const spread = opts.spreadBps ?? 500n;
+  const indices = opts.indices ?? p.seriesIds.map((_, i) => i);
+  await send(s, mm, { address: p.usdc as Address, abi: mintableAbi, functionName: "mint", args: [mm.address, 3_000_000_000_000n] });
+  await send(s, mm, { address: p.usdc as Address, abi: erc20Abi, functionName: "approve", args: [px.OptionClearing.proxy, 2n ** 256n - 1n] });
+  const account = await createAccount(s, 0);
+  await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 2_000_000_000_000n] });
+  for (const i of indices) {
+    const id = p.seriesIds[i]! as Hex;
+    const book = p.kuruBooks[i]! as Address;
+    const [mid] = await s.test.readContract({ address: px.PortfolioRiskManager.proxy, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [id] });
+    const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
+    await send(s, mm, { address: p.usdc as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
+    const u = await freshOracleUpdate(s, { price: opts.price ?? 4000, surface: false });
+    await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
+    const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
+    await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
+    await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
+  }
+  return account;
 }

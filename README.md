@@ -3,6 +3,9 @@
 Uncapped, cash-settled European options on Monad with portfolio margin, liquidation and an insurance fund. Long
 claims are ERC-20 wrapper tokens that trade on external venues (Kuru first).
 
+**Try it locally:** `pnpm install && (cd contract && forge build) && pnpm dev`, then open http://localhost:5173 and
+connect one of the funded test wallets. Needs Node ≥ 22.15, pnpm and Foundry.
+
 The specification lives in [`docs/`](docs/README.md). The build order and progress are in
 [`BUILD_PLAN.md`](BUILD_PLAN.md). The capped V2 design and its code are in git history.
 
@@ -15,6 +18,7 @@ The specification lives in [`docs/`](docs/README.md). The build order and progre
 | `publisher/` | Volatility surface publisher service |
 | `keepers/` | Oracle pusher, settlement keeper, reference liquidation bot |
 | `indexer/` | Envio indexer plus the health worker / monitoring API |
+| `frontend/` | The web app ([FRONTEND.md](docs/FRONTEND.md) §12) |
 | `docs/` | Normative specification |
 | `test-vectors/` | V2 reference vectors (kept for history; not used by PM) |
 

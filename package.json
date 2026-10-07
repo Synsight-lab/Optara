@@ -3,8 +3,11 @@
   "private": true,
   "description": "Optara PM off-chain services (step 15) and frontend (step 16). Contracts live in contract/ (Foundry).",
   "packageManager": "pnpm@10.11.0",
-  "engines": { "node": ">=22.15.0" },
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "scripts": {
+    "dev": "pnpm --filter @optara/frontend devnet",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
   }

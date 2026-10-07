@@ -20,8 +20,8 @@ import {MockKuruRouter, MockKuruOrderBook} from "../../test/mocks/MockVenues.sol
 ///         frontend: mock USDC/WETH, Pyth, a Chainlink-style ETH/USDC feed and Kuru; Optara deployed by the production
 ///         code; ETH/USDC listed through the same calls a real network proposes (ListingCalls), reserves seeded by
 ///         the treasury calls; weekly call and put series with Kuru books; a first spot price and signed surface;
-///         funded test users. Writes `deployments/local.json` (`deployments/<NETWORK>.json` if `NETWORK` is set, as the
-///         service test suites do so each gets its own manifest).
+///         funded test users. Writes `deployments/local.json` (`deployments/<NETWORK>.json` if `NETWORK` is set, as
+///         the service test suites do so each gets its own manifest). `pnpm dev` (frontend) adds quotes and services.
 /// @dev `anvil` then `forge script script/local/LocalStack.s.sol --rpc-url http://127.0.0.1:8545 --broadcast`.
 ///      Accounts come from anvil's default mnemonic: 0 deployer and treasury, 1 governance and every admin role,
 ///      2 and 3 publishers (2 independent), 4 keeper, 5–9 users. Never use these keys anywhere else.

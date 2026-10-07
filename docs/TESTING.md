@@ -94,7 +94,7 @@ A pull request that adds or changes contract code without its tests MUST NOT be 
 | Gas | `forge snapshot` + dedicated benchmarks | Risk check at max positions, liquidation, settlement batch |
 | Static analysis | Slither | Zero unresolved findings |
 | Services | Vitest, against the local stack on anvil (`sdk/testing`: deployed once, loaded from an anvil state file per suite) | SDK encodings equal the contracts' (EIP-712 digest, leaves, settlement proofs); PUB-001/002 (two publisher services, HTTP cosigning, `/oracle-update` proofs verified by real transactions); KPR-001 (200 participants), KPR-002 (restart mid-auction), the oracle pusher; IDX-001 (full lifecycle, then reconciliation finds no mismatch), IDX-002 (a real anvil reorg rolled back by Envio; replayed logs change nothing); handler logic on Envio's in-process test indexer |
-| Frontend | Vitest + Testing Library + local chain | See [FRONTEND.md](FRONTEND.md) §11 |
+| Frontend | Vitest + Testing Library (jsdom); integration against the local stack | FE-001..004, units; F1–F13 through the app's own transaction builders with a real publisher ([FRONTEND.md](FRONTEND.md) §11–§12) |
 
 ## 3. Reference model (`reference/`)
 

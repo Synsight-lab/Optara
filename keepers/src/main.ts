@@ -11,16 +11,8 @@
  */
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import {
-  connect,
-  HermesSource,
-  LedgerLogDirectory,
-  loadManifest,
-  RestampMockPythSource,
-  SeriesCatalog,
-  type AccountDirectory,
-  type SpotSource,
-} from "@optara/sdk";
+import { connect, HermesSource, LedgerLogDirectory, RestampMockPythSource, SeriesCatalog, type AccountDirectory, type SpotSource } from "@optara/sdk";
+import { loadManifest } from "@optara/sdk/node";
 import { IndexerDirectory } from "./indexerDirectory.ts";
 import { LiquidationBot } from "./liquidationBot.ts";
 import { OraclePusher } from "./oraclePusher.ts";

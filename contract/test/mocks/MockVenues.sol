@@ -49,6 +49,13 @@ contract MockKuruOrderBook {
         (pricePrecision, sizePrecision, takerFeeBps) = (pricePrecision_, sizePrecision_, takerFeeBps_);
     }
 
+    /// @notice As Kuru's OrderBook.bestBidAsk(): prices in 1e18 per whole base token (quote units); no bid → 0, no
+    ///         ask → type(uint256).max. Frontends read quotes through this view.
+    function bestBidAsk() external view returns (uint256 bid, uint256 ask) {
+        bid = bidSize == 0 ? 0 : bidPrice * 1e18 / pricePrecision;
+        ask = askSize == 0 ? type(uint256).max : askPrice * 1e18 / pricePrecision;
+    }
+
     /// @dev The book must hold the base it offers (and the quote it bids) itself.
     function setAsk(uint256 price, uint256 size) external {
         (askPrice, askSize) = (price, size);

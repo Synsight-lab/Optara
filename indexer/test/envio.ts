@@ -8,7 +8,7 @@ import { createWriteStream, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadManifest } from "@optara/sdk";
+import { loadManifest } from "@optara/sdk/node";
 import { configYaml } from "../scripts/config.ts";
 import { Db } from "../api/db.ts";
 

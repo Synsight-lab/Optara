@@ -3,3 +3,4 @@ packages:
   - publisher
   - keepers
   - indexer
+  - frontend

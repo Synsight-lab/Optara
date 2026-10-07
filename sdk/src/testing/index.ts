@@ -10,10 +10,11 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type {} from "vitest";
-import { createTestClient, createWalletClient, http, publicActions, walletActions, type Hex, type LocalAccount } from "viem";
+import { createTestClient, createWalletClient, http, publicActions, toHex, walletActions, type Hex, type LocalAccount } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { anvil as anvilChain } from "../chain.ts";
-import { loadManifest, DEPLOYMENTS_DIR, type Manifest } from "../manifest.ts";
+import type { Manifest } from "../manifest.ts";
+import { loadManifest, DEPLOYMENTS_DIR } from "../node.ts";
 
 export const ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
 export const CONTRACT_DIR = fileURLToPath(new URL("../../../contract", import.meta.url));
@@ -21,6 +22,8 @@ const STATE_DIR = join(CONTRACT_DIR, "cache", "services-e2e");
 
 /** Local stack accounts (LocalStack.s.sol): 0 deployer + treasury, 1 governance + admins, 2/3 publishers, 4 keeper, 5–9 users. */
 export const stackAccount = (index: number): LocalAccount => mnemonicToAccount(ANVIL_MNEMONIC, { addressIndex: index });
+/** The stack account's private key (for services started against the local stack). */
+export const stackPrivateKey = (index: number): Hex => toHex(mnemonicToAccount(ANVIL_MNEMONIC, { addressIndex: index }).getHdKey().privateKey!);
 export const ACCOUNTS = {
   deployer: 0,
   governance: 1,

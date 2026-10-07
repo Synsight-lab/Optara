@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 import { getAddress, isAddress, type Address, type Hex } from "viem";
 
 /** Module names as written by contract/script/Manifest.sol (DEPLOYMENT.md §3.2). */
@@ -41,15 +38,6 @@ export interface Manifest {
   proxies: Record<ModuleName, ProxyEntry>;
   /** Network-specific values (local: mocks, ids, series, books, accounts). */
   extra: Record<string, unknown>;
-}
-
-/** The repository's deployments/ directory. */
-export const DEPLOYMENTS_DIR = fileURLToPath(new URL("../../deployments", import.meta.url));
-
-/** Reads `deployments/<network>.json`, or a manifest file when given a path ending in `.json`. */
-export function loadManifest(networkOrPath: string): Manifest {
-  const path = networkOrPath.endsWith(".json") ? networkOrPath : join(DEPLOYMENTS_DIR, `${networkOrPath}.json`);
-  return parseManifest(JSON.parse(readFileSync(path, "utf8")));
 }
 
 function addr(v: unknown, what: string): Address {
