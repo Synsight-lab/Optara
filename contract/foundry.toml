@@ -51,6 +51,7 @@ depth = 300
 
 [profile.fork]
 match_path = "test/fork/**"
+no_match_path = "test/__nothing__/**" # override the default exclusion of fork tests
 
 [fmt]
 line_length = 120

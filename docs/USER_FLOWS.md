@@ -19,7 +19,7 @@ Can fail: asset not approved; fee-on-transfer token (`NonExactTransfer`).
    It shows: seller fee 3.20 USDC, IM after ≈ 3,418, equity after ≈ 3,890, OK.
 2. `mintExternalLong(accountId, C4500, 1e18, writerWallet, maxSellerFee = 3.5e6, update)`.
 3. Result: balance −1, cash −3.20, 1 wrapper in the wallet. The account stays healthy.
-4. `sellThroughVenue(KURU, C4500, 1e18, minProceeds, maxVenueFee, writerWallet, deadline, data)`, or post asks on
+4. `sellThroughVenue({KURU, C4500, qty: 1e18, minProceeds, maxVenueFee, writerWallet, deadline}, data)`, or post asks on
    Kuru directly.
 5. The premium (e.g. 104 USDC net of Kuru fees) lands in the **wallet**, not in Optara.
 
@@ -61,10 +61,12 @@ Can fail: `NotHealthy` (the amount exceeds free margin); stale data while positi
 ## Buyer flows
 
 ### F9. Buy on Kuru through the official router
-1. `quoteBuy` shows premium, Optara buyer fee (3%) and Kuru fee **separately**.
-2. Approve USDC to `VenueRouter`; `buyThroughVenue(KURU, C4500, 1e18, maxPremium, maxBuyerFee, maxVenueFee,
-   wallet, deadline, data)`.
-3. Wrapper in the wallet; unused USDC refunded.
+1. The frontend estimates the fill from Kuru's book and shows the premium, Optara's buyer fee (3%) and Kuru's fee
+   (`quoteBuy`) **separately**.
+2. Approve USDC to `VenueRouter`; `buyThroughVenue({KURU, C4500, premiumIn: 110e6, minQty: 0.99e18, maxBuyerFee,
+   maxVenueFee, wallet, deadline}, data)`. Buys are exact-in: the buyer names the budget and the fewest wrappers to
+   accept (DD-33).
+3. Wrappers in the wallet; unspent USDC refunded exactly; the buyer fee is charged on what was spent.
 
 Disclosures before buying: payoff at expiry, recovery-ratio risk, oracle-liveness risk, upgradeable contracts.
 

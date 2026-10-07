@@ -213,16 +213,17 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 
 | ID | Case |
 |---|---|
-| VEN-001 | `registerMarket` accepts the matching base/quote; rejects a wrong base, wrong quote or wrong chain (INV-51, `MarketRegistered`) |
-| VEN-002 | Router buy end-to-end with the mock venue: fees separate, limits enforced, refund exact (INV-50, `VenueTrade`) |
-| VEN-003 | Router sell: `minProceeds` enforced; no Optara fee |
+| VEN-001 | `registerMarket` reads tokens from the venue's own records and accepts the matching base/quote; rejects a wrong base, wrong quote, a contract the venue doesn't know, a duplicate or an expired series (`InvalidMarket` 1–4, INV-51, `MarketRegistered`); stores `chainId` |
+| VEN-002 | Router buy end-to-end (exact-in, DD-33): fees separate, buyer fee on the premium spent, `minQty` and fee bounds enforced, partial fills refunded exactly (INV-50, `VenueTrade`) |
+| VEN-003 | Router sell: `minProceeds` and the venue-fee bound enforced; unsold wrappers returned; no Optara fee |
 | VEN-004 | Deadline passed reverts (`DeadlineExpired`) |
-| VEN-005 | The router and adapter end every call with zero balance (INV-50) |
+| VEN-005 | The router and adapter end every call with their starting balances (INV-50): an adapter that keeps tokens reverts (`VenueBalanceLeft`); donations to either can't block trading; fee-on-transfer assets are refused (`NonExactTransfer`) |
 | VEN-006 | Disabling Kuru: mint, transfer, unwrap, close, liquidate, settle, redeem all still work (LIV-3, INV-52) |
 | VEN-007 | A Kuru balance never appears as margin (INV-20, INV-52) |
-| VEN-008 | Fork test: real Kuru market create, buy, sell (nightly) |
-| VEN-009 | Unregistered or inactive market reverts (`MarketNotVerified`); `setMarketStatus` expired hides it (`MarketStatusSet`) |
-| VEN-010 | `registerAdapter` timelocked; `setAdapterEnabled(false)` instant for the guardian (`AdapterRegistered`, `AdapterEnabled`) |
+| VEN-008 | Fork test against real Kuru on Monad mainnet (nightly): market created through Kuru's router (owner-gated), registered via Kuru's records, buy and sell through the router with exact unit conversions (pricePrecision ≠ quote decimals, sizePrecision ≠ wrapper decimals), Kuru's fees, partial-fill refunds (≤ one price unit of Kuru rounding) and no leftover balances |
+| VEN-009 | Unregistered or inactive market reverts (`MarketNotVerified`); a market reads EXPIRED from the series expiry and stops trading; `setMarketStatus` accepts only ACTIVE/INACTIVE on known markets (`InvalidMarket(5)`, `MarketStatusSet`) |
+| VEN-010 | `registerAdapter` timelocked, venue id must match, once per venue, registered disabled (`InvalidAdapter` 1–2); `setAdapterEnabled(false)` instant for the guardian or venue admin, enabling governance-only; a disabled adapter blocks trading (`AdapterDisabled`) (`AdapterRegistered`, `AdapterEnabled`) |
+| VEN-011 | `KuruAdapter`: only the router may trade; markets Kuru doesn't know revert (`MarketNotVerified`); budgets and sizes below one Kuru unit trade nothing and come back whole; fee previews (`quoteBuy`, `quoteSell`) match execution |
 
 ## UPG / ACL / PAU — Upgrades, access, pauses
 
@@ -418,7 +419,9 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | registerMarket / setMarketStatus | VEN-001, VEN-009 |
 | buyThroughVenue | VEN-002, VEN-004, FEE-004 |
 | sellThroughVenue | VEN-003, FEE-005 |
-| registerAdapter / setAdapterEnabled | VEN-010 |
+| registerAdapter / setAdapterEnabled / adapterOf | VEN-010 |
+| getMarket / tradableMarket | VEN-001, VEN-009 |
+| quoteBuy / quoteSell / marketTokens / venueId | VEN-011 |
 | pause / unpause | PAU-001, PAU-002 |
 | pausedBits / isPaused / requireNotPaused | PAU-001, PAU-003 |
 | grantRole / revokeRole | ACL-006 |
@@ -476,7 +479,11 @@ the spec lacks a test below, if an appendix cites a test ID that doesn't exist, 
 | InsufficientTreasury | FEE-007 |
 | TokensNotReceived | FEE-011, FEE-012 |
 | DeadlineExpired | VEN-004 |
-| SlippageExceeded | LIQ-009 |
+| SlippageExceeded | LIQ-009, VEN-002, VEN-003 |
+| InvalidMarket | VEN-001, VEN-009 |
+| InvalidAdapter | VEN-010 |
+| AdapterDisabled | VEN-010 |
+| VenueBalanceLeft | VEN-005 |
 | EmptyBucket | LIQ-001 |
 | InvalidLiquidationParams | LIQ-018 |
 | LengthMismatch | PRV-004 |

@@ -439,8 +439,20 @@ Views: `getConfig`, `configExists`, `isConfigApproved`, `isConfigUsable(configId
 
 ## 10. Venues
 
-See [VENUES_AND_KURU.md](VENUES_AND_KURU.md) §3–§5: `registerMarket`, `setMarketStatus`, `buyThroughVenue`,
-`sellThroughVenue`, `registerAdapter`, `setAdapterEnabled`.
+Full rules: [VENUES_AND_KURU.md](VENUES_AND_KURU.md) §3–§6.
+
+| Function | Caller | Checks | Event |
+|---|---|---|---|
+| `VenueRegistry.registerAdapter(venueId, adapter)` | Governance (timelocked) | `adapter.venueId() == venueId`, new (`InvalidAdapter` 1–2); registered disabled | `AdapterRegistered`, `AdapterEnabled` |
+| `VenueRegistry.setAdapterEnabled(venueId, enabled)` | Enable: governance. Disable: guardian, venue admin, governance | Adapter exists | `AdapterEnabled` |
+| `VenueRegistry.registerMarket(venueId, market, seriesId, metadata)` | Venue admin | Venue's own record: base = wrapper, quote = settlement asset; new; series unexpired (`InvalidMarket` 1–4) | `MarketRegistered` |
+| `VenueRegistry.setMarketStatus(venueId, seriesId, status)` | Venue admin | Known market; ACTIVE or INACTIVE (`InvalidMarket(5)`) | `MarketStatusSet` |
+| `VenueRouter.buyThroughVenue(BuyOrder, adapterData)` | Anyone | Exact-in budget, `minQty`, buyer-fee and venue-fee bounds, deadline, active market (DD-33) | `VenueTrade`, `BuyerFeeCharged` |
+| `VenueRouter.sellThroughVenue(SellOrder, adapterData)` | Anyone | `minProceeds`, venue-fee bound, deadline, active market; no Optara fee | `VenueTrade` |
+
+Views: `getMarket`, `tradableMarket`, `adapterOf` (registry); `modules()` (router); `quoteBuy`, `quoteSell`,
+`marketTokens`, `venueId` (adapters). The router and the adapter keep no balance across a call (`VenueBalanceLeft`,
+INV-50).
 
 ## 11. Governance: roles, pauses, close-only, upgrades
 
@@ -563,6 +575,10 @@ error TokensNotReceived(uint256 expected, uint256 available);
 error DeadlineExpired();
 error SlippageExceeded();
 error MarketNotVerified();
+error InvalidMarket(uint8 reason);
+error InvalidAdapter(uint8 reason);
+error AdapterDisabled(bytes32 venueId);
+error VenueBalanceLeft(address token);
 // ---- Liquidation ----
 error NotLiquidatable(int256 equity, uint256 threshold);
 error EmptyBucket(uint256 accountId, address underlying);

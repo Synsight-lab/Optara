@@ -62,6 +62,10 @@ error TokensNotReceived(uint256 expected, uint256 available);
 error DeadlineExpired();
 error SlippageExceeded();
 error MarketNotVerified();
+error InvalidMarket(uint8 reason);
+error InvalidAdapter(uint8 reason);
+error AdapterDisabled(bytes32 venueId);
+error VenueBalanceLeft(address token);
 
 // ---- Liquidation ----
 error NotLiquidatable(int256 equity, uint256 threshold);

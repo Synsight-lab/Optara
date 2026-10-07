@@ -97,7 +97,7 @@ The **Verified** column says how each invariant is checked today:
 
 | ID | Invariant | Verified |
 |---|---|---|
-| **INV-50** | After every router or adapter call, router and adapter hold zero tokens; the buyer pays at most `maxPremium + maxBuyerFeeNative + maxVenueFeeNative` and receives an exact refund of the rest. | sol |
+| **INV-50** | After every router or adapter call, router and adapter hold exactly what they held before it (anything donated to them stays, nothing of the call remains); the buyer pays exactly the premium spent (≤ `premiumIn`, the venue's fee is inside it) plus `ceil(spent × buyerTradeFeeBps)` (≤ `maxBuyerFeeNative`) and receives an exact refund of the rest. | sol |
 | **INV-51** | A market is registered only if its base is the series wrapper and its quote the series settlement asset, on the same chain. | sol |
 | **INV-52** | A venue fill never changes Optara balances; only Optara entry points do. Venue balances never count as margin. | sol (by construction) |
 

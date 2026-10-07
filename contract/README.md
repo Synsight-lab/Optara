@@ -23,6 +23,9 @@ src/
   series/ExternalOptionWrapper.sol  ERC-20 + permit long token; fixed minter and burners
   series/SeriesNaming.sol           display names and symbols
   liquidation/LiquidationModule.sol  Dutch slice auctions, wrapper-burn liquidation, bad-debt top-up (PROTOCOL_SPEC §6)
+  venues/VenueRegistry.sol        venue adapters and verified markets (VENUES_AND_KURU §3)
+  venues/VenueRouter.sol          official exact-in buys and sells with fee and slippage limits (§5)
+  venues/kuru/KuruAdapter.sol     Kuru non-margin market orders; IKuru.sol is the verified Kuru interface (§6)
   oracle/LiveSpotOracle.sol       Pyth spot prices per product (ORACLES §2)
   oracle/VolSurfaceOracle.sol     signed IV surfaces, Merkle leaves, status (ORACLES §3)
   oracle/OracleUpdates.sol        the OracleUpdate argument and how modules apply it (ORACLES §4)
@@ -37,7 +40,7 @@ test/
   differential/  Solidity vs the Python reference model (vectors + FFI)
   gas/           gas benchmarks with regression ceilings
   harness/       external wrappers around internal libraries (so tests can catch reverts)
-  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk, clearing, liquidation and settlement stacks)
+  mocks/, utils/ mock modules (V1/V2 upgrades) and fixtures (governance, risk, clearing, liquidation, settlement and venue stacks; mock Kuru)
 script/
   coverage_gate.py   TESTING.md §7 thresholds on an lcov report
   storage_check.py   upgradeable modules use ERC-7201 storage only; slot constants correct
@@ -51,6 +54,7 @@ forge build
 forge test                                  # default profile (fuzz 1,000 runs; FFI tests 200)
 FOUNDRY_PROFILE=ci forge test               # CI depth (fuzz 10,000 runs; FFI tests 2,000)
 forge test --match-path 'test/gas/*' -vv    # print gas benchmarks
+FOUNDRY_PROFILE=fork forge test             # fork tests vs live Monad mainnet (FORK_RPC_URL, default rpc.monad.xyz)
 ```
 
 Differential tests run `python3 ../reference/ffi.py` (standard library only) and read `../reference/vectors/`.

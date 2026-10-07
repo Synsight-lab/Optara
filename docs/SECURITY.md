@@ -37,7 +37,7 @@ Kuru is **not** trusted for anything in clearing.
 | T10 | **Settlement-counter griefing** (many dust accounts delay redemption) | `minPositionQty`; escalating keeper reward; batch `settleAccountGroup` calls; anyone can settle |
 | T11 | **First-come-first-served drain at expiry** | Redemption closed until all participants settle and one ratio is fixed |
 | T12 | **False shortfall from double-counted longs** | Netted claims only ([MATH.md](MATH.md) §13.1) |
-| T13 | **Router sandwich or MEV** | `maxPremium`, `minProceeds`, venue fee and deadline limits |
+| T13 | **Router sandwich or MEV** | Exact-in budget with `minQty`, `minProceeds`, buyer- and venue-fee bounds, deadline; the router measures fills by balance |
 | T14 | **Fake market registered as official** | `registerMarket` reads tokens from the venue contract; base/quote must match |
 | T15 | **Reentrancy through tokens or adapters** | `nonReentrant` everywhere; checks-effects-interactions; adapters end with zero balance |
 | T16 | **Non-standard settlement token** (fee-on-transfer, rebasing) | Balance-difference check on deposit; only approved standard tokens |

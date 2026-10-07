@@ -88,7 +88,7 @@ shocked spots. Label it an estimate.
 ## 7. Fee display
 
 Always three separate lines: **Optara fee**, **Kuru fee**, **Premium**. Each limit the user signs
-(`maxSellerFee`, `maxBuyerFee`, `maxVenueFee`, `maxPremium`) is shown with a default slippage of 1% and is editable.
+(`maxSellerFee`, `maxBuyerFee`, `maxVenueFee`, the premium budget and `minQty`) is shown with a default slippage of 1% and is editable.
 
 ## 8. Settlement page
 

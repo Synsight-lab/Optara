@@ -89,7 +89,7 @@ A pull request that adds or changes contract code without its tests MUST NOT be 
 | Stateful invariants | Foundry invariant tests (handlers) | All of [INVARIANTS.md](INVARIANTS.md) |
 | Differential | Foundry FFI or JSON vectors vs Python reference | Prices, IV, equity, IM, MM, slices, settlement, ratios |
 | Integration | Foundry, local chain | End-to-end flows F1–F19 with mock oracles, publishers and a mock venue |
-| Fork | Foundry fork of Monad testnet | Real Kuru markets, real Pyth/Chainlink feeds (non-blocking in CI) |
+| Fork | Foundry fork of Monad mainnet (`FOUNDRY_PROFILE=fork`, `FORK_RPC_URL`) | Real Kuru router, order books and margin account (VEN-008); runs nightly and on demand in CI, never blocking pushes |
 | Upgrade | OpenZeppelin upgrades plugin + custom tests | Storage layout, protected storage, timelock |
 | Gas | `forge snapshot` + dedicated benchmarks | Risk check at max positions, liquidation, settlement batch |
 | Static analysis | Slither | Zero unresolved findings |

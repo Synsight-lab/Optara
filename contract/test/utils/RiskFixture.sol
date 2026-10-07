@@ -44,6 +44,10 @@ import {
     MockSettlementOracle
 } from "../mocks/MockDependencies.sol";
 import {SettlementWindow} from "../../src/settlement/SettlementWindow.sol";
+import {VenueRegistry} from "../../src/venues/VenueRegistry.sol";
+import {VenueRouter} from "../../src/venues/VenueRouter.sol";
+import {IVenueRegistry} from "../../src/interfaces/IVenueRegistry.sol";
+import {IFeeController} from "../../src/interfaces/IFeeController.sol";
 import {ISettlementWindow} from "../../src/interfaces/ISettlementWindow.sol";
 import {MockPyth} from "../mocks/MockPyth.sol";
 
@@ -64,6 +68,8 @@ abstract contract RiskFixture is GovernanceFixture {
     LiquidationModule internal liquidation; // set only when `_deployRealLiquidation()` is true
     SettlementWindow internal window; // set only when `_deployRealSettlement()` is true
     address internal settlementOracle; // the window's oracle: a MockSettlementOracle unless overridden
+    VenueRegistry internal venues; // set only when `_deployRealVenues()` is true
+    VenueRouter internal venueRouter; // ditto; lives at the `router` address
     address internal router = makeAddr("VenueRouter");
     MockPyth internal pyth;
     MockSettlementConfigs internal settlementConfigs;
@@ -121,6 +127,7 @@ abstract contract RiskFixture is GovernanceFixture {
         if (_deployRealClearing()) clearing = _nextProxy(8);
         if (_deployRealLiquidation()) liquidationModule = _nextProxy(9);
         if (_deployRealSettlement()) settlementWindow = _nextProxy(10);
+        if (_deployRealVenues()) router = _nextProxy(12); // the registry is proxy 11
         address settlementStateAddr = _deployRealSettlement() ? settlementWindow : address(settlementState);
         IProtocolControl c = IProtocolControl(address(pc));
         registry = OptionSeriesRegistry(
@@ -221,6 +228,36 @@ abstract contract RiskFixture is GovernanceFixture {
         if (_deployRealClearing()) _deployClearing(c);
         if (_deployRealLiquidation()) _deployLiquidation(c);
         if (_deployRealSettlement()) _deploySettlement(c);
+        if (_deployRealVenues()) _deployVenues(c);
+    }
+
+    function _deployVenues(IProtocolControl c) private {
+        venues = VenueRegistry(
+            upgradeAdmin.deployProxy(
+                address(new VenueRegistry()),
+                abi.encodeCall(VenueRegistry.initialize, (c, IOptionSeriesRegistry(address(registry))))
+            )
+        );
+        venueRouter = VenueRouter(
+            upgradeAdmin.deployProxy(
+                address(new VenueRouter()),
+                abi.encodeCall(
+                    VenueRouter.initialize,
+                    (
+                        c,
+                        IOptionSeriesRegistry(address(registry)),
+                        IVenueRegistry(address(venues)),
+                        IFeeController(address(fees))
+                    )
+                )
+            )
+        );
+        assertEq(address(venueRouter), router, "address prediction");
+    }
+
+    /// @dev Override (with the real settlement stack) to deploy the real VenueRegistry and VenueRouter.
+    function _deployRealVenues() internal pure virtual returns (bool) {
+        return false;
     }
 
     function _deploySettlement(IProtocolControl c) private {

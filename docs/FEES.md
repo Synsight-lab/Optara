@@ -52,15 +52,16 @@ any user's collateral after debit.
 ## 4. Buyer fee
 
 ```text
-buyThroughVenue(adapterId, seriesId, qty, maxPremium, maxBuyerFeeNative, maxVenueFeeNative, recipient, deadline, adapterData)
+buyThroughVenue(BuyOrder{venueId, seriesId, premiumIn, minQty, maxBuyerFeeNative, maxVenueFeeNative, recipient, deadline}, adapterData)
 
-buyerFee = ceil(executedPremium × buyerTradeFeeBps / 10_000)
+buyerFee = ceil(premiumSpent × buyerTradeFeeBps / 10_000)
 ```
 
-1. The router pulls `maxPremium + maxBuyerFeeNative + maxVenueFeeNative` from the buyer.
-2. The adapter executes the trade.
-3. The router computes the fee from the **actual** premium paid and requires `fee ≤ maxBuyerFeeNative`.
-4. The fee is collected, the wrappers go to the recipient, and unused funds are refunded.
+1. The router checks `buyerFee(premiumIn) ≤ maxBuyerFeeNative` on the whole budget, then pulls `premiumIn`.
+2. The adapter executes the trade (exact-in: it spends at most `premiumIn`; DD-33).
+3. The router measures the wrappers received (`≥ minQty`) and the premium actually spent.
+4. The fee is computed on the premium **actually spent**, pulled and split; the wrappers go to the recipient; the
+   unspent premium is refunded exactly.
 5. The whole call reverts if any limit is exceeded or `now > deadline`.
 
 **Limitation:** Optara can't charge a buyer fee on direct Kuru trades or plain ERC-20 transfers without making the

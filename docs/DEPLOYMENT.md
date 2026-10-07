@@ -18,7 +18,9 @@
    `LiveSpotOracle`, `VolSurfaceOracle`, `SettlementOracle`, `PortfolioRiskManager`, `FeeController`,
    `InsuranceFund`, `OptionClearing`, `LiquidationModule`, `SettlementWindow`, `VenueRegistry`, `VenueRouter`.
 3. Wire internal permissions (ledger writers, wrapper minter/burner, insurance cover callers, fee collectors).
-4. `KuruAdapter`; register it in the router (disabled).
+4. `KuruAdapter` (constructor: the `VenueRouter` and Kuru's Router); register it in the `VenueRegistry` (disabled).
+   Kuru's `deployProxy` is owner-gated, so each series' Kuru market (base = wrapper, quote = settlement asset) must be
+   created by Kuru; the venue admin then registers it. Agree this with Kuru before launch.
 5. Grant roles; renounce the deployer's roles. Verify the deployer holds nothing.
 6. Verify all contracts on the explorer; publish code hashes.
 

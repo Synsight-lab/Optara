@@ -125,11 +125,11 @@ writer -> OptionClearing.mintExternalLong(accountId, seriesId, qty, recipient, m
 
 ### Buy through the router (buyer)
 ```text
-buyer -> VenueRouter.buyThroughVenue(adapterId, seriesId, qty, maxPremium, maxBuyerFee, maxVenueFee, recipient, deadline, data)
-   1. pull premium + buyer fee + venue fee budget from buyer
-   2. KuruAdapter executes the trade on Kuru
-   3. transfer buyer fee to FeeController; FeeController.notifyBuyerFee
-   4. wrappers -> recipient; unused stablecoin refunded
+buyer -> VenueRouter.buyThroughVenue({venueId, seriesId, premiumIn, minQty, maxBuyerFee, maxVenueFee, recipient, deadline}, data)
+   1. pull the premium budget (exact-in, DD-33) and hand it to the adapter
+   2. KuruAdapter executes a market order on Kuru; the router measures wrappers received and premium spent
+   3. buyer fee on the premium spent -> FeeController; FeeController.notifyBuyerFee
+   4. wrappers -> recipient; unspent premium refunded exactly
 ```
 
 ### Liquidation
