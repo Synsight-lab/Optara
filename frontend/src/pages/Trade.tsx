@@ -1,6 +1,6 @@
-/** `/trade` and `/trade/:id`: Frictionless, Swap-like Options Trading Interface (NectarFi-style simplicity). */
+/** `/trade`: pick direction, target, amount — buy in three taps. */
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import type { Hex } from "viem";
@@ -18,11 +18,12 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
-import { AmountInput, Card, EmptyState, Pill, Row, Skeleton, Term, cx } from "../components/ui.tsx";
+import { AmountInput, Card, Details, EmptyState, Row, Skeleton, Term, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { buySteps } from "../lib/optara/actions.ts";
 import { availability, type ActionContext } from "../lib/optara/availability.ts";
+import { recordTrade } from "../lib/optara/activity.ts";
 import { disclosuresFor } from "../lib/optara/disclosures.ts";
 import {
   fmtDuration,
@@ -55,7 +56,6 @@ const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** Bi
 
 export function TradePage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { address } = useConnection();
   const { open: openGuide } = useQuickGuide();
 
@@ -136,7 +136,7 @@ export function TradePage() {
 
   if (loadingList) {
     return (
-      <div className="mx-auto max-w-xl space-y-4 py-6">
+      <div className="w-full space-y-4 py-6">
         <Skeleton className="h-64 w-full rounded-3xl" />
         <Skeleton className="h-48 w-full rounded-3xl" />
       </div>
@@ -145,7 +145,7 @@ export function TradePage() {
 
   if (!product || !selectedSeries) {
     return (
-      <div className="mx-auto max-w-xl py-12">
+      <div className="w-full py-12">
         <Card>
           <EmptyState
             title="No active markets available"
@@ -162,37 +162,31 @@ export function TradePage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 py-2 sm:py-6">
-      {/* Top Breadcrumb & Education Link */}
-      <div className="flex items-center justify-between text-xs">
-        <Link to="/" className="text-muted hover:text-primary transition font-semibold">
-          ← Back to Markets
+    <div className="w-full space-y-4 py-1 sm:py-4">
+      <div className="flex items-center justify-between px-1 text-[13px]">
+        <Link to="/" className="font-semibold text-muted hover:text-ink transition">
+          ← Markets
         </Link>
-        <button onClick={openGuide} className="text-primary hover:underline flex items-center gap-1 font-semibold">
-          <HelpCircle className="h-3.5 w-3.5" /> How does this work?
+        <button onClick={openGuide} className="font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+          <HelpCircle className="h-3.5 w-3.5" /> How it works
         </button>
       </div>
 
-      {/* Main Swap-Like Card */}
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-surface/90 p-5 sm:p-7 backdrop-blur-2xl shadow-2xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <div className="ticket space-y-5 p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-ink flex items-center gap-2">
-              Instant Option Trade
+            <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">
+              Trade {product.underlyingSymbol}
             </h1>
-            <p className="text-xs text-muted mt-0.5">Pick your market prediction in 3 simple steps</p>
+            <p className="mt-0.5 text-[13px] text-muted">Three taps: direction, target, amount</p>
           </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-good/15 px-3 py-1 text-xs font-bold text-good">
-            <ShieldCheck className="h-4 w-4" /> 100% Capped Risk
-          </div>
+          <span className="pill border border-good/25 bg-good/10 text-good">Capped risk</span>
         </div>
 
-        {/* STEP 1: Direction Selection */}
         <div>
-          <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">
-            1. What's your prediction for {product.underlyingSymbol}?
-          </label>
+          <div className="label mb-2">
+            1 · Where is {product.underlyingSymbol} headed?
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -201,19 +195,19 @@ export function TradePage() {
                 setSelectedSeriesId(undefined);
               }}
               className={cx(
-                "flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.98]",
+                "flex items-center gap-2.5 rounded-2xl border p-3 text-left transition active:scale-[0.98] cursor-pointer",
                 direction === "call"
-                  ? "border-good bg-good/15 shadow-md ring-1 ring-good/40 text-good"
-                  : "border-line bg-surface-2/60 text-muted hover:border-good/40 hover:text-ink"
+                  ? "border-good/60 bg-good/8"
+                  : "border-line bg-surface-2/60 hover:border-good/30"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-good/20 text-good">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="block font-black text-sm text-ink">Price Goes UP</span>
-                <span className="block text-[11px] font-semibold text-good">Buy CALL Option</span>
-              </div>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-good/15 text-good">
+                <TrendingUp className="h-4.5 w-4.5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold">Up</span>
+                <span className="block text-xs font-semibold text-good">Call option</span>
+              </span>
             </button>
 
             <button
@@ -223,38 +217,36 @@ export function TradePage() {
                 setSelectedSeriesId(undefined);
               }}
               className={cx(
-                "flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.98]",
+                "flex items-center gap-2.5 rounded-2xl border p-3 text-left transition active:scale-[0.98] cursor-pointer",
                 direction === "put"
-                  ? "border-bad bg-bad/15 shadow-md ring-1 ring-bad/40 text-bad"
-                  : "border-line bg-surface-2/60 text-muted hover:border-bad/40 hover:text-ink"
+                  ? "border-bad/60 bg-bad/8"
+                  : "border-line bg-surface-2/60 hover:border-bad/30"
               )}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-bad/20 text-bad">
-                <TrendingDown className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="block font-black text-sm text-ink">Price Drops</span>
-                <span className="block text-[11px] font-semibold text-bad">Buy PUT Option</span>
-              </div>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-bad/15 text-bad">
+                <TrendingDown className="h-4.5 w-4.5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold">Down</span>
+                <span className="block text-xs font-semibold text-bad">Put option</span>
+              </span>
             </button>
           </div>
         </div>
 
-        {/* STEP 2: Target Price & Expiry */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">
-              2. Target Price & Expiry Date
-            </label>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="label">
+              2 · Target and expiry
+            </span>
             {productMarket && (
-              <span className="text-xs text-muted font-medium">
-                Spot now: <b className="num text-ink font-bold">${fmtWad(productMarket.spotWad, 0)}</b>
+              <span className="text-[13px] text-muted">
+                Spot <b className="num font-display text-ink">${fmtWad(productMarket.spotWad, 0)}</b>
               </span>
             )}
           </div>
 
-          {/* Expiry Selector Pills */}
-          <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-none">
+          <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {expiries.map((exp) => (
               <button
                 key={exp.toString()}
@@ -264,13 +256,13 @@ export function TradePage() {
                   setSelectedSeriesId(undefined);
                 }}
                 className={cx(
-                  "whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-semibold border transition",
+                  "whitespace-nowrap rounded-xl border px-2.5 py-1.5 text-[13px] font-semibold transition cursor-pointer",
                   exp === chosenExpiry
-                    ? "border-primary bg-primary-soft text-primary font-bold shadow-sm"
+                    ? "border-primary/60 bg-primary-soft text-primary"
                     : "border-line bg-surface-2 text-muted hover:text-ink"
                 )}
               >
-                {fmtExpiryShort(exp)} {now !== undefined ? `(${fmtDuration(exp - now)})` : ""}
+                {fmtExpiryShort(exp)} {now !== undefined ? `· ${fmtDuration(exp - now)}` : ""}
               </button>
             ))}
           </div>
@@ -312,11 +304,10 @@ export function TradePage() {
           </div>
         </div>
 
-        {/* STEP 3: Amount & Execution */}
         <div>
-          <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">
-            3. How much do you want to invest?
-          </label>
+          <div className="label mb-2">
+            3 · How much to invest?
+          </div>
           <TradeForm
             series={selectedSeries}
             amount={spendAmount}
@@ -331,7 +322,7 @@ export function TradePage() {
             to={`/series/${selectedSeries.id}`}
             className="text-xs text-primary font-semibold hover:underline inline-flex items-center gap-1"
           >
-            Switch to Advanced View (Charts & Greeks) <ArrowRight className="h-3 w-3" />
+            See payoff chart and details <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </div>
@@ -413,49 +404,59 @@ function TradeForm({
   const estTotalPayout = estQty ? (Number(estQty) / 1e18) * estPayoutPerOption : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       <AmountInput
-        label="Investment Amount"
+        label="You pay"
         value={amount}
         onChange={onAmountChange}
         unit={series.assetSymbol}
-        presets={["25", "50", "100", "250", "500"]}
+        presets={["25", "50", "100", "250"]}
         max={balance !== undefined ? fmtNative(balance, series.assetDecimals, 2).replace(/,/g, "") : undefined}
         maxLabel="Wallet"
-        invalid={tooMuch ? `Wallet has ${fmtNative(balance!, series.assetDecimals)} ${series.assetSymbol}.` : undefined}
+        invalid={tooMuch ? `Wallet holds ${fmtNative(balance!, series.assetDecimals)} ${series.assetSymbol}.` : undefined}
       />
 
-      {/* Outcome projection card */}
-      <div className="rounded-2xl border border-line bg-surface-2/80 p-4 space-y-2.5 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-muted">Options you receive:</span>
-          <span className="num font-black text-sm text-ink">
-            {estQty !== undefined ? `${fmtQty(estQty)} options` : "—"}
+      <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[13px] text-muted">You receive about</span>
+          <span className="num font-display text-2xl font-bold tracking-tight">
+            {estQty !== undefined ? fmtQty(estQty) : "—"}
           </span>
         </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-muted">Maximum risk:</span>
-          <span className="num font-bold text-ink">
-            ${amount || "0"} {series.assetSymbol} (100% Capped)
-          </span>
+        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-muted">
+          <span>Max loss is what you pay</span>
+          {estTotalPayout > 0 && (
+            <span className="num font-semibold text-good">up to +${estTotalPayout.toFixed(0)} if ±15%</span>
+          )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-line/60 pt-2 font-bold text-good">
-          <span>Estimated payout (if target hit):</span>
-          <span className="num text-sm font-black">
-            +${estTotalPayout.toFixed(2)} {series.assetSymbol}
-          </span>
+        <div className="mt-2.5">
+          <Details summary={<span>Total <b className="num">{total !== undefined ? `${fmtNative(total, series.assetDecimals)} ${series.assetSymbol}` : "—"}</b></span>}>
+            <Row
+              label="Premium"
+              value={premiumIn !== undefined ? `${fmtNative(premiumIn, series.assetDecimals)} ${series.assetSymbol}` : "—"}
+            />
+            <Row
+              label={<Term tip="Charged by the order book.">Venue fee</Term>}
+              value={fees.data ? `≈ ${fmtNative(fees.data.kuru, series.assetDecimals)}` : "—"}
+            />
+            <Row
+              label={<Term tip="Funds insurance and keepers.">Optara fee</Term>}
+              value={fees.data ? `${fmtNative(fees.data.optara, series.assetDecimals)}` : "—"}
+            />
+          </Details>
         </div>
       </div>
 
       <TxButton
-        label={estQty ? `Place Trade for $${amount || "0"}` : "Place Trade"}
+        label={estQty ? `Buy ${fmtQty(estQty)}` : "Buy"}
         steps={steps}
         disabled={!a.enabled || !steps || tooMuch}
         disabledReason={a.reason}
         disclosures={disclosuresFor("buy", series.underlyingSymbol)}
-        successMessage="Trade complete! Your options are in your wallet."
+        successMessage="Bought. Tokens are in your wallet."
+
+        onDone={() => recordTrade(address, series.id, "buy")}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import {
   buildSettlementProof,
   liquidationModuleAbi,
   optionClearingAbi,
+  optionSeriesRegistryAbi,
   settlementWindowAbi,
   subAccountsAbi,
   venueRouterAbi,
@@ -211,3 +212,20 @@ export function setupAccountSteps(asset: Address, amount: bigint, symbol: string
     },
   ];
 }
+
+export interface SeriesParams {
+  underlying: Address;
+  settlementAsset: Address;
+  optionType: number;
+  strikeWad: bigint;
+  contractSizeWad: bigint;
+  expiry: bigint;
+  settlementOracleConfigId: Hex;
+  volSurfaceProductId: Hex;
+  riskParameterSetId: Hex;
+}
+
+/** List a new option market (SERIES_CREATOR role). Terms can never change afterwards. */
+export const createSeriesSteps = (params: SeriesParams): Step[] => [
+  callStep("list", "List the market", { address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "createSeries", args: [params] }, "Deploys the option token and opens the market."),
+];

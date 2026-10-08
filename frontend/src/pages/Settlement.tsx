@@ -55,13 +55,12 @@ export function SettlementPage() {
   const upcoming = groups.filter((g) => g.expiry > now).sort((a, b) => (a.expiry < b.expiry ? -1 : 1));
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-col justify-between gap-3 px-1 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Settlement & Payouts</h1>
-          <p className="text-xs sm:text-sm text-muted mt-0.5">
-            Transparent, provable cash settlements for expired option groups.
+          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">Settlement</h1>
+          <p className="mt-0.5 text-[13px] text-muted">
+            Expired groups fix one price, settle accounts, then open payouts.
           </p>
         </div>
 
@@ -78,33 +77,18 @@ export function SettlementPage() {
         )}
       </div>
 
-      {/* Explainer: How Settlement Works */}
-      <div className="rounded-3xl border border-line bg-surface/75 p-5 backdrop-blur-xl">
-        <div className="text-xs font-bold text-ink uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-primary" /> The 4-Stage Fair Settlement Window
-        </div>
-        <div className="grid gap-3 sm:grid-cols-4 text-xs">
+      <div className="card p-4 sm:p-5">
+        <div className="label mb-3">How payout opens</div>
+        <div className="grid gap-2 text-[13px]">
           {[
-            {
-              n: "1. Expiration",
-              desc: "Option trading ceases at 08:00 UTC on expiry day. No new positions can be opened.",
-            },
-            {
-              n: "2. Fix Price",
-              desc: "A tamper-proof settlement price is proven on-chain from the Pyth/Chainlink round in force.",
-            },
-            {
-              n: "3. Settle Accounts",
-              desc: "All subaccounts are settled automatically by keepers in batches before redemptions begin.",
-            },
-            {
-              n: "4. Cash Payouts Open",
-              desc: "The insurance fund covers shortfalls, and all long holders redeem their cash in USDC.",
-            },
-          ].map((step, idx) => (
-            <div key={idx} className="rounded-2xl border border-line/60 bg-surface-2/60 p-3.5">
-              <span className="font-bold text-ink block">{step.n}</span>
-              <span className="text-muted text-[11px] leading-relaxed mt-1 block">{step.desc}</span>
+            ["Expiry hits", "Trading stops at 08:00 UTC."],
+            ["Price is fixed", "One proven on-chain price."],
+            ["Accounts settle", "Keepers clear every account."],
+            ["You claim cash", "Redeem tokens for stablecoin."],
+          ].map(([t, d]) => (
+            <div key={t} className="rounded-xl border border-line bg-surface-2/60 p-3">
+              <span className="block font-semibold">{t}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted">{d}</span>
             </div>
           ))}
         </div>
@@ -171,7 +155,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
       {/* Progress Timeline */}
       <SettlementTimeline state={g.state} />
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
+      <div className="mt-4 flex flex-col gap-3">
         {/* Left Side: Accounting Data */}
         <div className="space-y-2 rounded-2xl bg-surface-2/60 p-4 border border-line">
           <Row
@@ -180,7 +164,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
             strong={a.finalized}
           />
           <Row
-            label={<Term tip="Remaining subaccounts that must be settled before redemptions unlock.">Accounts Left to Settle</Term>}
+            label={<Term tip="Remaining accounts that must settle before payouts open.">Accounts Left to Settle</Term>}
             value={
               <span className="flex items-center gap-1.5 font-bold">
                 <Users className="h-3.5 w-3.5 text-muted" />
@@ -215,7 +199,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
                   <Wallet className="h-4 w-4" /> Your Option Tokens in this Expiry
                 </span>
                 {g.state === "REDEEMABLE" && (
-                  <span className="pill bg-good text-white font-bold text-[10px]">Ready to Redeem</span>
+                  <span className="pill bg-good text-white font-bold text-[10px]">Ready</span>
                 )}
               </div>
               <div className="divide-y divide-good/20">
@@ -229,7 +213,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
                       ${fmtWad(w.series.strikeWad, 0)} {optionTypeName(w.series.optionType)} · <b className="text-ink">{fmtQty(w.balance)} tokens</b>
                     </span>
                     <span className="font-bold text-primary flex items-center gap-1">
-                      {g.state === "REDEEMABLE" ? "Claim Cash →" : "View Series →"}
+                      {g.state === "REDEEMABLE" ? "Claim →" : "View →"}
                     </span>
                   </Link>
                 ))}
@@ -241,11 +225,11 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
             <div className="space-y-2">
               {g.state === "ORACLE_STALLED" && (
                 <div className="rounded-xl bg-bad/10 border border-bad/30 p-3 text-xs text-bad">
-                  ⚠️ Price feed observation is delayed. Anyone can trigger finalization once a valid round arrives.
+                  Price feed is delayed. Anyone can publish once a valid round arrives.
                 </div>
               )}
               <TxButton
-                label="Fix Settlement Price On-Chain"
+                label="Publish settlement price"
                 steps={finalizeSteps(groupId, s0.settlementOracleConfigId, s0.expiry)}
                 disabled={!canFinalize}
                 disabledReason={
@@ -275,7 +259,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
 
           {g.state === "ALL_SETTLED" && (
             <TxButton
-              label="Calculate Recovery Ratio & Open Payouts"
+              label="Open payouts"
               steps={ratioSteps(groupId)}
               successMessage="Payouts are now open!"
             />
@@ -283,7 +267,7 @@ function GroupCard({ groupId, series, now }: { groupId: Hex; series: Series[]; n
 
           {g.state === "REDEEMABLE" && mine.length === 0 && (
             <div className="rounded-2xl border border-line bg-surface-2/40 p-4 text-xs text-muted">
-              ✅ Cash payouts are unlocked. Long holders can redeem their payout from their Series or Portfolio page.
+              Payouts are unlocked. Redeem from the series or portfolio page.
             </div>
           )}
         </div>

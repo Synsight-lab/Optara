@@ -138,19 +138,18 @@ export function PayoffChart({ optionType, strike, spot, premium, qty, side, asse
           </g>
         )}
       </svg>
-      <div className="mt-2 flex min-h-10 flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-2 px-3.5 py-2 text-sm">
+      <div className="mt-2.5 flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface-2/70 px-3.5 py-2.5 text-sm">
         {hoverS !== undefined && hoverV !== undefined ? (
           <>
-            <span className="text-muted">
-              If {underlyingSymbol} settles at <b className="num text-ink">{Math.round(hoverS).toLocaleString()}</b>
+            <span className="text-muted text-[13px]">
+              If {underlyingSymbol} settles at <b className="num font-display text-ink">{Math.round(hoverS).toLocaleString()}</b>
             </span>
-            <span className={`num font-semibold ${hoverV >= 0 ? "text-good" : "text-bad"}`}>
-              {hoverV >= 0 ? "you make " : "you lose "}
-              {money(Math.abs(hoverV))} {assetSymbol}
+            <span className={`num font-display text-[15px] font-bold ${hoverV >= 0 ? "text-good" : "text-bad"}`}>
+              {hoverV >= 0 ? "+" : "−"}{money(Math.abs(hoverV)).slice(1)} {assetSymbol}
             </span>
           </>
         ) : (
-          <span className="text-muted">Move across the chart to see your result at any settlement price.</span>
+          <span className="text-[13px] text-muted">Drag across the curve to preview any settlement price.</span>
         )}
       </div>
     </div>

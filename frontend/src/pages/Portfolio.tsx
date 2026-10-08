@@ -51,7 +51,7 @@ export function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="mx-auto max-w-xl py-12">
+      <div className="w-full py-12">
         <Card className="text-center p-8">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-primary-soft text-primary mb-4">
             <Wallet className="h-8 w-8" />
@@ -80,23 +80,22 @@ export function PortfolioPage() {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Portfolio Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 px-1">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Portfolio & Margin</h1>
-          <p className="text-xs sm:text-sm text-muted mt-0.5">
-            Monitor account health, manage collateral, and track open options.
+          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">Portfolio</h1>
+          <p className="mt-0.5 text-[13px] text-muted">
+            Margin health, collateral and open contracts in one place.
           </p>
         </div>
 
-        {/* Subaccount Switcher & Create Account */}
+        {/* Account switcher */}
         <div className="flex flex-wrap items-center gap-2">
           {accounts.length > 0 && (
             <Segmented
               value={(selected ?? accounts[0]!).toString()}
               onChange={(v) => select(BigInt(v))}
-              options={accounts.map((a) => ({ value: a.toString(), label: `Subaccount #${a}` }))}
+              options={accounts.map((a) => ({ value: a.toString(), label: `Account #${a}` }))}
             />
           )}
           {accounts.length > 0 && (
@@ -129,7 +128,7 @@ function NewAccountButton({ asset, onCreated }: { asset: Series; onCreated: (id:
   if (!open) {
     return (
       <button className="btn-ghost text-xs" onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5" /> New Subaccount
+        <Plus className="h-3.5 w-3.5" /> New account
       </button>
     );
   }
@@ -138,7 +137,7 @@ function NewAccountButton({ asset, onCreated }: { asset: Series; onCreated: (id:
       <TxButton
         label="Create Another Account"
         steps={[createAccountStep(asset.settlementAsset)]}
-        successMessage="New subaccount created!"
+        successMessage="New account created!"
         onDone={(r) => {
           const id = createdAccountId(r[0]!);
           setOpen(false);
@@ -164,29 +163,29 @@ function Onboarding({ asset }: { asset: Series }) {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card title="Open Your Margin Account">
+    <div className="flex flex-col gap-3">
+      <Card title="Open your margin account">
         <p className="mb-4 text-xs sm:text-sm text-muted leading-relaxed">
           <b className="text-ink">Buying options</b> requires zero account setup — tokens go straight to your wallet.
-          To <b className="text-ink">write options and earn yield</b>, you maintain {asset.assetSymbol} collateral in an Optara subaccount.
+          To <b className="text-ink">write options and earn yield</b>, you maintain {asset.assetSymbol} collateral in an Optara margin account.
         </p>
 
         <div className="space-y-4">
           <AmountInput
-            label="Initial Collateral Deposit"
+            label="First deposit"
             value={amount}
             onChange={setAmount}
             unit={asset.assetSymbol}
             presets={["500", "1000", "2500", "5000"]}
             max={balance !== undefined ? fmtNative(balance, asset.assetDecimals).replace(/,/g, "") : undefined}
-            maxLabel="Wallet Balance"
+            maxLabel="Wallet"
           />
 
           <TxButton
-            label="Create Subaccount & Deposit"
+            label="Create account & deposit"
             steps={steps}
             disabled={!deposit}
-            successMessage="Your subaccount is ready to trade!"
+            successMessage="Your margin account is ready."
             onDone={async () => {
               await refresh();
               if (created.current !== undefined) select(created.current);
@@ -195,20 +194,20 @@ function Onboarding({ asset }: { asset: Series }) {
         </div>
       </Card>
 
-      <Card title="Why Portfolio Margin?">
+      <Card title="Why margin?">
         <ul className="space-y-3.5 text-xs sm:text-sm">
           {[
             [
               "Capital Efficiency",
-              "Instead of locking 100% of the strike, your collateral requirement is calculated from realistic stress scenarios.",
+              "Collateral is sized from realistic market scenarios, not the full worst case.",
             ],
             [
               "Risk Offsetting",
-              "Longs and shorts on the same underlying offset each other across strikes and expiries, reducing margin.",
+              "Longs and shorts on the same asset offset each other, lowering what you must lock up.",
             ],
             [
               "Instant Cash Premiums",
-              "Premiums from writing options land straight in your wallet. Re-deposit them to boost margin.",
+              "Premiums land in your wallet. Re-deposit them to strengthen margin.",
             ],
           ].map(([t, b]) => (
             <li key={t} className="flex gap-3">
@@ -222,7 +221,7 @@ function Onboarding({ asset }: { asset: Series }) {
         </ul>
 
         <Link to="/" className="btn-ghost mt-6 w-full text-xs">
-          Browse Markets Without Writing →
+          Browse markets
         </Link>
       </Card>
     </div>
@@ -247,12 +246,12 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
   if (a.health.state === "LIQUIDATABLE" || a.health.state === "INSOLVENT") {
     todo.push({
       tone: "bad",
-      text: "🚨 Action Needed: Account is below Maintenance Margin. Deposit collateral now or close positions to prevent liquidation.",
+      text: "Account is below its liquidation threshold. Deposit collateral or close positions to avoid liquidation.",
     });
   } else if (a.health.state === "CLOSE_ONLY") {
     todo.push({
       tone: "warn",
-      text: "⚠️ Close-Only Mode: Below Initial Margin. New positions are blocked until you deposit collateral or reduce risk.",
+      text: "Close-only: below required margin. Deposit collateral or reduce risk to open new positions.",
     });
   }
 
@@ -261,7 +260,7 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
       tone: "primary",
       text: (
         <>
-          💡 You have {fmtNative(walletCash, asset.assetDecimals)} {asset.assetSymbol} in your wallet from option premiums.
+          You have {fmtNative(walletCash, asset.assetDecimals)} {asset.assetSymbol} in your wallet from option premiums.
           Deposit it below to strengthen your margin buffer!
         </>
       ),
@@ -279,19 +278,18 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
 
   return (
     <>
-      {/* Alert Notices */}
       {todo.length > 0 && (
         <div className="space-y-2">
           {todo.map((t, i) => (
             <div
               key={i}
               className={cx(
-                "rounded-2xl border px-4 py-3 text-xs sm:text-sm font-medium",
+                "rounded-2xl border px-4 py-2.5 text-[13px] font-medium",
                 t.tone === "bad"
-                  ? "border-bad/40 bg-bad/10 text-bad"
+                  ? "border-bad/30 bg-bad/10 text-bad"
                   : t.tone === "warn"
-                  ? "border-warn/40 bg-warn/10 text-warn"
-                  : "border-primary/40 bg-primary-soft text-ink"
+                  ? "border-warn/30 bg-warn/10 text-warn"
+                  : "border-primary/30 bg-primary-soft text-ink"
               )}
             >
               {t.text}
@@ -300,28 +298,19 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
         </div>
       )}
 
-      {/* Grid: Health Meter & Collateral Actions */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-        {/* Health & Risk Engine */}
+      <div className="flex flex-col gap-3">
         <Card
-          title={
-            <span className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              <span>Subaccount #{accountId.toString()} Margin Health</span>
-            </span>
-          }
+          title={`Account #${accountId.toString()}`}
         >
           <HealthBar health={a.health} hasPositions={a.positions.length > 0} assetSymbol={asset.assetSymbol} />
 
-          {/* Liquidation Thresholds */}
           {a.positions.length > 0 && (
-            <div className="mt-6 border-t border-line pt-5">
-              <div className="text-xs font-bold text-ink mb-3 flex items-center gap-1.5">
-                <AlertTriangle className="h-4 w-4 text-warn" />
-                <span>Estimated Liquidation Spot Prices</span>
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="mb-2.5 text-[13px] font-semibold">
+                Liquidation estimates
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
                   <Stat
                     label={<Term tip="Estimated spot price at which equity falls to maintenance margin.">If Price Climbs To</Term>}
@@ -357,10 +346,10 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
         </Card>
 
         {/* Collateral Manager (Deposit / Withdraw) */}
-        <Card title="Collateral & Cash">
+        <Card title="Cash">
           <div className="mb-4 grid grid-cols-2 gap-3 rounded-2xl bg-surface-2/60 p-3 border border-line">
             <Stat
-              label="Account Cash"
+              label="In account"
               value={`$${fmtNative(a.cash, asset.assetDecimals)}`}
               sub={asset.assetSymbol}
             />
@@ -378,14 +367,14 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
               setAmount("");
             }}
             options={[
-              { value: "deposit", label: "Deposit Cash" },
-              { value: "withdraw", label: "Withdraw Cash" },
+              { value: "deposit", label: "Add" },
+              { value: "withdraw", label: "Withdraw" },
             ]}
           />
 
           <div className="mt-4 space-y-4">
             <AmountInput
-              label={tab === "deposit" ? "Deposit to Subaccount" : "Withdraw to Wallet"}
+              label={tab === "deposit" ? "Deposit to account" : "Withdraw to wallet"}
               value={amount}
               onChange={setAmount}
               unit={asset.assetSymbol}
@@ -410,7 +399,7 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
               label={tab === "deposit" ? "Deposit Collateral" : "Withdraw to Wallet"}
               steps={steps}
               disabled={!value || tooMuch}
-              successMessage={tab === "deposit" ? "Collateral deposited successfully!" : "Cash withdrawn to your wallet."}
+              successMessage={tab === "deposit" ? "Deposited." : "Withdrawn to your wallet."}
               onDone={() => setAmount("")}
             />
           </div>
@@ -419,45 +408,24 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
 
       {/* Positions in this Account */}
       <Card
-        title={
-          <span className="flex items-center gap-2">
-            <span>Positions in Subaccount #{accountId.toString()}</span>
-            <span className="pill bg-surface-2 text-xs font-semibold">
-              {a.positions.length} active
-            </span>
-          </span>
-        }
+        title={`Positions · ${a.positions.length}`}
       >
         {a.positions.length === 0 ? (
           <EmptyState
-            title="No open positions in this subaccount"
-            body="Write options or move tokens into this account from any series page to activate portfolio margin."
+            title="No open positions"
+            body="Write options or move tokens in from any series page."
             action={
               <Link to="/" className="btn-ghost mt-2 text-xs">
-                Browse Markets
+                Browse markets
               </Link>
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted border-b border-line">
-                  <th className="pb-3 font-semibold">Option Contract</th>
-                  <th className="pb-3 font-semibold">Type</th>
-                  <th className="pb-3 text-right font-semibold">Position Size</th>
-                  <th className="pb-3 pr-6 text-right font-semibold">Mark Valuation</th>
-                  <th className="pb-3 font-semibold">Status</th>
-                  <th className="pb-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line/40">
-                {a.positions.map((p) => (
-                  <PositionRow key={p.seriesId} s={p.series} balance={p.balance} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-line/60">
+            {a.positions.map((p) => (
+              <PositionRow key={p.seriesId} s={p.series} balance={p.balance} />
+            ))}
+          </ul>
         )}
       </Card>
     </>
@@ -473,31 +441,24 @@ function PositionRow({ s, balance }: { s: Series; balance: bigint }) {
   const value = m?.mark !== undefined ? (m.mark * balance) / WAD : undefined;
 
   return (
-    <tr className="hover:bg-surface-2/30 transition">
-      <td className="py-3.5">
-        <Link to={`/series/${s.id}`} className="font-bold text-ink hover:text-primary transition">
-          {seriesName(s)}
-        </Link>
-      </td>
-      <td>
-        <Pill tone={balance > 0n ? "good" : "accent"}>
-          {balance > 0n ? "Long (Asset)" : "Written (Liability)"}
-        </Pill>
-      </td>
-      <td className="num text-right font-semibold">{fmtQty(balance < 0n ? -balance : balance)}</td>
-      <td className={cx("num pr-6 text-right font-bold", value !== undefined && value < 0n ? "text-bad" : "text-good")}>
-        {value !== undefined ? (value < 0n ? `-$${fmtWad(-value)}` : `+$${fmtWad(value)}`) : "—"}
-      </td>
-      <td>{m && <StatePill state={m.state} />}</td>
-      <td className="text-right">
-        <Link
-          to={`/series/${s.id}?tab=${m?.state === "REDEEMABLE" ? "redeem" : "manage"}`}
-          className="rounded-xl border border-line px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-soft transition"
-        >
-          Manage →
-        </Link>
-      </td>
-    </tr>
+    <li>
+      <Link
+        to={`/series/${s.id}?tab=${m?.state === "REDEEMABLE" ? "redeem" : "manage"}`}
+        className="flex min-h-[68px] items-center gap-2.5 rounded-2xl px-2 py-2.5 transition hover:bg-primary-soft/50"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold">{seriesName(s)}</span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+            <Pill tone={balance > 0n ? "good" : "accent"}>{balance > 0n ? "Long" : "Written"}</Pill>
+            <span className="num">{fmtQty(balance < 0n ? -balance : balance)}</span>
+            {m && <StatePill state={m.state} />}
+          </span>
+        </span>
+        <span className={cx("num shrink-0 text-sm font-bold", value !== undefined && value < 0n ? "text-bad" : "text-good")}>
+          {value !== undefined ? (value < 0n ? `−$${fmtWad(-value)}` : `+$${fmtWad(value)}`) : "—"}
+        </span>
+      </Link>
+    </li>
   );
 }
 
@@ -518,7 +479,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
   return (
     <Card
       title="Option Tokens in Your Wallet"
-      action={<span className="text-xs text-muted">ERC-20 option tokens held in your wallet. Tradeable on Kuru.</span>}
+      action={<span className="text-xs text-muted">ERC-20 option tokens held in your wallet. Tradeable elsewhere.</span>}
     >
       {isLoading ? (
         <Skeleton className="h-20 w-full" />
@@ -534,7 +495,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5">
           {rows.map(({ series: s, balance }) => {
             const st = states.data?.[s.id];
             const isRedeemable = st === "REDEEMABLE";
@@ -542,7 +503,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
             return (
               <Link
                 key={s.id}
-                to={`/series/${s.id}?tab=${isRedeemable ? "redeem" : "sell"}`}
+                to={`/series/${s.id}?tab=${isRedeemable ? "redeem" : "trade"}`}
                 className={cx(
                   "rounded-2xl border p-4 transition-all hover:shadow-lg active:scale-[0.98]",
                   isRedeemable
@@ -562,7 +523,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
                 <div className="mt-2 flex items-center justify-between text-xs font-semibold">
                   <span className="text-muted">Expiry: {fmtExpiry(s.expiry)}</span>
                   <span className={isRedeemable ? "text-good" : "text-primary"}>
-                    {isRedeemable ? "Redeem Cash Payout →" : "Trade or Hedge →"}
+                    {isRedeemable ? "Redeem →" : "Trade →"}
                   </span>
                 </div>
               </Link>

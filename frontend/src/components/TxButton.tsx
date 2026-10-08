@@ -82,10 +82,10 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
     onDone?.(receipts);
   }
 
-  if (!isConnected) return <button className="btn-ghost w-full py-3" disabled>Connect a wallet to continue</button>;
+  if (!isConnected) return <button className="btn-ghost w-full !py-3 text-[15px]" disabled>Connect wallet to continue</button>;
   if (wrongChain) {
     return (
-      <button className="btn-primary w-full py-3" onClick={() => switchChain({ chainId: CHAIN.id })} disabled={switching}>
+      <button className="btn-primary w-full !py-3 text-[15px]" onClick={() => switchChain({ chainId: CHAIN.id })} disabled={switching}>
         {switching && <Spinner />} Switch to {NETWORK_LABEL[CHAIN.id] ?? CHAIN.name}
       </button>
     );
@@ -93,28 +93,28 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
 
   const showSteps = steps && steps.length > 1 && Object.keys(status).length > 0;
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <button
-        className={cx(tone === "accent" ? "btn-accent" : "btn-primary", "w-full py-3 text-base")}
+        className={cx(tone === "accent" ? "btn-accent" : "btn-primary", "w-full !py-3.5 text-[15px]")}
         disabled={disabled || running || !steps}
         onClick={run}
         title={disabled ? disabledReason : undefined}
       >
         {running && <Spinner />}
-        {running ? "Working…" : label}
+        {running ? "Confirm in wallet…" : label}
       </button>
-      {disabled && disabledReason && <p className="text-center text-xs text-muted">{disabledReason}</p>}
+      {disabled && disabledReason && <p className="text-center text-[13px] leading-snug text-muted">{disabledReason}</p>}
       {showSteps && (
-        <ol className="space-y-1.5 rounded-xl bg-surface-2 p-3 text-sm">
+        <ol className="space-y-1.5 rounded-xl border border-line bg-surface-2/70 p-3 text-sm">
           {steps!.map((s, i) => {
             const p = status[s.key] ?? "idle";
             return (
               <li key={s.key} className="flex items-center gap-2.5">
-                <span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold", p === "done" ? "bg-good text-black" : p === "failed" ? "bg-bad text-white" : p === "idle" ? "bg-line text-muted" : "bg-primary text-white")}>
+                <span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold", p === "done" ? "bg-good text-[#04281c]" : p === "failed" ? "bg-bad text-white" : p === "idle" ? "bg-line text-muted" : "bg-primary text-white")}>
                   {p === "done" ? "✓" : p === "failed" ? "!" : p === "wallet" || p === "mining" ? <Spinner className="h-3 w-3" /> : i + 1}
                 </span>
-                <span className={cx(p === "idle" && "text-muted")}>{s.label}</span>
-                <span className="ml-auto text-xs text-muted">{p === "wallet" ? "Confirm in your wallet" : p === "mining" ? "Confirming…" : ""}</span>
+                <span className={cx("text-[13px]", p === "idle" && "text-muted")}>{s.label}</span>
+                <span className="ml-auto text-xs text-muted">{p === "wallet" ? "Confirm in wallet" : p === "mining" ? "Confirming…" : ""}</span>
               </li>
             );
           })}

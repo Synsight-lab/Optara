@@ -13,6 +13,8 @@ export interface Series {
   contractSizeWad: bigint;
   expiry: bigint;
   settlementOracleConfigId: Hex;
+  /** Position in listing (creation) order. Absent for hand-built fixtures. */
+  listedAt?: number;
   underlyingSymbol: string;
   assetSymbol: string;
   assetDecimals: number;

@@ -30,7 +30,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { AmountInput, Card, CopyButton, EmptyState, Pill, Row, Segmented, Skeleton, Stat, Term, cx, useTicker } from "../components/ui.tsx";
+import { AmountInput, Card, CopyButton, Details, EmptyState, Pill, Row, Segmented, Skeleton, Stat, Term, cx, useTicker } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { PayoffChart } from "../components/PayoffChart.tsx";
 import { TxButton } from "../components/TxButton.tsx";
@@ -47,6 +47,7 @@ import {
   wrapSteps,
 } from "../lib/optara/actions.ts";
 import { ADDR, publicClient } from "../lib/optara/client.ts";
+import { recordTrade } from "../lib/optara/activity.ts";
 import { disclosuresFor } from "../lib/optara/disclosures.ts";
 import {
   fmtDuration,
@@ -76,7 +77,7 @@ import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
 
-type Tab = "buy" | "write" | "sell" | "manage" | "redeem";
+type Tab = "trade" | "write" | "manage" | "redeem" | "buy" | "sell";
 const SLIPPAGE_BPS = 100n; // FRONTEND.md §7: 1% default
 const withSlip = (x: bigint) => (x * (10_000n + SLIPPAGE_BPS)) / 10_000n + 1n;
 const lessSlip = (x: bigint) => (x * (10_000n - SLIPPAGE_BPS)) / 10_000n;
@@ -140,17 +141,18 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
     credit: false,
   };
 
+  const canonicalTab: Tab = tab === "buy" || tab === "sell" ? "trade" : tab;
+  const tradeSide: "buy" | "sell" = tab === "sell" ? "sell" : "buy";
   const tabs: { value: Tab; label: string; icon: any; actions: ActionKey[] }[] = [
-    { value: "buy", label: "Buy Option", icon: TrendingUp, actions: ["buy"] },
-    { value: "write", label: "Write (Yield)", icon: Coins, actions: ["write"] },
-    { value: "sell", label: "Sell Tokens", icon: TrendingDown, actions: ["sell"] },
-    { value: "manage", label: "Manage / Hedge", icon: Shield, actions: ["unwrap", "close", "wrap"] },
-    { value: "redeem", label: "Redeem Payout", icon: CheckCircle2, actions: ["redeem", "claim"] },
+    { value: "trade", label: "Trade", icon: TrendingUp, actions: ["buy", "sell"] },
+    { value: "write", label: "Earn", icon: Coins, actions: ["write"] },
+    { value: "manage", label: "Manage", icon: Shield, actions: ["unwrap", "close", "wrap"] },
+    { value: "redeem", label: "Settle", icon: CheckCircle2, actions: ["redeem", "claim"] },
   ];
 
   const spotNum = product ? Number(product.spotWad) / 1e18 : undefined;
   const markNum = market?.mark !== undefined ? Number(market.mark) / 1e18 : undefined;
-  const side = tab === "write" || tab === "sell" ? "short" : "long";
+  const side = canonicalTab === "write" ? "short" : "long";
   const premiumForChart = (side === "long" ? market?.quote?.ask : market?.quote?.bid) ?? market?.mark;
 
   const select = (t: Tab) => {
@@ -161,129 +163,112 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const isCall = series.optionType === 0;
 
   return (
-    <div className="space-y-6">
-      {/* Navigation Breadcrumb */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-1">
         <Link
           to="/"
-          className="flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-primary transition"
+          className="flex items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink transition"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to all markets
+          <ArrowLeft className="h-4 w-4" /> All markets
         </Link>
         <button
           onClick={openGuide}
-          className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          className="flex items-center gap-1 text-[13px] font-semibold text-primary hover:underline cursor-pointer"
         >
-          <HelpCircle className="h-3.5 w-3.5" /> What does this option mean?
+          <HelpCircle className="h-3.5 w-3.5" /> What does this mean?
         </button>
       </div>
 
-      {/* Main Header Card */}
-      <section className="relative overflow-hidden rounded-3xl border border-line bg-surface/90 p-5 sm:p-7 backdrop-blur-xl shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={cx(
-                  "pill font-bold",
-                  isCall ? "bg-good/15 text-good" : "bg-bad/15 text-bad"
-                )}
-              >
-                {isCall ? "CALL (BULLISH)" : "PUT (BEARISH)"}
-              </span>
-              <StatePill state={state} />
-              <span className="pill bg-surface-2 text-muted">European Cash-Settled</span>
-            </div>
-
-            <div className="mt-3 flex items-center gap-3">
-              <TokenIcon symbol={series.underlyingSymbol} className="h-8 w-8 sm:h-9 sm:w-9" />
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  {series.underlyingSymbol} ${fmtWad(series.strikeWad, 0)} {optionTypeName(series.optionType)}
-                </h1>
-                <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  Expires {fmtExpiry(series.expiry)}
-                  {tick !== undefined && series.expiry > tick && (
-                    <span className="num font-semibold text-ink">
-                      · {fmtDuration(series.expiry - tick)} remaining
-                    </span>
+      <section className="card rise overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-5">
+          <div className="flex items-center gap-3">
+            <TokenIcon symbol={series.underlyingSymbol} className="h-10 w-10" />
+            <div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className={cx(
+                    "pill border font-bold",
+                    isCall ? "border-good/25 bg-good/12 text-good" : "border-bad/25 bg-bad/12 text-bad"
                   )}
-                </p>
+                >
+                  {isCall ? "Call · up" : "Put · down"}
+                </span>
+                <StatePill state={state} />
               </div>
+              <h1 className="font-display mt-1.5 text-2xl font-bold tracking-tight sm:text-[28px]">
+                {series.underlyingSymbol} ${fmtWad(series.strikeWad, 0)} {optionTypeName(series.optionType)}
+              </h1>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
+                Expires {fmtExpiry(series.expiry)}
+                {tick !== undefined && series.expiry > tick && (
+                  <span className="num font-semibold text-ink">
+                    · {fmtDuration(series.expiry - tick)} left
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 border-t md:border-t-0 border-line pt-4 md:pt-0">
-            <Stat
-              label={`${series.underlyingSymbol} Spot`}
-              value={product ? `$${fmtWad(product.spotWad, 0)}` : "…"}
-              sub={product?.spotFresh ? "Pyth live" : "delayed"}
-              tone={product?.spotFresh ? "good" : "warn"}
-            />
-            <Stat
-              label={<Term tip="The protocol fair value per option derived from the volatility surface.">Mark Fair Value</Term>}
-              value={market?.mark !== undefined ? fmtPrice(market.mark) : "—"}
-              sub={series.assetSymbol}
-            />
-            <Stat
-              label={<Term tip="Implied Volatility: market's expected price fluctuation. Higher IV = higher option value.">Implied Vol (IV)</Term>}
-              value={market?.iv !== undefined ? fmtIv(market.iv) : "—"}
-              sub="Annualized"
-            />
-            <Stat
-              label={<Term tip="Live bid/ask order book quotes on Kuru.">Kuru Bid / Ask</Term>}
-              value={
-                market?.quote ? (
+          <div className="w-full border-t border-line pt-3">
+            <div className="grid grid-cols-3 gap-2">
+              <Stat
+                label={`${series.underlyingSymbol} spot`}
+                value={product ? `$${fmtWad(product.spotWad, 0)}` : "…"}
+                sub={product?.spotFresh ? "Live" : "Delayed"}
+                tone={product?.spotFresh ? "good" : "warn"}
+              />
+              <Stat
+                label={<Term tip="Fair value per option from the on-chain volatility surface.">Fair value</Term>}
+                value={market?.mark !== undefined ? fmtPrice(market.mark) : "—"}
+                sub={series.assetSymbol}
+              />
+              <Stat
+                label={<Term tip="Expected movement priced in. Higher means pricier options.">Volatility</Term>}
+                value={market?.iv !== undefined ? fmtIv(market.iv) : "—"}
+                sub="Annualized"
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-surface-2/60 px-3 py-1.5 text-xs">
+              <span className="text-muted">Order book</span>
+              <span className="num font-semibold">
+                {market?.quote ? (
                   <span>
                     <span className="text-good">{market.quote.bid !== undefined ? fmtPrice(market.quote.bid) : "—"}</span>
                     <span className="text-muted"> / </span>
                     <span className="text-bad">{market.quote.ask !== undefined ? fmtPrice(market.quote.ask) : "—"}</span>
+                    <span className="text-muted"> {series.assetSymbol}</span>
                   </span>
                 ) : (
-                  "No orders"
-                )
-              }
-              sub={series.assetSymbol}
-            />
+                  <span className="text-muted">No orders yet</span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Existing Position / Wallet Holdings Banner */}
         {(walletQty > 0n || position !== 0n) && (
-          <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4 text-xs">
-            <Wallet className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-ink">Your Holdings:</span>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-line bg-surface-2/50 px-4 py-2.5 text-[13px] sm:px-5">
+            <span className="font-semibold">You hold</span>
             {walletQty > 0n && (
-              <Pill tone="primary">{fmtQty(walletQty)} option tokens in your wallet</Pill>
+              <Pill tone="primary">{fmtQty(walletQty)} in wallet</Pill>
             )}
             {position > 0n && (
-              <Pill tone="good">{fmtQty(position)} long in Account #{selected?.toString()}</Pill>
+              <Pill tone="good">{fmtQty(position)} long · account #{selected?.toString()}</Pill>
             )}
             {position < 0n && (
-              <Pill tone="accent">{fmtQty(-position)} short (written) in Account #{selected?.toString()}</Pill>
+              <Pill tone="accent">{fmtQty(-position)} written · account #{selected?.toString()}</Pill>
             )}
           </div>
         )}
       </section>
 
-      {/* Main Grid: Interactive Payoff Simulator on Left, Actions Card on Right */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
-        {/* Left Column: Interactive Visualizer & Simulator */}
-        <div className="space-y-6">
+      <div className="flex flex-col gap-3">
+        <div className="space-y-4">
           <Card
-            title={
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span>
-                  {side === "long" ? "Estimated Payout & Risk at Expiry" : "Writer Payoff & Obligation"}
-                </span>
-              </span>
-            }
+            title={side === "long" ? "What you could make" : "What writing risks"}
             action={
-              <span className="text-xs text-muted font-medium">
-                Simulating {Number(qtyForChart.toFixed(2))} option{qtyForChart === 1 ? "" : "s"}
+              <span className="text-[13px] text-muted">
+                {Number(qtyForChart.toFixed(2))} option{qtyForChart === 1 ? "" : "s"} · drag the chart
               </span>
             }
           >
@@ -316,13 +301,12 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
           <Terms s={series} market={market?.quote?.market} />
         </div>
 
-        {/* Right Column: High-Conversion Action Tabs */}
-        <div>
-          <Card className="h-fit lg:sticky lg:top-24 shadow-xl">
-            {/* Action Selector Tab Pills */}
-            <div className="mb-5 flex gap-1.5 overflow-x-auto pb-1 border-b border-line">
+        {/* Right: brokerage ticket */}
+        <div className="lg:sticky lg:top-16">
+          <section className="ticket p-4 sm:p-5">
+            <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-surface-2/70 p-1 scrollbar-none">
               {tabs.map((t) => {
-                const isSelected = tab === t.value;
+                const isSelected = canonicalTab === t.value || (t.value === "trade" && (tab === "buy" || tab === "sell"));
                 const a = t.actions.map((k) => availability(k, ctx));
                 const isDisabled = a.every((x) => !x.enabled);
                 return (
@@ -332,30 +316,32 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                     disabled={isDisabled}
                     title={isDisabled ? a[0]?.reason : undefined}
                     className={cx(
-                      "flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-bold transition disabled:opacity-30",
+                      "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-semibold transition disabled:opacity-35 cursor-pointer",
                       isSelected
-                        ? "bg-primary text-white shadow-md"
-                        : "text-muted hover:bg-surface-2 hover:text-ink"
+                        ? "bg-primary text-white shadow"
+                        : "text-muted hover:text-ink"
                     )}
                   >
-                    <t.icon className="h-3.5 w-3.5" />
-                    <span>{t.label}</span>
+                    {t.label}
                   </button>
                 );
               })}
             </div>
 
             {/* Tab Body */}
-            {tab === "buy" && (
-              <BuyPanel
+            {(canonicalTab === "trade") && (
+              <TradePanel
                 s={series}
                 ctx={ctx}
                 ask={market?.quote?.ask}
+                bid={market?.quote?.bid}
                 market={market?.quote?.market}
+                walletQty={walletQty}
+                initialSide={tradeSide}
                 onQty={setQtyForChart}
               />
             )}
-            {tab === "write" && (
+            {canonicalTab === "write" && (
               <WritePanel
                 s={series}
                 ctx={ctx}
@@ -364,30 +350,19 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 onQty={setQtyForChart}
               />
             )}
-            {tab === "sell" && (
-              <SellPanel
-                s={series}
-                ctx={ctx}
-                bid={market?.quote?.bid}
-                market={market?.quote?.market}
-                walletQty={walletQty}
-                onQty={setQtyForChart}
-              />
-            )}
-            {tab === "manage" && (
+            {canonicalTab === "manage" && (
               <ManagePanel s={series} ctx={ctx} walletQty={walletQty} position={position} />
             )}
-            {tab === "redeem" && (
+            {canonicalTab === "redeem" && (
               <RedeemPanel s={series} ctx={ctx} walletQty={walletQty} />
             )}
 
-            {/* Active Subaccount Health Widget */}
             {account && (
-              <div className="mt-6 border-t border-line pt-4">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="font-semibold text-ink">Account #{selected?.toString()} Health</span>
-                  <Link to="/portfolio" className="text-primary hover:underline font-medium">
-                    View Portfolio →
+              <div className="mt-5 border-t border-line pt-3.5">
+                <div className="mb-2 flex items-center justify-between text-[13px]">
+                  <span className="font-semibold">Margin account #{selected?.toString()}</span>
+                  <Link to="/portfolio" className="font-semibold text-primary hover:underline">
+                    Portfolio
                   </Link>
                 </div>
                 <HealthBar
@@ -398,7 +373,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 />
               </div>
             )}
-          </Card>
+          </section>
         </div>
       </div>
     </div>
@@ -441,68 +416,106 @@ function PriceTargetSimulator({
   const pctFromSpot = spot ? (((targetPrice - spot) / spot) * 100).toFixed(1) : "0";
 
   return (
-    <div className="mt-4 rounded-2xl border border-line bg-surface-2/60 p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-primary" /> Target Price Simulator
-        </span>
-        <span className="text-xs text-muted">
-          At expiry, if {series.underlyingSymbol} is: <b className="num text-ink font-bold">${targetPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b>
-        </span>
+    <div className="mt-3 rounded-2xl border border-line bg-surface-2/60 p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[13px] font-semibold">Try a settlement price</span>
+        <span className="num font-display text-[15px] font-bold">${targetPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
       </div>
 
-      {/* Target Price Slider */}
       <input
         type="range"
         min={Math.round(basePrice * 0.5)}
         max={Math.round(basePrice * 1.5)}
         step={Math.round(basePrice * 0.005) || 1}
         value={targetPrice}
-        onChange={(e) => setTargetPrice(Number(e.target.value))}
-        className="mt-3 w-full accent-[var(--primary)] cursor-pointer"
+        onChange={(e) => {
+          setTargetPrice(Number(e.target.value));
+          e.target.style.setProperty("--fill", `${((Number(e.target.value) - basePrice * 0.5) / (basePrice) * 100).toFixed(1)}%`);
+        }}
+        className="mt-3 w-full cursor-pointer"
       />
 
-      {/* Quick Target Presets */}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {[
-          { label: "Current Spot", mult: 1.0 },
+          { label: "Spot", mult: 1.0 },
           { label: "+5%", mult: 1.05 },
           { label: "+10%", mult: 1.1 },
           { label: "+20%", mult: 1.2 },
-          { label: "-10%", mult: 0.9 },
+          { label: "−10%", mult: 0.9 },
         ].map((p) => (
           <button
             key={p.label}
             type="button"
             onClick={() => spot && setTargetPrice(Math.round(spot * p.mult))}
-            className="rounded-lg border border-line/60 bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted hover:text-ink hover:border-primary/40 transition"
+            className="chip !py-1 !text-[11px] cursor-pointer"
           >
             {p.label}
           </button>
         ))}
       </div>
 
-      {/* Dynamic Results Grid */}
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line/60 pt-3 text-center">
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-2.5 text-center">
         <div>
-          <div className="text-[10px] text-muted font-medium">Price Change</div>
-          <div className={cx("num mt-0.5 text-xs font-bold", Number(pctFromSpot) >= 0 ? "text-good" : "text-bad")}>
+          <div className="text-[11px] text-muted">Move</div>
+          <div className={cx("num font-display mt-0.5 text-sm font-bold", Number(pctFromSpot) >= 0 ? "text-good" : "text-bad")}>
             {Number(pctFromSpot) >= 0 ? `+${pctFromSpot}%` : `${pctFromSpot}%`}
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-muted font-medium">Net Profit / Loss</div>
-          <div className={cx("num mt-0.5 text-xs sm:text-sm font-black", totalNet >= 0 ? "text-good" : "text-bad")}>
-            {totalNet >= 0 ? `+$${totalNet.toFixed(2)}` : `-$${Math.abs(totalNet).toFixed(2)}`}
+          <div className="text-[11px] text-muted">Net</div>
+          <div className={cx("num font-display mt-0.5 text-sm font-bold", totalNet >= 0 ? "text-good" : "text-bad")}>
+            {totalNet >= 0 ? `+$${totalNet.toFixed(0)}` : `−$${Math.abs(totalNet).toFixed(0)}`}
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-muted font-medium">Estimated ROI</div>
-          <div className={cx("num mt-0.5 text-xs sm:text-sm font-black", totalNet >= 0 ? "text-good" : "text-bad")}>
+          <div className="text-[11px] text-muted">Return</div>
+          <div className={cx("num font-display mt-0.5 text-sm font-bold", totalNet >= 0 ? "text-good" : "text-bad")}>
             {totalNet >= 0 ? `+${roi}%` : `${roi}%`}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ Unified trade ticket (buy + sell merged)
+function TradePanel({
+  s,
+  ctx,
+  ask,
+  bid,
+  market,
+  walletQty,
+  initialSide,
+  onQty,
+}: {
+  s: Series;
+  ctx: ActionContext;
+  ask?: bigint;
+  bid?: bigint;
+  market?: Hex;
+  walletQty: bigint;
+  initialSide: "buy" | "sell";
+  onQty: (q: number) => void;
+}) {
+  const [side, setSide] = useState<"buy" | "sell">(initialSide);
+  useEffect(() => setSide(initialSide), [initialSide, s.id]);
+  const hasTokens = walletQty > 0n;
+  return (
+    <div className="space-y-3.5">
+      <Segmented
+        value={side}
+        onChange={setSide}
+        options={[
+          { value: "buy", label: "Buy" },
+          { value: "sell", label: `Sell${hasTokens ? ` (${fmtQty(walletQty)})` : ""}`, disabled: !hasTokens, title: hasTokens ? undefined : "You hold none of this option yet" },
+        ]}
+      />
+      {side === "buy" ? (
+        <BuyPanel s={s} ctx={ctx} ask={ask} market={market} onQty={onQty} />
+      ) : (
+        <SellPanel s={s} ctx={ctx} bid={bid} market={market} walletQty={walletQty} onQty={onQty} />
+      )}
     </div>
   );
 }
@@ -561,67 +574,60 @@ function BuyPanel({
   if (!a.enabled && ctx.connected) return <Blocked reason={a.reason} />;
 
   return (
-    <div className="space-y-4">
-      {/* 100% Capped Risk Safety Badge */}
-      <div className="rounded-2xl border border-good/30 bg-good/10 p-3 text-xs text-good flex items-center gap-2">
+    <div className="space-y-3.5">
+      <div className="flex items-center gap-2 rounded-xl border border-good/25 bg-good/8 px-3 py-2 text-[13px] text-good">
         <ShieldCheck className="h-4 w-4 shrink-0" />
-        <span>
-          <b>Zero Liquidation Risk</b>: Your loss is 100% capped at the purchase price.
-        </span>
+        <span>Max loss is what you pay. No liquidation on longs.</span>
       </div>
 
       <AmountInput
-        label="You Spend"
+        label="You pay"
         value={amount}
         onChange={setAmount}
         unit={s.assetSymbol}
-        presets={["25", "50", "100", "250", "500"]}
+        presets={["25", "50", "100", "250"]}
         max={balance !== undefined ? fmtNative(balance, s.assetDecimals, 2).replace(/,/g, "") : undefined}
         maxLabel="Wallet"
-        invalid={tooMuch ? `Your wallet only has ${fmtNative(balance!, s.assetDecimals)} ${s.assetSymbol}.` : undefined}
+        invalid={tooMuch ? `Wallet holds ${fmtNative(balance!, s.assetDecimals)} ${s.assetSymbol}.` : undefined}
       />
 
-      {/* Outcome preview card */}
-      <div className="rounded-2xl border border-line bg-surface-2 p-4">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs text-muted font-medium">Estimated Options Received:</span>
-          <span className="num text-2xl font-black text-ink">
+      <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[13px] text-muted">You receive about</span>
+          <span className="num font-display text-2xl font-bold tracking-tight">
             {estQty !== undefined ? fmtQty(estQty) : "—"}
           </span>
         </div>
-        <div className="text-right text-[11px] text-muted">
-          Price: {ask !== undefined ? `$${fmtWad(ask, 2)}` : "—"} {s.assetSymbol} / option
+        <div className="mt-0.5 text-right text-xs text-muted">
+          {ask !== undefined ? `${fmtWad(ask, 2)} ${s.assetSymbol} each` : "Waiting for book"} · capped risk
         </div>
 
-        {/* 3-Line Transparent Cost Breakdown */}
-        <div className="mt-3 border-t border-line pt-2 space-y-1">
-          <Row
-            label="Option Premium"
-            value={premiumIn !== undefined ? `${fmtNative(premiumIn, s.assetDecimals)} ${s.assetSymbol}` : "—"}
-          />
-          <Row
-            label={<Term tip="Charged by the Kuru order book.">Kuru Venue Fee</Term>}
-            value={fees.data ? `≈ ${fmtNative(fees.data.kuru, s.assetDecimals)} ${s.assetSymbol}` : "—"}
-          />
-          <Row
-            label={<Term tip="Optara protocol fee on premium, supporting the insurance fund and keepers.">Optara Fee</Term>}
-            value={fees.data ? `${fmtNative(fees.data.optara, s.assetDecimals)} ${s.assetSymbol}` : "—"}
-          />
-          <Row
-            strong
-            label="Total Deducted From Wallet"
-            value={total !== undefined ? `${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "—"}
-          />
+        <div className="mt-2.5">
+          <Details summary={<span>Total <b className="num">{total !== undefined ? `${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "—"}</b></span>}>
+            <Row
+              label="Premium"
+              value={premiumIn !== undefined ? `${fmtNative(premiumIn, s.assetDecimals)} ${s.assetSymbol}` : "—"}
+            />
+            <Row
+              label={<Term tip="Charged by the order book.">Venue fee</Term>}
+              value={fees.data ? `≈ ${fmtNative(fees.data.kuru, s.assetDecimals)}` : "—"}
+            />
+            <Row
+              label={<Term tip="Funds insurance and keepers.">Optara fee</Term>}
+              value={fees.data ? `${fmtNative(fees.data.optara, s.assetDecimals)}` : "—"}
+            />
+          </Details>
         </div>
       </div>
 
       <TxButton
-        label={estQty ? `Buy ${fmtQty(estQty)} Options Now` : "Buy Options"}
+        label={estQty ? `Buy ${fmtQty(estQty)}` : "Buy"}
         steps={steps}
         disabled={!a.enabled || !steps || tooMuch}
         disabledReason={a.reason}
         disclosures={disclosuresFor("buy", s.underlyingSymbol)}
-        successMessage="Options bought successfully! Tokens are in your wallet."
+        successMessage="Bought. Tokens are in your wallet."
+        onDone={() => recordTrade(address, s.id, "buy")}
       />
     </div>
   );
@@ -678,28 +684,25 @@ function WritePanel({
       : undefined;
 
   return (
-    <div className="space-y-4">
-      {/* Yield Banner */}
-      <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 text-xs text-accent flex items-center gap-2">
+    <div className="space-y-3.5">
+      <div className="flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/8 px-3 py-2 text-[13px] text-accent">
         <Coins className="h-4 w-4 shrink-0" />
-        <span>
-          <b>Earn Cash Yield</b>: Collect premium upfront today. Requires collateral in your Optara subaccount.
-        </span>
+        <span>You keep the premium today. Margin account covers the payout.</span>
       </div>
 
       <AmountInput
-        label="Number of Options to Write"
+        label="Contracts to write"
         value={amount}
         onChange={setAmount}
         unit="options"
         presets={["0.1", "0.5", "1", "2"]}
-        hint="Min 0.01. Requires sufficient initial margin (IM)."
+        hint="Min 0.01. Needs enough margin after writing."
       />
 
       <label
         className={cx(
-          "flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition",
-          sellable ? "border-primary bg-primary-soft/50" : "border-line bg-surface-2/60"
+          "flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition",
+          sellNow && sellable ? "border-primary/50 bg-primary-soft/60" : "border-line bg-surface-2/60"
         )}
       >
         <input
@@ -709,57 +712,58 @@ function WritePanel({
           onChange={(e) => setSellNow(e.target.checked)}
           disabled={!market || bid === undefined}
         />
-        <span className="text-xs">
-          <span className="block font-bold text-ink">Sell on Kuru immediately for instant cash</span>
+        <span className="text-[13px]">
+          <span className="block font-semibold">Sell instantly for cash</span>
           <span className="block text-muted">
             {market && bid !== undefined
-              ? `Best bid $${fmtWad(bid)} ${s.assetSymbol}. Premium is transferred straight to your wallet.`
-              : "No current bids on Kuru. You will receive the option tokens into your wallet instead."}
+              ? `Bid ${fmtWad(bid)} ${s.assetSymbol}. Cash lands in your wallet.`
+              : "No bids yet. You keep the tokens instead."}
           </span>
         </span>
       </label>
 
-      {/* Write Financials Breakdown */}
-      <div className="rounded-2xl border border-line bg-surface-2 p-4 space-y-2">
+      <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
         {sellable && net !== undefined && (
-          <div className="flex items-baseline justify-between border-b border-line pb-2">
-            <span className="text-xs text-muted font-medium">Upfront Cash To Your Wallet:</span>
-            <span className="num text-xl font-black text-good">
-              +${fmtNative(net, s.assetDecimals)} {s.assetSymbol}
+          <div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
+            <span className="text-[13px] text-muted">Cash to wallet</span>
+            <span className="num font-display text-xl font-bold text-good">
+              +{fmtNative(net, s.assetDecimals)} {s.assetSymbol}
             </span>
           </div>
         )}
-        <Row
-          label="Optara Minting Fee"
-          value={fee !== undefined ? `${fmtNative(fee, s.assetDecimals)} ${s.assetSymbol}` : "—"}
-        />
-        {sellable && (
+        <Details summary="Margin and fees">
           <Row
-            label="Kuru Venue Fee"
-            value={sellFee.data !== undefined ? `${fmtNative(sellFee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"}
+            label="Optara fee"
+            value={fee !== undefined ? `${fmtNative(fee, s.assetDecimals)} ${s.assetSymbol}` : "—"}
           />
-        )}
-        <Row
-          strong
-          label={<Term tip="Your subaccount's equity and margin requirement after writing.">Account Equity vs Required Margin</Term>}
-          value={equityAfter !== undefined ? `$${fmtWad(equityAfter)} / $${fmtWad(imAfter!)}` : "—"}
-          tone={ok === false ? "bad" : ok ? "good" : undefined}
-        />
+          {sellable && (
+            <Row
+              label="Venue fee"
+              value={sellFee.data !== undefined ? `${fmtNative(sellFee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"}
+            />
+          )}
+          <Row
+            strong
+            label={<Term tip="Equity and required margin after writing.">Equity vs required</Term>}
+            value={equityAfter !== undefined ? `${fmtWad(equityAfter)} / ${fmtWad(imAfter!)}` : "—"}
+            tone={ok === false ? "bad" : ok ? "good" : undefined}
+          />
+        </Details>
         {ok === false && (
-          <p className="mt-2 text-xs font-semibold text-bad">
-            ⚠️ Insufficient margin. Deposit more collateral in Portfolio or write a smaller amount.
+          <p className="mt-2 text-[13px] font-semibold text-bad">
+            Not enough margin. Add collateral in Portfolio or lower the size.
           </p>
         )}
       </div>
 
       <TxButton
-        label={sellable ? `Write & Sell for +$${net !== undefined ? fmtNative(net, s.assetDecimals) : ""}` : `Write ${amount || "0"} Options`}
+        label={sellable ? `Write for +${net !== undefined ? fmtNative(net, s.assetDecimals) : ""}` : `Write ${amount || "0"}`}
         tone="accent"
         steps={ok ? steps : undefined}
         disabled={!a.enabled || !steps || ok === false}
         disabledReason={a.reason}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
-        successMessage={sellable ? "Options written and sold! Premium is in your wallet." : "Options written! Tokens sent to your wallet."}
+        successMessage={sellable ? "Written and sold. Premium is in your wallet." : "Written. Tokens are in your wallet."}
       />
     </div>
   );
@@ -783,10 +787,10 @@ function AccountSetup({ s }: { s: Series }) {
     <div className="space-y-4">
       <div className="rounded-2xl border border-primary/40 bg-primary-soft p-4 text-xs">
         <div className="font-bold text-ink text-sm flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-primary" /> Create Your Optara Account
+          <Sparkles className="h-4 w-4 text-primary" /> Create your margin account
         </div>
         <p className="mt-1 text-muted leading-relaxed">
-          Writing options requires collateral. One click creates your dedicated smart subaccount and deposits your initial margin.
+          Writing needs collateral. One step creates your margin account and deposits funds.
         </p>
       </div>
 
@@ -875,6 +879,8 @@ function SellPanel({
         disabled={!steps || tooMuch}
         disabledReason={a.reason}
         successMessage="Options sold! Proceeds are in your wallet."
+
+        onDone={() => recordTrade(address, s.id, "sell")}
       />
     </div>
   );
@@ -910,47 +916,47 @@ function ManagePanel({
   return (
     <div className="space-y-4">
       <Section
-        title="Close Written Position (Short)"
-        text="Burn wallet tokens to cancel your written liability and release collateral."
+        title="Close written position"
+        text="Use wallet tokens to cancel what you wrote and free margin."
         blocked={!c.enabled ? c.reason : undefined}
       >
-        <AmountInput label="Amount to Close" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(maxClose)} />
+        <AmountInput label="Amount" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(maxClose)} />
         <TxButton
-          label="Close Short"
+          label="Close position"
           steps={selected !== undefined && cq ? closeShortSteps(selected, s, cq) : undefined}
           disabled={!c.enabled || !cq || cq > maxClose}
           disabledReason={c.reason}
-          successMessage="Position closed and margin freed!"
+          successMessage="Closed. Margin freed."
         />
       </Section>
 
       <Section
-        title="Hedge / Move Tokens Into Account"
-        text="Deposit option tokens into your subaccount to offset shorts and reduce margin."
+        title="Move tokens into account"
+        text="Move tokens into your account to offset shorts and reduce margin."
         blocked={!u.enabled ? u.reason : undefined}
       >
-        <AmountInput label="Amount to Move" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(walletQty)} />
+        <AmountInput label="Amount" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(walletQty)} />
         <TxButton
-          label="Move Into Account"
+          label="Move in"
           steps={selected !== undefined && uq ? unwrapSteps(selected, s, uq) : undefined}
           disabled={!u.enabled || !uq || uq > walletQty}
           disabledReason={u.reason}
-          successMessage="Tokens deposited into account."
+          successMessage="Moved into your account."
         />
       </Section>
 
       <Section
-        title="Wrap Long Tokens to Wallet"
-        text="Convert internal longs into tradeable ERC-20 tokens in your wallet."
+        title="Move tokens to wallet"
+        text="Turn account longs into wallet tokens you can sell."
         blocked={!w.enabled ? w.reason : undefined}
       >
-        <AmountInput label="Amount to Wrap" value={wrapAmt} onChange={setWrapAmt} unit="options" max={position > 0n ? fmtQty(position) : "0"} />
+        <AmountInput label="Amount" value={wrapAmt} onChange={setWrapAmt} unit="options" max={position > 0n ? fmtQty(position) : "0"} />
         <TxButton
-          label="Withdraw to Wallet"
+          label="Move out"
           steps={selected !== undefined && wq && address ? wrapSteps(selected, s, wq, address) : undefined}
           disabled={!w.enabled || !wq}
           disabledReason={w.reason}
-          successMessage="Option tokens sent to your wallet."
+          successMessage="Sent to your wallet."
         />
       </Section>
     </div>
@@ -1084,23 +1090,23 @@ function Terms({ s, market }: { s: Series; market?: Hex }) {
           onClick={() => setOpen((o) => !o)}
           className="flex w-full items-center justify-between text-left"
         >
-          <span className="text-xs sm:text-sm font-bold text-ink">Contract Specifications & Addresses</span>
+          <span className="text-xs sm:text-sm font-bold text-ink">Details and addresses</span>
           <span className="text-xs text-primary font-semibold">
-            {open ? "Hide Specs ▲" : "Show Specs ▼"}
+            {open ? "Hide ▲" : "Show ▼"}
           </span>
         </button>
       }
     >
       {open ? (
-        <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2 text-xs pt-2">
-          <Row label="Exercise Style" value={`European ${optionTypeName(s.optionType).toLowerCase()}`} />
-          <Row label="Strike Price" value={`$${fmtWad(s.strikeWad, 2)} ${s.assetSymbol}`} />
-          <Row label="Underlying Unit" value={`1.000 ${s.underlyingSymbol}`} />
-          <Row label="Settlement Asset" value={s.assetSymbol} />
-          <Row label="Final Expiry" value={fmtExpiry(s.expiry)} />
-          <Row label="Oracle Settlement" value="Chainlink round in force at expiry" />
+        <div className="flex flex-col gap-1 text-xs pt-2">
+          <Row label="Type" value={`European ${optionTypeName(s.optionType).toLowerCase()}`} />
+          <Row label="Strike" value={`$${fmtWad(s.strikeWad, 2)} ${s.assetSymbol}`} />
+          <Row label="Contract size" value={`1.000 ${s.underlyingSymbol}`} />
+          <Row label="Settles in" value={s.assetSymbol} />
+          <Row label="Expiry" value={fmtExpiry(s.expiry)} />
+          <Row label="Settlement price" value="Reference price at expiry" />
           <Row
-            label="Option ERC-20"
+            label="Option token"
             value={
               <span>
                 {shortAddr(s.wrapper)} <CopyButton text={s.wrapper} label="token address" />
@@ -1108,13 +1114,13 @@ function Terms({ s, market }: { s: Series; market?: Hex }) {
             }
           />
           <Row
-            label="Kuru CLOB Market"
+            label="Order book"
             value={market ? <span>{shortAddr(market)} <CopyButton text={market} label="market address" /></span> : "Not listed"}
           />
         </div>
       ) : (
         <p className="text-xs text-muted">
-          European cash-settled option in {s.assetSymbol} at expiry. Fully verified on-chain.
+          Cash-settled in {s.assetSymbol} at expiry. Terms can't change.
         </p>
       )}
     </Card>

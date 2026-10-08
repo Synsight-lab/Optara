@@ -42,28 +42,27 @@ export function LiquidationsPage() {
   const { open: openGuide } = useQuickGuide();
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex flex-col justify-between gap-2 px-1 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Dutch Auction Liquidations</h1>
-          <p className="text-xs sm:text-sm text-muted mt-0.5">
-            Permissionless portfolio-slice auctions. Protect protocol solvency and earn escalating discount bonuses.
+          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">Auctions</h1>
+          <p className="mt-0.5 text-[13px] text-muted">
+            Under-collateralized accounts sell slices at a growing discount. Anyone can take them.
           </p>
         </div>
         <button
           onClick={openGuide}
           className="flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
         >
-          <HelpCircle className="h-4 w-4" /> How Dutch Slice Auctions Work
+          <HelpCircle className="h-4 w-4" /> How auctions work
         </button>
       </div>
 
       {/* Liquidation Parameters Banner */}
       {params && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-2">
           <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted">Auction Bonus</span>
+            <span className="text-[13px] font-semibold text-muted">Discount bonus</span>
             <div className="num mt-1 text-base font-black text-good">
               {fmtBps(params.startBonusBps, 1)} → {fmtBps(params.maxBonusBps, 1)}
             </div>
@@ -71,7 +70,7 @@ export function LiquidationsPage() {
           </div>
 
           <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted">Slice Sizing</span>
+            <span className="text-[13px] font-semibold text-muted">Slice size</span>
             <div className="num mt-1 text-base font-black text-ink">
               {fmtBps(params.minSliceBps, 0)} to {fmtBps(params.maxSliceBps, 0)}
             </div>
@@ -79,7 +78,7 @@ export function LiquidationsPage() {
           </div>
 
           <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted">Insurance Penalty</span>
+            <span className="text-[13px] font-semibold text-muted">Safety penalty</span>
             <div className="num mt-1 text-base font-black text-accent">
               {fmtBps(params.liquidationPenaltyBps, 1)}
             </div>
@@ -96,7 +95,7 @@ export function LiquidationsPage() {
           <EmptyState
             icon="🛡️"
             title="All accounts are healthy"
-            body="No accounts are currently below Maintenance Margin. The system is operating at full collateralization."
+            body="No account is below its liquidation threshold right now."
           />
         </Card>
       ) : (
@@ -130,20 +129,20 @@ function AccountCard({
     <Card
       title={
         <div className="flex items-center gap-2">
-          <span className="font-extrabold text-ink">Subaccount #{id.toString()}</span>
+          <span className="font-bold text-ink">Account #{id.toString()}</span>
           <Pill tone="bad" dot>Liquidatable</Pill>
         </div>
       }
     >
-      <div className="grid gap-6 md:grid-cols-[280px_1fr]">
+      <div className="flex flex-col gap-3">
         {/* Margin Deficit Info */}
         <div className="rounded-2xl border border-bad/30 bg-bad/5 p-4 space-y-1.5">
-          <Row label="Account Equity" value={`$${fmtWad(equity)}`} tone="bad" />
-          <Row label={<Term tip="Maintenance margin threshold.">Required MM</Term>} value={`$${fmtWad(mm)}`} />
-          <Row strong label="Collateral Shortfall" value={`-$${fmtWad(mm - equity)}`} tone="bad" />
+          <Row label="Equity" value={`$${fmtWad(equity)}`} tone="bad" />
+          <Row label={<Term tip="Below this, the account can be liquidated.">Liquidation at</Term>} value={`$${fmtWad(mm)}`} />
+          <Row strong label="Shortfall" value={`-$${fmtWad(mm - equity)}`} tone="bad" />
 
           <p className="text-[11px] text-muted mt-3 pt-2 border-t border-bad/20">
-            Anyone can trigger or take slices of this account's bucket to restore its health.
+            Anyone can take a slice of this account to bring it back to health.
           </p>
         </div>
 
@@ -195,9 +194,9 @@ function Bucket({
     return (
       <div className="rounded-2xl border border-line bg-surface-2/60 p-4">
         <p className="mb-3 text-xs text-muted">
-          No active auction running on this bucket. Starting an auction is permissionless and kicks off the bonus clock.
+          No auction running here yet. Starting one is open to anyone and starts the discount clock.
         </p>
-        <TxButton label="Start Dutch Auction" steps={startAuctionSteps(id, underlying)} successMessage="Dutch auction started!" />
+        <TxButton label="Start auction" steps={startAuctionSteps(id, underlying)} successMessage="Auction started." />
       </div>
     );
   }
@@ -209,18 +208,18 @@ function Bucket({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Pill tone="warn" dot>
-            Auction Running {now !== undefined ? `(${fmtDuration(now - auction.start)})` : ""}
+            Live {now !== undefined ? `(${fmtDuration(now - auction.start)})` : ""}
           </Pill>
           <Pill tone="good">
-            Bonus Now: +{fmtBps(auction.bonusBps, 2)}
+            Discount +{fmtBps(auction.bonusBps, 2)}
           </Pill>
         </div>
-        {auction.wholeBucket && <Pill tone="accent">Whole Bucket Mode (100%)</Pill>}
+        {auction.wholeBucket && <Pill tone="accent">Whole position</Pill>}
       </div>
 
       <div>
         <div className="flex items-center justify-between text-xs font-semibold">
-          <label htmlFor={`slice-${id}`}>Portfolio Slice to Liquidate:</label>
+          <label htmlFor={`slice-${id}`}>Slice to take:</label>
           <span className="num text-primary font-bold">{fmtBps(sliceBps, 0)}</span>
         </div>
         <input
@@ -237,20 +236,20 @@ function Bucket({
 
       {/* Financial Preview */}
       <div className="rounded-xl border border-line bg-surface p-3 space-y-1 text-xs">
-        <Row label={<Term tip="Net fair value of positions transferred.">Position Value</Term>} value={sliceMark !== undefined ? `$${fmtWad(sliceMark)}` : "—"} />
-        <Row label="Margin Requirement Released" value={sliceMM !== undefined ? `$${fmtWad(sliceMM)}` : "—"} />
-        <Row label="Liquidator Discount Bonus" value={discount !== undefined ? `+$${fmtWad(discount)}` : "—"} tone="good" />
-        <Row label="Penalty Paid to Insurance" value={penalty !== undefined ? `$${fmtNative(penalty, 6)}` : "—"} />
+        <Row label={<Term tip="Value of the positions you receive.">Position Value</Term>} value={sliceMark !== undefined ? `$${fmtWad(sliceMark)}` : "—"} />
+        <Row label="Margin freed" value={sliceMM !== undefined ? `$${fmtWad(sliceMM)}` : "—"} />
+        <Row label="Your discount" value={discount !== undefined ? `+$${fmtWad(discount)}` : "—"} tone="good" />
+        <Row label="Safety penalty" value={penalty !== undefined ? `$${fmtNative(penalty, 6)}` : "—"} />
         <Row
           strong
-          label="Net Cash Transferred to Liquidator"
+          label="You receive"
           value={cash !== undefined ? (cash >= 0n ? `+$${fmtNative(cash, 6)}` : `-$${fmtNative(-cash, 6)}`) : "—"}
           tone={cash !== undefined && cash >= 0n ? "good" : "bad"}
         />
       </div>
 
       <TxButton
-        label="Liquidate This Slice"
+        label="Take slice"
         steps={
           liquidator !== undefined && cash !== undefined
             ? sliceSteps(
@@ -266,12 +265,12 @@ function Bucket({
         disabled={liquidator === undefined || liquidator === id}
         disabledReason={
           liquidator === undefined
-            ? "Create or select your own funded subaccount in Portfolio first."
+            ? "Create or select your own funded account in Portfolio first."
             : liquidator === id
-            ? "You cannot liquidate your own subaccount."
+            ? "You cannot liquidate your own account."
             : undefined
         }
-        successMessage="Slice liquidated successfully!"
+        successMessage="Slice taken."
       />
     </div>
   );

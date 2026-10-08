@@ -5,7 +5,7 @@ import { WagmiProvider } from "wagmi";
 import { RouterProvider } from "react-router";
 import { wagmiConfig } from "./config/wagmi.ts";
 import { router } from "./router.tsx";
-import { AccountProvider, GuideProvider, ModeProvider, ToastProvider } from "./state.tsx";
+import { AccountProvider, GuideProvider, ToastProvider } from "./state.tsx";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -18,11 +18,9 @@ createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AccountProvider>
-            <ModeProvider>
-              <GuideProvider>
-                <RouterProvider router={router} />
-              </GuideProvider>
-            </ModeProvider>
+            <GuideProvider>
+              <RouterProvider router={router} />
+            </GuideProvider>
           </AccountProvider>
         </ToastProvider>
       </QueryClientProvider>

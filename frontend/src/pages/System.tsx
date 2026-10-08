@@ -27,15 +27,15 @@ export function SystemPage() {
   const assets = useMemo(() => [...new Map((series ?? []).map((s) => [s.settlementAsset, s])).values()], [series]);
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">System Health & Transparency</h1>
-        <p className="text-xs sm:text-sm text-muted mt-0.5">
-          Real-time verification of oracles, keeper reserves, insurance solvency, and smart contracts.
+    <div className="space-y-4 sm:space-y-5">
+      <div className="px-1">
+        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">System</h1>
+        <p className="mt-0.5 text-[13px] text-muted">
+          Oracles, reserves and contracts — live from chain.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="flex flex-col gap-3">
         {products.map((p) => (
           <ProductStatus key={p.productId} s={p} />
         ))}
@@ -58,7 +58,7 @@ function ProductStatus({ s }: { s: Series }) {
       title={
         <div className="flex items-center gap-2">
           <TokenIcon symbol={s.underlyingSymbol} className="h-5 w-5" />
-          <span className="font-extrabold text-ink">
+          <span className="font-bold text-ink">
             {s.underlyingSymbol}/{s.assetSymbol} Oracles
           </span>
         </div>
@@ -117,7 +117,7 @@ function Reserves({ s }: { s: Series }) {
       title={
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-good" />
-          <span className="font-extrabold text-ink">{s.assetSymbol} Protocol Reserves</span>
+          <span className="font-bold text-ink">{s.assetSymbol} Protocol Reserves</span>
         </div>
       }
     >
@@ -176,18 +176,18 @@ function Services() {
       title={
         <div className="flex items-center gap-2">
           <Server className="h-5 w-5 text-primary" />
-          <span className="font-extrabold text-ink">Infrastructure & Keepers</span>
+          <span className="font-bold text-ink">Services</span>
         </div>
       }
     >
       <div className="space-y-2 text-xs">
         <Row label="Network RPC" value={<span className="num text-muted truncate max-w-[200px]">{RPC_URL}</span>} />
         <Row
-          label="IV Surface Publisher Service"
+          label="Volatility publisher"
           value={<Pill tone={tone(publisher.data)}>{publisher.data ?? "verifying…"}</Pill>}
         />
         <Row
-          label="HyperIndex Indexer Process"
+          label="Indexer"
           value={<Pill tone={tone(indexer.data)}>{indexer.data ?? "verifying…"}</Pill>}
         />
       </div>
@@ -206,12 +206,12 @@ function Contracts() {
       title={
         <div className="flex items-center gap-2">
           <Lock className="h-5 w-5 text-accent" />
-          <span className="font-extrabold text-ink">Smart Contracts (Monad)</span>
+          <span className="font-bold text-ink">Contracts</span>
         </div>
       }
-      className="lg:col-span-2"
+      className=""
     >
-      <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2 text-xs">
+      <div className="flex flex-col gap-1 text-xs">
         {[
           ...rows,
           ["UpgradeAdmin", MANIFEST.upgradeAdmin] as const,

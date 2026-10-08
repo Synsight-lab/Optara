@@ -19,6 +19,7 @@ export const router = createBrowserRouter([
         path: "/trade/:id",
         lazy: async () => ({ Component: (await import("./pages/Trade.tsx")).TradePage }),
       },
+      { path: "/new", lazy: async () => ({ Component: (await import("./pages/NewMarket.tsx")).NewMarketPage }) },
       { path: "/portfolio", lazy: async () => ({ Component: (await import("./pages/Portfolio.tsx")).PortfolioPage }) },
       { path: "/settlement", lazy: async () => ({ Component: (await import("./pages/Settlement.tsx")).SettlementPage }) },
       { path: "/liquidations", lazy: async () => ({ Component: (await import("./pages/Liquidations.tsx")).LiquidationsPage }) },

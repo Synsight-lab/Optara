@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { ArrowRight, BookOpen, CheckCircle2, ChevronRight, HelpCircle, ShieldCheck, Sparkles, TrendingDown, TrendingUp, X } from "lucide-react";
-import { useQuickGuide, useTradingMode } from "../state.tsx";
+import { useQuickGuide } from "../state.tsx";
 import { cx } from "./ui.tsx";
 
 export function OnboardingModal() {
   const { isOpen, close } = useQuickGuide();
-  const { setMode } = useTradingMode();
   const [activeTab, setActiveTab] = useState<"basics" | "calls-puts" | "buyer-safety" | "simulator">("basics");
   const [simPrice, setSimPrice] = useState(3400);
 
@@ -19,41 +18,34 @@ export function OnboardingModal() {
   const roi = ((netProfit / premium) * 100).toFixed(0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
       <div
-        className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-line bg-surface p-6 shadow-2xl sm:p-8"
+        className="ticket relative max-h-[88vh] w-full max-w-2xl overflow-y-auto p-5 sm:p-7"
         role="dialog"
         aria-modal="true"
         aria-labelledby="guide-title"
       >
-        {/* Glow decorations */}
-        <div className="pointer-events-none absolute -left-20 -top-20 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-20 -bottom-20 h-56 w-56 rounded-full bg-accent/20 blur-3xl" />
-
-        {/* Close Button */}
         <button
           onClick={close}
-          className="absolute right-5 top-5 rounded-full p-2 text-muted hover:bg-surface-2 hover:text-ink transition"
+          className="absolute right-4 top-4 rounded-full p-2 text-muted transition hover:bg-surface-2 hover:text-ink cursor-pointer"
           aria-label="Close guide"
         >
           <X className="h-5 w-5" />
         </button>
 
-        {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-            <Sparkles className="h-5 w-5" />
+          <div className="font-display grid h-10 w-10 place-items-center rounded-2xl bg-primary text-lg font-bold text-white">
+            O
           </div>
           <div>
-            <h2 id="guide-title" className="text-xl font-bold tracking-tight">
-              Learn Options in 60 Seconds
+            <h2 id="guide-title" className="font-display text-xl font-bold tracking-tight">
+              Options in 60 seconds
             </h2>
-            <p className="text-xs text-muted">A beginner-friendly guide to trading options on Monad</p>
+            <p className="text-[13px] text-muted">Pick direction, pay once, settle in cash</p>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="mt-6 flex gap-2 border-b border-line pb-2 overflow-x-auto">
+        <div className="mt-5 flex gap-1.5 overflow-x-auto rounded-xl border border-line bg-surface-2/70 p-1 scrollbar-none">
           {[
             { id: "basics", label: "The Basics" },
             { id: "calls-puts", label: "Calls vs Puts" },
@@ -225,17 +217,16 @@ export function OnboardingModal() {
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <div className="text-xs text-muted flex items-center gap-1.5">
             <HelpCircle className="h-4 w-4 text-primary" />
-            Switch anytime between Simple & Pro modes.
+            No margin needed to buy. You only risk what you pay.
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => {
-                setMode("simple");
                 close();
               }}
               className="btn-primary text-xs"
             >
-              Start in Simple Mode <ArrowRight className="h-3.5 w-3.5 ml-1 inline" />
+              Start trading <ArrowRight className="h-3.5 w-3.5 ml-1 inline" />
             </button>
           </div>
         </div>

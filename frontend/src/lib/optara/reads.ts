@@ -69,9 +69,11 @@ async function listedSeries(): Promise<ListedSeries[]> {
 /** Every listed series, by expiry, type and strike. */
 export async function getSeriesList(): Promise<Series[]> {
   const listed = await listedSeries();
+  const order = new Map<Hex, number>(listed.map((s, i) => [s.seriesId.toLowerCase() as Hex, i]));
   const out = await Promise.all(
     listed.map(async (s) => ({
       id: s.seriesId,
+      listedAt: order.get(s.seriesId.toLowerCase() as Hex),
       groupId: s.groupId,
       productId: s.productId,
       underlying: s.underlying,

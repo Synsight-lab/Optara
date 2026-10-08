@@ -38,11 +38,11 @@ export function availability(action: ActionKey, c: ActionContext): Availability 
   switch (action) {
     case "buy":
       if (!active) return no("This option has expired.");
-      if (!c.marketTradable) return no("No Kuru market for this option yet.");
+      if (!c.marketTradable) return no("No order book for this option yet.");
       return { enabled: true };
     case "sell":
       if (!active) return no("This option has expired.");
-      if (!c.marketTradable) return no("No Kuru market for this option yet.");
+      if (!c.marketTradable) return no("No order book for this option yet.");
       if (c.walletWrappers === 0n) return no("You don't hold any of these option tokens.");
       return { enabled: true };
     case "write":
