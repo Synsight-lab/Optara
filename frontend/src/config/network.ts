@@ -34,7 +34,8 @@ const DEFAULT_RPC: Record<number, string> = {
 
 export const RPC_URL: string = (env.VITE_RPC_URL as string | undefined) ?? DEFAULT_RPC[MANIFEST.chainId] ?? "";
 export const CHAIN: Chain = chainFor(MANIFEST.chainId, RPC_URL);
-export const IS_LOCAL = MANIFEST.chainId === 31337;
+const LOCAL_RPC = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(RPC_URL);
+export const IS_LOCAL = MANIFEST.chainId === 31337 || (NETWORK === "local" && LOCAL_RPC);
 export const PUBLISHER_URL: string = (env.VITE_PUBLISHER_URL as string | undefined) ?? (IS_LOCAL ? "http://127.0.0.1:8790" : "");
 export const INDEXER_URL: string | undefined = (env.VITE_INDEXER_URL as string | undefined) || undefined;
 export const EXPLORER_URL: string | undefined =

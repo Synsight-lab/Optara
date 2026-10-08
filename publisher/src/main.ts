@@ -55,15 +55,29 @@ async function main() {
     );
   } else {
     const e = manifest.extra as Record<string, any>;
-    if (!e.ethUsdcProductId) throw new Error("PRODUCTS is required outside the local stack");
-    products = [{ symbol: "ETH/USDC", underlying: e.weth, settlementAsset: e.usdc, productId: e.ethUsdcProductId, inputs: inputsFrom("synthetic:0.6") }];
+    if (e.productIds) {
+      products = (e.productIds as Hex[]).map((productId, i) => {
+        const symbol = `${(e.productSymbols as string[])[i]}/${(e.productAssetSymbols as string[])[i]}`;
+        const baseIv = (e.productSymbols as string[])[i] === "MON" ? "1.1" : (e.productSymbols as string[])[i] === "BTC" ? "0.55" : "0.6";
+        return {
+          symbol,
+          underlying: (e.productUnderlyings as Hex[])[i]!,
+          settlementAsset: (e.productSettlementAssets as Hex[])[i]!,
+          productId,
+          inputs: inputsFrom(`synthetic:${baseIv}`),
+        };
+      });
+    } else {
+      if (!e.ethUsdcProductId) throw new Error("PRODUCTS is required outside the local stack");
+      products = [{ symbol: "ETH/USDC", underlying: e.weth, settlementAsset: e.usdc, productId: e.ethUsdcProductId, inputs: inputsFrom("synthetic:0.6") }];
+    }
   }
 
   const spotKind = process.env.SPOT_SOURCE ?? (manifest.chainId === 31337 ? "restamp" : "hermes");
   const spot: SpotSource =
     spotKind === "restamp"
       ? new RestampMockPythSource(client, (manifest.extra as any).pyth)
-      : new HermesSource({ endpoint: env("HERMES_URL", "https://hermes.pyth.network"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+      : new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
 
   const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
   const catalog = new SeriesCatalog(client, registry, BigInt(manifest.deployedAtBlock), BigInt(process.env.LOG_CHUNK ?? "100"));

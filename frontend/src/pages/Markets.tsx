@@ -39,39 +39,81 @@ export function MarketsPage() {
   if (!product) return <Card><EmptyState title="No markets listed yet" body="Be the first to list one." action={<Link to="/new" className="btn-primary mt-3 text-xs">New market</Link>} /></Card>;
 
   return (
-    <div className="space-y-3">
-      <MarketHero product={product} />
+    <div className="space-y-4">
+      <LandingHero products={products} seriesCount={series?.length ?? 0} />
 
-      {products.length > 1 && (
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
-          {products.map((p) => (
-            <button
-              key={p.productId}
-              onClick={() => setProductId(p.productId)}
-              className={cx("flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-2xl border px-3 text-[13px] font-semibold cursor-pointer", p.productId === product.productId ? "border-primary/50 bg-primary-soft text-primary" : "border-line bg-surface text-muted")}
-            >
-              <TokenIcon symbol={p.underlyingSymbol} className="h-4 w-4" />
-              {p.underlyingSymbol}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
+        <aside className="space-y-3 lg:sticky lg:top-[84px]">
+          <MarketHero product={product} />
 
-      <div className="grid grid-cols-3 gap-1.5">
-        <IntentButton active={intent === "call"} onClick={() => setIntent("call")} tone="up" icon={<TrendingUp className="h-4 w-4" />} title="Up" sub="Calls" />
-        <IntentButton active={intent === "put"} onClick={() => setIntent("put")} tone="down" icon={<TrendingDown className="h-4 w-4" />} title="Down" sub="Puts" />
-        <IntentButton active={intent === "earn"} onClick={() => setIntent("earn")} tone="earn" icon={<Coins className="h-4 w-4" />} title="Earn" sub="Write" />
+          {products.length > 1 && (
+            <div className="card p-2">
+              <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-1">
+                {products.map((p) => (
+                  <button
+                    key={p.productId}
+                    onClick={() => setProductId(p.productId)}
+                    className={cx("flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border px-3 text-[13px] font-semibold cursor-pointer", p.productId === product.productId ? "border-primary/50 bg-primary-soft text-primary" : "border-line bg-surface text-muted")}
+                  >
+                    <TokenIcon symbol={p.underlyingSymbol} className="h-4 w-4" />
+                    <span>{p.underlyingSymbol}/{p.assetSymbol}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-1">
+            <IntentButton active={intent === "call"} onClick={() => setIntent("call")} tone="up" icon={<TrendingUp className="h-4 w-4" />} title="Up" sub="Calls" />
+            <IntentButton active={intent === "put"} onClick={() => setIntent("put")} tone="down" icon={<TrendingDown className="h-4 w-4" />} title="Down" sub="Puts" />
+            <IntentButton active={intent === "earn"} onClick={() => setIntent("earn")} tone="earn" icon={<Coins className="h-4 w-4" />} title="Earn" sub="Write" />
+          </div>
+        </aside>
+
+        <MarketList
+          product={product}
+          all={all}
+          now={now}
+          intent={intent}
+          query={query}
+          onQuery={setQuery}
+          onGuide={openGuide}
+        />
       </div>
+    </div>
+  );
+}
 
-      <MarketList
-        product={product}
-        all={all}
-        now={now}
-        intent={intent}
-        query={query}
-        onQuery={setQuery}
-        onGuide={openGuide}
-      />
+function LandingHero({ products, seriesCount }: { products: Series[]; seriesCount: number }) {
+  return (
+    <section className="overflow-hidden rounded-[22px] border border-line bg-surface/80 p-4 shadow-ticket md:p-6">
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_360px] md:items-end">
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
+            Live fork simulation
+          </div>
+          <h1 className="font-display max-w-2xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+            Trade listed option markets across MON, ETH and BTC
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted md:text-base">
+            Fresh one-hour contracts sit beside weekly expiries, with mock Kuru books quoted against the local fork.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <Metric label="Products" value={products.length.toString()} />
+          <Metric label="Series" value={seriesCount.toString()} />
+          <Metric label="Expiry" value="1h" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface-2 p-3">
+      <div className="text-[11px] font-semibold uppercase text-faint">{label}</div>
+      <div className="font-display mt-1 text-2xl font-bold">{value}</div>
     </div>
   );
 }
@@ -99,7 +141,7 @@ function MarketHero({ product }: { product: Series }) {
         </div>
         <div className="text-right">
           <div className="text-[11px] text-muted">Spot</div>
-          <div className="num font-display text-[26px] font-bold leading-none tracking-tight">{m ? `$${fmtWad(m.spotWad, 0)}` : <Skeleton className="h-7 w-20" />}</div>
+          <div className="num font-display text-[26px] font-bold leading-none tracking-tight">{m ? fmtSpot(product.underlyingSymbol, m.spotWad) : <Skeleton className="h-7 w-20" />}</div>
         </div>
         <Link to="/new" aria-label="List a new market" title="List a new market" className="btn-ghost !px-2.5 !py-2 shrink-0">
           <Plus className="h-4 w-4" />
@@ -112,6 +154,11 @@ function MarketHero({ product }: { product: Series }) {
       </div>
     </section>
   );
+}
+
+function fmtSpot(symbol: string, wad: bigint) {
+  const decimals = symbol === "MON" ? 4 : 0;
+  return `$${fmtWad(wad, decimals)}`;
 }
 
 function premiumOf(mk: { mark?: bigint; quote?: { ask?: bigint; bid?: bigint } } | undefined, intent: Intent): bigint | undefined {
@@ -393,7 +440,7 @@ function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Serie
       <button onClick={onOpen} className="flex min-h-[68px] w-full items-center gap-2.5 rounded-2xl px-2.5 py-2.5 text-left transition active:scale-[0.99] hover:bg-primary-soft/50 cursor-pointer">
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className={cx("num font-display text-[17px] font-bold tracking-tight", expired && "text-muted")}>${fmtWad(s.strikeWad, 0)}</span>
+            <span className={cx("num font-display text-[17px] font-bold tracking-tight", expired && "text-muted")}>${fmtWad(s.strikeWad, s.underlyingSymbol === "MON" ? 4 : 0)}</span>
             {expired && <span className="pill border border-line bg-surface-2 text-muted !text-[11px]">Expired</span>}
             {held && !expired && <span className="pill bg-primary-soft text-primary !text-[11px]">Yours</span>}
             {away !== undefined && (
@@ -404,7 +451,7 @@ function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Serie
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted">
             {seriesName(s)}
-            {breakeven !== undefined ? ` · BE $${Math.round(breakeven).toLocaleString()}` : ""}
+            {breakeven !== undefined ? ` · BE $${s.underlyingSymbol === "MON" ? breakeven.toFixed(4) : Math.round(breakeven).toLocaleString()}` : ""}
             {itm && !expired ? " · ITM" : ""}
           </span>
         </span>

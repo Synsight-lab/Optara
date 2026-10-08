@@ -56,6 +56,9 @@ contract RehearsalSmoke is LocalMarketData {
             underlying: vm.parseJsonAddress(listing, ".underlying"),
             asset: address(s.usdc),
             pythFeed: bytes32(0),
+            pythQuoteFeed: bytes32(0),
+            pythBasePriceWad: 0,
+            pythQuotePriceWad: 0,
             keyA: vm.deriveKey(MNEMONIC, 2),
             keyB: vm.deriveKey(MNEMONIC, 3)
         });

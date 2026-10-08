@@ -46,6 +46,14 @@ export function Layout() {
           </Link>
 
           <div className="ml-auto flex items-center gap-1.5">
+            <div className="hidden items-center gap-1 md:flex">
+              <DesktopNav to="/" label="Markets" />
+              <DesktopNav to="/trade" label="Trade" />
+              <DesktopNav to="/portfolio" label="Portfolio" />
+              <DesktopNav to="/settlement" label="Settle" />
+              <DesktopNav to="/liquidations" label="Liquidations" />
+              <DesktopNav to="/system" label="System" />
+            </div>
             <SpotPill />
             <button
               className="rounded-xl border border-line p-2 text-muted transition hover:text-ink cursor-pointer"
@@ -60,12 +68,12 @@ export function Layout() {
       </header>
 
       {/* Single app column — phone-like on every screen */}
-      <main className="app-column w-full flex-1 pb-28 pt-3 sm:pt-4">
+      <main className="app-column w-full flex-1 pb-28 pt-3 sm:pt-4 md:pb-8 md:pt-6">
         <Outlet />
       </main>
 
       {/* Bottom tab bar — always visible, app-style */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 backdrop-blur-2xl safe-area-pb" aria-label="App">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 backdrop-blur-2xl safe-area-pb md:hidden" aria-label="App">
         <div className="app-column grid grid-cols-5 items-end px-1 pb-1 pt-1.5">
           <MobileTab to="/" label="Markets" icon={Compass} />
           <MobileTab to="/portfolio" label="Portfolio" icon={PieChart} />
@@ -111,6 +119,20 @@ export function Layout() {
       <OnboardingModal />
       <Toaster />
     </div>
+  );
+}
+
+function DesktopNav({ to, label }: { to: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === "/"}
+      className={({ isActive }) =>
+        cx("rounded-xl px-3 py-2 text-[13px] font-semibold transition", isActive ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-ink")
+      }
+    >
+      {label}
+    </NavLink>
   );
 }
 

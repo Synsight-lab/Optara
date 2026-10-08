@@ -105,7 +105,7 @@ body {
   font-feature-settings: "tnum";
 }
 
-/* ---------- app shell: one phone-like column on every screen ---------- */
+/* ---------- app shell ---------- */
 
 .app-shell {
   background:
@@ -152,16 +152,8 @@ body {
 
 @media (min-width: 768px) {
   .app-column {
-    max-width: 460px;
-    padding-inline: 16px;
-  }
-  .app-shell main.app-column {
-    border-inline: 1px solid var(--line);
-    background: rgb(255 255 255 / 0.012);
-    min-height: calc(100vh - 60px);
-  }
-  :root[data-theme="light"] .app-shell main.app-column {
-    background: #faf9f5;
+    max-width: 1200px;
+    padding-inline: 24px;
   }
 }
 

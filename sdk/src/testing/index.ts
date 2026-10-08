@@ -19,6 +19,7 @@ import { loadManifest, DEPLOYMENTS_DIR } from "../node.ts";
 export const ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
 export const CONTRACT_DIR = fileURLToPath(new URL("../../../contract", import.meta.url));
 const STATE_DIR = join(CONTRACT_DIR, "cache", "services-e2e");
+const zeroFeedId = `0x${"0".repeat(64)}` as Hex;
 
 /** Local stack accounts (LocalStack.s.sol): 0 deployer + treasury, 1 governance + admins, 2/3 publishers, 4 keeper, 5–9 users. */
 export const stackAccount = (index: number): LocalAccount => mnemonicToAccount(ANVIL_MNEMONIC, { addressIndex: index });
@@ -88,7 +89,7 @@ export function forgeScript(script: string, rpcUrl: string, env: Record<string, 
   return execFileSync(
     "forge",
     ["script", script, "--rpc-url", rpcUrl, "--broadcast", "--disable-code-size-limit", "-q"],
-    { cwd: CONTRACT_DIR, env: { ...process.env, ...env, FOUNDRY_DISABLE_NIGHTLY_WARNING: "1" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: CONTRACT_DIR, env: { ...process.env, ...env, FOUNDRY_DISABLE_NIGHTLY_WARNING: "1", RUST_LOG: "error" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
 }
 
@@ -184,22 +185,58 @@ declare module "vitest" {
 }
 
 /** The ETH/USDC listing of the local stack (`extra` of its manifest). */
-export function stackProduct(m: Manifest) {
+export function stackProducts(m: Manifest) {
   const e = m.extra as Record<string, any>;
-  return {
-    productId: e.ethUsdcProductId as Hex,
-    weth: e.weth as Hex,
-    usdc: e.usdc as Hex,
-    pyth: e.pyth as Hex,
-    pythFeedId: e.ethUsdcPythFeedId as Hex,
-    settlementFeed: e.ethUsdcSettlementFeed as Hex,
-    settlementConfigId: e.ethUsdcSettlementConfigId as Hex,
-    riskSetId: e.ethUsdcRiskSetId as Hex,
-    kuruRouter: e.kuruRouter as Hex,
-    expiries: (e.expiries as number[]).map(BigInt),
-    seriesIds: e.seriesIds as Hex[],
-    kuruBooks: e.kuruBooks as Hex[],
-  };
+  const allExpiries = (e.expiries as number[]).map(BigInt);
+  if (e.productIds) {
+    const starts = e.productSeriesStarts as number[];
+    return (e.productIds as Hex[]).map((productId, i) => ({
+      productId,
+      underlyingSymbol: (e.productSymbols as string[])[i]!,
+      assetSymbol: (e.productAssetSymbols as string[])[i]!,
+      underlying: (e.productUnderlyings as Hex[])[i]!,
+      settlementAsset: (e.productSettlementAssets as Hex[])[i]!,
+      weth: e.weth as Hex,
+      usdc: e.usdc as Hex,
+      pyth: e.pyth as Hex,
+      pythFeedId: (e.productPythFeedIds as Hex[])[i]!,
+      pythQuoteFeedId: ((e.productPythQuoteFeedIds as Hex[] | undefined)?.[i] ?? zeroFeedId) as Hex,
+      settlementFeed: (e.productSettlementFeeds as Hex[])[i]!,
+      settlementConfigId: (e.productSettlementConfigIds as Hex[])[i]!,
+      riskSetId: (e.productRiskSetIds as Hex[])[i]!,
+      kuruRouter: e.kuruRouter as Hex,
+      expiries: allExpiries,
+      seriesIds: (e.seriesIds as Hex[]).slice(starts[i]!, starts[i + 1]!),
+      kuruBooks: (e.kuruBooks as Hex[]).slice(starts[i]!, starts[i + 1]!),
+      spotWad: BigInt((e.productSpotWads as string[] | number[] | bigint[])[i]!),
+    }));
+  }
+  return [
+    {
+      productId: e.ethUsdcProductId as Hex,
+      underlyingSymbol: "ETH",
+      assetSymbol: "USDC",
+      underlying: e.weth as Hex,
+      settlementAsset: e.usdc as Hex,
+      weth: e.weth as Hex,
+      usdc: e.usdc as Hex,
+      pyth: e.pyth as Hex,
+      pythFeedId: e.ethUsdcPythFeedId as Hex,
+      pythQuoteFeedId: (e.ethUsdcPythQuoteFeedId ?? zeroFeedId) as Hex,
+      settlementFeed: e.ethUsdcSettlementFeed as Hex,
+      settlementConfigId: e.ethUsdcSettlementConfigId as Hex,
+      riskSetId: e.ethUsdcRiskSetId as Hex,
+      kuruRouter: e.kuruRouter as Hex,
+      expiries: allExpiries,
+      seriesIds: e.seriesIds as Hex[],
+      kuruBooks: e.kuruBooks as Hex[],
+      spotWad: 4000n * 10n ** 18n,
+    },
+  ];
+}
+
+export function stackProduct(m: Manifest) {
+  return stackProducts(m)[0]!;
 }
 export * from "./actions.ts";
 

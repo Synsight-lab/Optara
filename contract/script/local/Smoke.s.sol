@@ -124,6 +124,9 @@ contract Smoke is LocalMarketData {
             underlying: vm.parseJsonAddress(json, ".extra.weth"),
             asset: address(s.usdc),
             pythFeed: vm.parseJsonBytes32(json, ".extra.ethUsdcPythFeedId"),
+            pythQuoteFeed: vm.parseJsonBytes32Array(json, ".extra.productPythQuoteFeedIds")[0],
+            pythBasePriceWad: 0,
+            pythQuotePriceWad: 1e18,
             keyA: vm.deriveKey(MNEMONIC, 2),
             keyB: vm.deriveKey(MNEMONIC, 3)
         });

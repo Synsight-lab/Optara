@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "pnpm --filter @optara/frontend devnet",
+    "dev:fork": "DEVNET_FORK=1 pnpm --filter @optara/frontend devnet",
+    "kill:devnet": "bash scripts/kill-devnet.sh",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
   }

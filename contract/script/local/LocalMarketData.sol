@@ -21,6 +21,9 @@ abstract contract LocalMarketData is Script {
         address underlying;
         address asset;
         bytes32 pythFeed;
+        bytes32 pythQuoteFeed;
+        uint256 pythBasePriceWad;
+        uint256 pythQuotePriceWad;
         uint256 keyA; // publisher A (independent)
         uint256 keyB; // publisher B
     }
@@ -42,15 +45,41 @@ abstract contract LocalMarketData is Script {
         e[1] = uint64(friday + 7 days);
     }
 
+    /// @dev A near-expiry playground market plus the two regular weekly expiries. The product min is 1 hour, so the
+    ///      local "1h" playground keeps a small buffer for broadcast time.
+    function _localExpiries() internal view returns (uint64[] memory e) {
+        uint64[] memory weekly = _weeklyExpiries();
+        uint256 near = vm.envOr("LOCAL_NEAR_EXPIRY_SECONDS", uint256(75 minutes));
+        if (near <= 1 hours) near = 65 minutes;
+        e = new uint64[](3);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        e[0] = uint64(vm.envOr("LOCAL_EXPIRY_0", block.timestamp + near));
+        // forge-lint: disable-next-line(unsafe-typecast)
+        e[1] = uint64(vm.envOr("LOCAL_EXPIRY_1", uint256(weekly[0])));
+        // forge-lint: disable-next-line(unsafe-typecast)
+        e[2] = uint64(vm.envOr("LOCAL_EXPIRY_2", uint256(weekly[1])));
+    }
+
     /// @dev A MockPyth blob at `price` plus a signed flat-`iv` surface.
     function _oracleUpdate(Market memory m, uint256 price, uint256 iv, uint64[] memory tenors, uint64 seq)
         internal
         view
         returns (OracleUpdate memory u)
     {
-        bytes[] memory spot = new bytes[](1);
+        bytes[] memory spot = new bytes[](m.pythQuoteFeed == 0 ? 1 : 2);
         // forge-lint: disable-next-line(unsafe-typecast)
-        spot[0] = MockPyth(m.pyth).encode(m.pythFeed, int64(int256(price / 1e10)), -8, block.timestamp);
+        spot[0] = MockPyth(m.pyth)
+            .encode(
+                m.pythFeed,
+                int64(int256((m.pythBasePriceWad == 0 ? price : m.pythBasePriceWad) / 1e10)),
+                -8,
+                block.timestamp
+            );
+        if (m.pythQuoteFeed != 0) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            spot[1] = MockPyth(m.pyth)
+                .encode(m.pythQuoteFeed, int64(int256(m.pythQuotePriceWad / 1e10)), -8, block.timestamp);
+        }
         u = _surfaceUpdate(m, spot, price, iv, tenors, seq);
     }
 

@@ -6,8 +6,8 @@ import { decodeRevert } from "../errors.ts";
 import { withGasBuffer } from "../chain.ts";
 import { MockPythSource } from "../pyth.ts";
 import { assembleReport, signReport, sortSignatures } from "../surface.ts";
-import { toWad, totalVarianceFromIv, yearsBetween } from "../math.ts";
-import { stackAccount, stackProduct, type LocalStack } from "./index.ts";
+import { ivFromTotalVariance, toWad, totalVarianceFromIv, yearsBetween } from "../math.ts";
+import { stackAccount, stackProduct, stackProducts, type LocalStack } from "./index.ts";
 
 /**
  * Sends a transaction (gas: estimate plus `withGasBuffer`) and waits for it; throws with the decoded revert reason.
@@ -42,7 +42,11 @@ export const spotFee = (s: LocalStack, u: OracleUpdate) =>
 /** Creates a USDC subaccount for stack account `user`; the id comes from the transaction's own event (race-free). */
 export async function createAccount(s: LocalStack, user: number): Promise<bigint> {
   const p = stackProduct(s.manifest);
-  const { receipt } = await send(s, stackAccount(user), { address: s.manifest.proxies.SubAccounts.proxy, abi: subAccountsAbi, functionName: "createSubAccount", args: [p.usdc] });
+  return createAccountForAsset(s, user, p.usdc);
+}
+
+export async function createAccountForAsset(s: LocalStack, user: number, asset: Address): Promise<bigint> {
+  const { receipt } = await send(s, stackAccount(user), { address: s.manifest.proxies.SubAccounts.proxy, abi: subAccountsAbi, functionName: "createSubAccount", args: [asset] });
   const [created] = parseEventLogs({ abi: subAccountsAbi, eventName: "SubAccountCreated", logs: receipt.logs });
   if (!created) throw new Error("no SubAccountCreated");
   return created.args.accountId;
@@ -91,22 +95,50 @@ export async function pushOracles(s: LocalStack, from: number, u: OracleUpdate) 
  */
 export async function freshOracleUpdate(s: LocalStack, opts: { price: number; iv?: number; surface?: boolean }): Promise<OracleUpdate> {
   const p = stackProduct(s.manifest);
+  return freshOracleUpdateForProduct(s, p, opts);
+}
+
+const productSpotPrice = (p: ReturnType<typeof stackProducts>[number], price?: number) => price ?? Number(p.spotWad) / 1e18;
+const headerIv = (h: Awaited<ReturnType<LocalStack["test"]["readContract"]>>): number | undefined => {
+  const header = h as { surfaceSeq: bigint; validAfter: bigint; tenorTimestamps: readonly bigint[]; atmTotalVarianceByTenor: readonly bigint[] };
+  if (header.surfaceSeq === 0n) return undefined;
+  const i = header.tenorTimestamps.findIndex((t) => t > header.validAfter);
+  if (i < 0) return undefined;
+  const tau = yearsBetween(header.validAfter, header.tenorTimestamps[i]!);
+  if (tau <= 0) return undefined;
+  return ivFromTotalVariance(Number(header.atmTotalVarianceByTenor[i]!) / 1e18, tau);
+};
+
+export async function freshOracleUpdateForProduct(
+  s: LocalStack,
+  p: ReturnType<typeof stackProducts>[number],
+  opts: { price?: number; basePrice?: number; quotePrice?: number; iv?: number; surface?: boolean },
+): Promise<OracleUpdate> {
   const now = (await s.test.getBlock()).timestamp;
-  const spotUpdates = await new MockPythSource(() => opts.price, async () => now).updates([p.pythFeedId]);
+  const fallback = Number(p.spotWad) / 1e18;
+  const zeroFeed = `0x${"0".repeat(64)}`;
+  const feedIds = p.pythQuoteFeedId && p.pythQuoteFeedId !== zeroFeed ? [p.pythFeedId, p.pythQuoteFeedId] : [p.pythFeedId];
+  const spotUpdates = await new MockPythSource(
+    (feedId) => {
+      if (feedId === p.pythFeedId) return opts.basePrice ?? opts.price ?? fallback;
+      return opts.quotePrice ?? 1;
+    },
+    async () => now,
+  ).updates(feedIds);
   const u: OracleUpdate = { spotUpdates, spotProductIds: [p.productId], reports: [], reportSignatures: [], nodes: [] };
   if (opts.surface === false) return u;
   const surface = s.manifest.proxies.VolSurfaceOracle.proxy;
   const h = await s.test.readContract({ address: surface, abi: volSurfaceOracleAbi, functionName: "header", args: [p.productId] });
   const tenors = p.expiries.filter((t) => t > now);
   const kNodes = [-1.2, -0.6, -0.3, -0.1, 0, 0.1, 0.3, 0.6, 1.2].map(toWad);
-  const iv = opts.iv ?? 0.6;
+  const iv = opts.iv ?? headerIv(h) ?? 0.6;
   const w = tenors.map((t) => toWad(totalVarianceFromIv(iv, yearsBetween(now, t))));
   const { report, grid } = assembleReport({
     chainId: BigInt(s.manifest.chainId),
     verifyingContract: surface,
     productId: p.productId,
-    underlying: p.weth,
-    settlementAsset: p.usdc,
+    underlying: p.underlying,
+    settlementAsset: p.settlementAsset,
     seq: h.surfaceSeq + 1n,
     validAfter: now,
     lifetime: 900n,
@@ -138,27 +170,47 @@ const mintableAbi = [{ type: "function", name: "mint", stateMutability: "nonpaya
  * writes straight into the book (each mint with a fresh spot update at `price`). Returns the maker's account id.
  */
 export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint } = {}): Promise<bigint> {
-  const p = stackProduct(s.manifest);
+  const products = stackProducts(s.manifest);
   const px = s.manifest.proxies;
   const mm = stackAccount(0);
   const size = opts.size ?? 5n * 10n ** 18n;
   const spread = opts.spreadBps ?? 500n;
-  const indices = opts.indices ?? p.seriesIds.map((_, i) => i);
-  await send(s, mm, { address: p.usdc as Address, abi: mintableAbi, functionName: "mint", args: [mm.address, 3_000_000_000_000n] });
-  await send(s, mm, { address: p.usdc as Address, abi: erc20Abi, functionName: "approve", args: [px.OptionClearing.proxy, 2n ** 256n - 1n] });
-  const account = await createAccount(s, 0);
-  await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 2_000_000_000_000n] });
-  for (const i of indices) {
-    const id = p.seriesIds[i]! as Hex;
-    const book = p.kuruBooks[i]! as Address;
-    const [mid] = await s.test.readContract({ address: px.PortfolioRiskManager.proxy, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [id] });
-    const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
-    await send(s, mm, { address: p.usdc as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
-    const u = await freshOracleUpdate(s, { price: opts.price ?? 4000, surface: false });
-    await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
-    const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
-    await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
-    await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
+  const maxSeriesPerAccount = Number(
+    await s.test.readContract({ address: px.SubAccounts.proxy, abi: subAccountsAbi, functionName: "maxSeriesPerAccount" }),
+  );
+  const chunkSize = Math.max(1, maxSeriesPerAccount);
+  let firstAccount = 0n;
+  for (const p of products) {
+    const now = (await s.test.getBlock()).timestamp;
+    const livePrice = productSpotPrice(p, products.length === 1 ? opts.price : undefined);
+    const indices = (opts.indices ?? p.seriesIds.map((_, i) => i)).filter((i) => p.expiries[Math.floor(i / 8)]! > now);
+    if (indices.length === 0) continue;
+    await pushOracles(s, 4, await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false }));
+    await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "approve", args: [px.OptionClearing.proxy, 2n ** 256n - 1n] });
+    for (let start = 0; start < indices.length; start += chunkSize) {
+      const chunk = indices.slice(start, start + chunkSize);
+      await send(s, mm, { address: p.settlementAsset as Address, abi: mintableAbi, functionName: "mint", args: [mm.address, 150_000_000_000_000n] });
+      const account = await createAccountForAsset(s, 0, p.settlementAsset as Address);
+      if (firstAccount === 0n) firstAccount = account;
+      await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 100_000_000_000_000n] });
+      for (const i of chunk) {
+        const id = p.seriesIds[i]! as Hex;
+        const book = p.kuruBooks[i]! as Address;
+        let mid: bigint;
+        try {
+          [mid] = await s.test.readContract({ address: px.PortfolioRiskManager.proxy, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [id] });
+        } catch {
+          continue;
+        }
+        const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
+        await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
+        const u = await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false });
+        await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
+        const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
+        await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
+        await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
+      }
+    }
   }
-  return account;
+  return firstAccount;
 }

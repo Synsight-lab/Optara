@@ -17,9 +17,9 @@ import {MockKuruRouter, MockKuruOrderBook} from "../../test/mocks/MockVenues.sol
 
 /// @title LocalStack
 /// @notice A complete local environment on anvil (DEPLOYMENT.md §4.1) for the keepers, publisher, indexer and
-///         frontend: mock USDC/WETH, Pyth, a Chainlink-style ETH/USDC feed and Kuru; Optara deployed by the production
-///         code; ETH/USDC listed through the same calls a real network proposes (ListingCalls), reserves seeded by
-///         the treasury calls; weekly call and put series with Kuru books; a first spot price and signed surface;
+///         frontend: mock USDC/USDT, WETH/WMON/WBTC, Pyth, Chainlink-style settlement feeds and Kuru; Optara deployed by the production
+///         code; ETH, MON and BTC products listed through the same calls a real network proposes (ListingCalls), reserves seeded by
+///         the treasury calls; one-hour and weekly call/put series with Kuru books; a first spot price and signed surface;
 ///         funded test users. Writes `deployments/local.json` (`deployments/<NETWORK>.json` if `NETWORK` is set, as
 ///         the service test suites do so each gets its own manifest). `pnpm dev` (frontend) adds quotes and services.
 /// @dev `anvil` then `forge script script/local/LocalStack.s.sol --rpc-url http://127.0.0.1:8545 --broadcast`.
@@ -27,15 +27,55 @@ import {MockKuruRouter, MockKuruOrderBook} from "../../test/mocks/MockVenues.sol
 ///      2 and 3 publishers (2 independent), 4 keeper, 5–9 users. Never use these keys anywhere else.
 contract LocalStack is Manifest, ListingCalls, LocalMarketData {
     string internal constant MNEMONIC = "test test test test test test test test test test test junk";
-    bytes32 internal constant RISK_SET = keccak256("ETH/USDC default");
-    bytes32 internal constant ETH_FEED = keccak256("local pyth ETH/USDC");
+    bytes32 internal constant ETH_USDC_RISK_SET = keccak256("ETH/USDC default");
+    bytes32 internal constant ETH_USDT_RISK_SET = keccak256("ETH/USDT default");
+    bytes32 internal constant MON_USDC_RISK_SET = keccak256("MON/USDC default");
+    bytes32 internal constant BTC_USDC_RISK_SET = keccak256("BTC/USDC default");
+    bytes32 internal constant PYTH_ETH_USD = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace;
+    bytes32 internal constant PYTH_BTC_USD = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43;
+    bytes32 internal constant PYTH_MON_USD = 0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1;
+    bytes32 internal constant PYTH_USDC_USD = 0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a;
+    bytes32 internal constant PYTH_USDT_USD = 0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b;
 
     struct Mocks {
         MockERC20 usdc;
+        MockERC20 usdt;
         MockERC20 weth;
+        MockERC20 wmon;
+        MockERC20 wbtc;
         MockPyth pyth;
         MockAggregator ethFeed;
+        MockAggregator ethUsdtFeed;
+        MockAggregator monFeed;
+        MockAggregator btcFeed;
         MockKuruRouter kuru;
+    }
+
+    struct ProductPlan {
+        address underlying;
+        address asset;
+        MockAggregator settlementFeed;
+        string underlyingSymbol;
+        string assetSymbol;
+        bytes32 riskSetId;
+        bytes32 pythFeed;
+        bytes32 pythQuoteFeed;
+        uint256 pythBasePriceWad;
+        uint256 pythQuotePriceWad;
+        uint256 spotWad;
+        uint256 ivWad;
+        uint256 shortCapUnderlyingWad;
+        uint32 maxReportLifetime;
+        uint256[4] strikes;
+    }
+
+    struct ListedData {
+        bytes32[] productIds;
+        bytes32[] cfgIds;
+        bytes32[] ids;
+        address[] books;
+        uint256[] starts;
+        uint64[] expiries;
     }
 
     uint256[10] internal keys;
@@ -53,30 +93,35 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         Deployment memory d = _deploy(c);
         vm.stopBroadcast();
 
-        ListingParams memory p = _ethListing(m);
-        _send(keys[1], _listingCalls(d, p)); // governance + admins (all account 1 locally)
-        vm.broadcast(keys[0]);
-        m.usdc.mint(accts[0], p.insuranceSeed + p.keeperReserveMin);
-        _send(keys[0], _seedCalls(d, p)); // the treasury (account 0 locally)
+        ProductPlan[] memory products = _products(m);
+        for (uint256 i; i < products.length; ++i) {
+            ListingParams memory p = _listing(products[i], i == 0);
+            _send(keys[1], _listingCalls(d, p)); // governance + admins (all account 1 locally)
+            vm.broadcast(keys[0]);
+            MockERC20(p.asset).mint(accts[0], p.insuranceSeed + p.keeperReserveMin);
+            _send(keys[0], _seedCalls(d, p)); // the treasury (account 0 locally)
+        }
 
-        uint64[] memory expiries = _weeklyExpiries();
-        (bytes32[] memory ids, address[] memory books) = _listSeries(m, d, expiries);
-        bytes32 productId = d.registry.computeProductId(address(m.weth), address(m.usdc));
-        _publish(m, d, productId, expiries);
-        _fundUsers(m);
-
-        bytes32 cfgId = d.settlementOracle.computeConfigId(p.settlement);
-        _writeManifest(vm.envOr("NETWORK", string("local")), d, c, _extra(m, productId, cfgId, ids, books, expiries));
+        _listPublishFundAndWrite(m, d, c, products);
     }
 
     // ------------------------------------------------------------------ steps
 
     function _mocks() internal returns (Mocks memory m) {
         m.usdc = new MockERC20("USD Coin", "USDC", 6);
+        m.usdt = new MockERC20("Tether USD", "USDT", 6);
         m.weth = new MockERC20("Wrapped Ether", "WETH", 18);
+        m.wmon = new MockERC20("Wrapped Monad", "WMON", 18);
+        m.wbtc = new MockERC20("Wrapped Bitcoin", "WBTC", 18);
         m.pyth = new MockPyth();
         m.ethFeed = new MockAggregator(8);
-        m.ethFeed.pushRound(4000e8, block.timestamp);
+        m.ethUsdtFeed = new MockAggregator(8);
+        m.monFeed = new MockAggregator(8);
+        m.btcFeed = new MockAggregator(8);
+        m.ethFeed.pushRound(int256(_envPrice("LOCAL_ETH_PRICE_WAD", 4000e18) / 1e10), block.timestamp);
+        m.ethUsdtFeed.pushRound(int256(_envPrice("LOCAL_ETH_PRICE_WAD", 4000e18) / 1e10), block.timestamp);
+        m.monFeed.pushRound(int256(_envPrice("LOCAL_MON_PRICE_WAD", 30_000_000_000_000_000) / 1e10), block.timestamp);
+        m.btcFeed.pushRound(int256(_envPrice("LOCAL_BTC_PRICE_WAD", 100_000e18) / 1e10), block.timestamp);
         m.kuru = new MockKuruRouter();
     }
 
@@ -102,23 +147,114 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         });
     }
 
-    function _ethListing(Mocks memory m) internal view returns (ListingParams memory p) {
-        p.underlying = address(m.weth);
-        p.asset = address(m.usdc);
-        p.underlyingSymbol = "ETH";
-        p.assetSymbol = "USDC";
-        p.minStrikeWad = 100e18;
-        p.maxStrikeWad = 1_000_000e18;
-        p.maxReportLifetime = 900;
-        p.riskSetId = RISK_SET;
-        p.shortCapUnderlyingWad = 10_000e18;
-        p.pythBaseFeed = ETH_FEED;
+    function _envPrice(string memory key, uint256 fallbackPrice) internal view returns (uint256) {
+        uint256 p = vm.envOr(key, fallbackPrice);
+        return p == 0 ? fallbackPrice : p;
+    }
+
+    function _strikeGrid(uint256 spot) internal pure returns (uint256[4] memory strikes) {
+        strikes = [spot * 8 / 10, spot * 9 / 10, spot, spot * 11 / 10];
+    }
+
+    function _products(Mocks memory m) internal view returns (ProductPlan[] memory ps) {
+        ps = new ProductPlan[](4);
+        uint256 ethUsd = _envPrice("LOCAL_ETH_PRICE_WAD", 4000e18);
+        uint256 monUsd = _envPrice("LOCAL_MON_PRICE_WAD", 30_000_000_000_000_000);
+        uint256 btcUsd = _envPrice("LOCAL_BTC_PRICE_WAD", 100_000e18);
+        uint256 usdcUsd = _envPrice("LOCAL_USDC_PRICE_WAD", 1e18);
+        uint256 usdtUsd = _envPrice("LOCAL_USDT_PRICE_WAD", 1e18);
+        uint256 ethUsdc = ethUsd * 1e18 / usdcUsd;
+        uint256 ethUsdt = ethUsd * 1e18 / usdtUsd;
+        uint256 monUsdc = monUsd * 1e18 / usdcUsd;
+        uint256 btcUsdc = btcUsd * 1e18 / usdcUsd;
+        ps[0] = ProductPlan(
+            address(m.weth),
+            address(m.usdc),
+            m.ethFeed,
+            "ETH",
+            "USDC",
+            ETH_USDC_RISK_SET,
+            PYTH_ETH_USD,
+            PYTH_USDC_USD,
+            ethUsd,
+            usdcUsd,
+            ethUsdc,
+            0.6e18,
+            10_000e18,
+            900,
+            _strikeGrid(ethUsdc)
+        );
+        ps[1] = ProductPlan(
+            address(m.weth),
+            address(m.usdt),
+            m.ethUsdtFeed,
+            "ETH",
+            "USDT",
+            ETH_USDT_RISK_SET,
+            PYTH_ETH_USD,
+            PYTH_USDT_USD,
+            ethUsd,
+            usdtUsd,
+            ethUsdt,
+            0.6e18,
+            10_000e18,
+            900,
+            _strikeGrid(ethUsdt)
+        );
+        ps[2] = ProductPlan(
+            address(m.wmon),
+            address(m.usdc),
+            m.monFeed,
+            "MON",
+            "USDC",
+            MON_USDC_RISK_SET,
+            PYTH_MON_USD,
+            PYTH_USDC_USD,
+            monUsd,
+            usdcUsd,
+            monUsdc,
+            1.1e18,
+            10_000_000e18,
+            900,
+            _strikeGrid(monUsdc)
+        );
+        ps[3] = ProductPlan(
+            address(m.wbtc),
+            address(m.usdc),
+            m.btcFeed,
+            "BTC",
+            "USDC",
+            BTC_USDC_RISK_SET,
+            PYTH_BTC_USD,
+            PYTH_USDC_USD,
+            btcUsd,
+            usdcUsd,
+            btcUsdc,
+            0.55e18,
+            1_000e18,
+            900,
+            _strikeGrid(btcUsdc)
+        );
+    }
+
+    function _listing(ProductPlan memory plan, bool includePublishers) internal view returns (ListingParams memory p) {
+        p.underlying = plan.underlying;
+        p.asset = plan.asset;
+        p.underlyingSymbol = plan.underlyingSymbol;
+        p.assetSymbol = plan.assetSymbol;
+        p.minStrikeWad = plan.spotWad / 100;
+        p.maxStrikeWad = plan.spotWad * 100;
+        p.maxReportLifetime = plan.maxReportLifetime;
+        p.riskSetId = plan.riskSetId;
+        p.shortCapUnderlyingWad = plan.shortCapUnderlyingWad;
+        p.pythBaseFeed = plan.pythFeed;
+        p.pythQuoteFeed = plan.pythQuoteFeed;
         p.settlement = ISettlementOracle.SettlementOracleConfig({
-            underlying: address(m.weth),
-            settlementAsset: address(m.usdc),
+            underlying: plan.underlying,
+            settlementAsset: plan.asset,
             primary: ISettlementOracle.FeedSource({
                 kind: ISettlementOracle.FeedKind.DIRECT,
-                feed: address(m.ethFeed),
+                feed: address(plan.settlementFeed),
                 feedDecimals: 8,
                 quoteFeed: address(0),
                 quoteFeedDecimals: 0
@@ -136,10 +272,12 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             maxFinalizationDelay: 7 days,
             maxLegSkew: 0
         });
-        p.publishers = new address[](2);
-        p.independent = new bool[](2);
-        (p.publishers[0], p.publishers[1]) = (accts[2], accts[3]);
-        (p.independent[0], p.independent[1]) = (true, false);
+        p.publishers = new address[](includePublishers ? 2 : 0);
+        p.independent = new bool[](includePublishers ? 2 : 0);
+        if (includePublishers) {
+            (p.publishers[0], p.publishers[1]) = (accts[2], accts[3]);
+            (p.independent[0], p.independent[1]) = (true, false);
+        }
         p.minSellerFee = 0.1e6;
         p.insuranceSeed = 10_000e6;
         p.keeperReserveMin = 1_000e6;
@@ -163,37 +301,77 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         vm.stopBroadcast();
     }
 
-    function _listSeries(Mocks memory m, Deployment memory d, uint64[] memory expiries)
-        internal
-        returns (bytes32[] memory ids, address[] memory books)
-    {
-        uint256[4] memory strikes = [uint256(3500e18), 4000e18, 4500e18, 5000e18];
-        ids = new bytes32[](16);
-        books = new address[](16);
-        bytes32 kuru = d.kuruAdapter.VENUE_ID();
-        for (uint256 i; i < 16; ++i) {
-            SeriesParams memory sp = SeriesParams({
-                underlying: address(m.weth),
-                settlementAsset: address(m.usdc),
-                optionType: i % 2 == 0 ? OptionType.CALL : OptionType.PUT,
-                strikeWad: strikes[(i / 2) % 4],
-                contractSizeWad: 1e18,
-                expiry: expiries[i / 8],
-                settlementOracleConfigId: d.settlementOracle.computeConfigId(_ethListing(m).settlement),
-                volSurfaceProductId: d.registry.computeProductId(address(m.weth), address(m.usdc)),
-                riskParameterSetId: RISK_SET
-            });
-            vm.broadcast(keys[1]);
-            ids[i] = d.registry.createSeries(sp);
-            address w = d.registry.getSeries(ids[i]).wrapper;
-            vm.startBroadcast(keys[0]); // Kuru deploys the book (owner-gated on the real Kuru)
-            MockKuruOrderBook b = new MockKuruOrderBook(IERC20(w), IERC20(address(m.usdc)), 18, 6, 1e4, 1e16, 30);
-            m.kuru.setMarket(address(b), _kuruParams(w, address(m.usdc)));
-            vm.stopBroadcast();
-            books[i] = address(b);
-            vm.broadcast(keys[1]);
-            d.venues.registerMarket(kuru, address(b), ids[i], "");
+    function _listPublishFundAndWrite(
+        Mocks memory m,
+        Deployment memory d,
+        Config memory c,
+        ProductPlan[] memory products
+    ) internal {
+        ListedData memory listed;
+        listed.expiries = _localExpiries();
+        uint256 perProduct = listed.expiries.length * 8;
+        listed.ids = new bytes32[](products.length * perProduct);
+        listed.books = new address[](products.length * perProduct);
+        listed.starts = new uint256[](products.length + 1);
+        listed.productIds = new bytes32[](products.length);
+        listed.cfgIds = new bytes32[](products.length);
+        for (uint256 i; i < products.length; ++i) {
+            listed.starts[i] = i * perProduct;
+            listed.productIds[i] = d.registry.computeProductId(products[i].underlying, products[i].asset);
+            listed.cfgIds[i] = d.settlementOracle.computeConfigId(_listing(products[i], false).settlement);
+            _listSeries(d, products[i], listed.expiries, listed.ids, listed.books, listed.starts[i]);
+            _publish(m, d, products[i], listed.productIds[i], listed.expiries);
         }
+        listed.starts[products.length] = listed.ids.length;
+        _fundUsers(m);
+        _writeManifest(vm.envOr("NETWORK", string("local")), d, c, _extra(m, products, listed));
+    }
+
+    function _listSeries(
+        Deployment memory d,
+        ProductPlan memory plan,
+        uint64[] memory expiries,
+        bytes32[] memory ids,
+        address[] memory books,
+        uint256 offset
+    ) internal {
+        bytes32 kuru = d.kuruAdapter.VENUE_ID();
+        for (uint256 i; i < expiries.length * 8; ++i) {
+            (ids[offset + i], books[offset + i]) = _createSeriesBook(
+                d, plan, kuru, expiries[i / 8], i % 2 == 0 ? OptionType.CALL : OptionType.PUT, plan.strikes[(i / 2) % 4]
+            );
+        }
+    }
+
+    function _createSeriesBook(
+        Deployment memory d,
+        ProductPlan memory plan,
+        bytes32 kuru,
+        uint64 expiry,
+        OptionType optionType,
+        uint256 strike
+    ) internal returns (bytes32 id, address book) {
+        SeriesParams memory sp = SeriesParams({
+            underlying: plan.underlying,
+            settlementAsset: plan.asset,
+            optionType: optionType,
+            strikeWad: strike,
+            contractSizeWad: 1e18,
+            expiry: expiry,
+            settlementOracleConfigId: d.settlementOracle.computeConfigId(_listing(plan, false).settlement),
+            volSurfaceProductId: d.registry.computeProductId(plan.underlying, plan.asset),
+            riskParameterSetId: plan.riskSetId
+        });
+        vm.broadcast(keys[1]);
+        id = d.registry.createSeries(sp);
+        address w = d.registry.getSeries(id).wrapper;
+        vm.startBroadcast(keys[0]); // Kuru deploys the book (owner-gated on the real Kuru)
+        MockKuruOrderBook b = new MockKuruOrderBook(IERC20(w), IERC20(plan.asset), 18, 6, 1e4, 1e16, 30);
+        MockKuruRouter(address(d.kuruAdapter.kuruRouter())).setMarket(address(b), _kuruParams(w, plan.asset));
+        vm.stopBroadcast();
+        book = address(b);
+        vm.broadcast(keys[1]);
+        d.venues.registerMarket(kuru, book, id, "");
     }
 
     function _kuruParams(address base, address quote) internal pure returns (IKuruRouter.MarketParams memory) {
@@ -212,19 +390,28 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         });
     }
 
-    /// @dev A first spot price (4,000) and a signed 60%-IV surface whose tenors are the two expiries.
-    function _publish(Mocks memory m, Deployment memory d, bytes32 productId, uint64[] memory tenors) internal {
+    /// @dev A first spot price and a signed flat-IV surface whose tenors are the listed expiries.
+    function _publish(
+        Mocks memory m,
+        Deployment memory d,
+        ProductPlan memory plan,
+        bytes32 productId,
+        uint64[] memory tenors
+    ) internal {
         Market memory mk = Market({
             pyth: address(m.pyth),
             surface: IVolSurfaceOracle(address(d.surface)),
             productId: productId,
-            underlying: address(m.weth),
-            asset: address(m.usdc),
-            pythFeed: ETH_FEED,
+            underlying: plan.underlying,
+            asset: plan.asset,
+            pythFeed: plan.pythFeed,
+            pythQuoteFeed: plan.pythQuoteFeed,
+            pythBasePriceWad: plan.pythBasePriceWad,
+            pythQuotePriceWad: plan.pythQuotePriceWad,
             keyA: keys[2],
             keyB: keys[3]
         });
-        OracleUpdate memory u = _oracleUpdate(mk, 4000e18, 0.6e18, tenors, 1);
+        OracleUpdate memory u = _oracleUpdate(mk, plan.spotWad, plan.ivWad, tenors, 1);
         uint256 fee = m.pyth.getUpdateFee(u.spotUpdates);
         vm.broadcast(keys[4]); // the keeper submits it
         d.clearing.updateOracles{value: fee}(u);
@@ -234,30 +421,33 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         vm.startBroadcast(keys[0]);
         for (uint256 i = 5; i < 10; ++i) {
             m.usdc.mint(accts[i], 100_000e6);
+            m.usdt.mint(accts[i], 100_000e6);
         }
         vm.stopBroadcast();
     }
 
     // ------------------------------------------------------------------ manifest extras
 
-    function _extra(
-        Mocks memory m,
-        bytes32 productId,
-        bytes32 cfgId,
-        bytes32[] memory ids,
-        address[] memory books,
-        uint64[] memory expiries
-    ) internal returns (string memory) {
+    function _extra(Mocks memory m, ProductPlan[] memory products, ListedData memory listed)
+        internal
+        returns (string memory)
+    {
         string memory k = "extra";
         vm.serializeAddress(k, "usdc", address(m.usdc));
+        vm.serializeAddress(k, "usdt", address(m.usdt));
         vm.serializeAddress(k, "weth", address(m.weth));
+        vm.serializeAddress(k, "wmon", address(m.wmon));
+        vm.serializeAddress(k, "wbtc", address(m.wbtc));
         vm.serializeAddress(k, "pyth", address(m.pyth));
         vm.serializeAddress(k, "ethUsdcSettlementFeed", address(m.ethFeed));
+        vm.serializeAddress(k, "ethUsdtSettlementFeed", address(m.ethUsdtFeed));
+        vm.serializeAddress(k, "monUsdcSettlementFeed", address(m.monFeed));
+        vm.serializeAddress(k, "btcUsdcSettlementFeed", address(m.btcFeed));
         vm.serializeAddress(k, "kuruRouter", address(m.kuru));
-        vm.serializeBytes32(k, "ethUsdcProductId", productId);
-        vm.serializeBytes32(k, "ethUsdcPythFeedId", ETH_FEED);
-        vm.serializeBytes32(k, "ethUsdcSettlementConfigId", cfgId);
-        vm.serializeBytes32(k, "ethUsdcRiskSetId", RISK_SET);
+        vm.serializeBytes32(k, "ethUsdcProductId", listed.productIds[0]);
+        vm.serializeBytes32(k, "ethUsdcPythFeedId", PYTH_ETH_USD);
+        vm.serializeBytes32(k, "ethUsdcSettlementConfigId", listed.cfgIds[0]);
+        vm.serializeBytes32(k, "ethUsdcRiskSetId", ETH_USDC_RISK_SET);
         vm.serializeAddress(k, "governance", accts[1]);
         vm.serializeAddress(k, "publisherA", accts[2]);
         vm.serializeAddress(k, "publisherB", accts[3]);
@@ -267,12 +457,48 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             users[i] = accts[5 + i];
         }
         vm.serializeAddress(k, "users", users);
-        uint256[] memory exp = new uint256[](expiries.length);
-        for (uint256 i; i < expiries.length; ++i) {
-            exp[i] = expiries[i];
+        uint256[] memory exp = new uint256[](listed.expiries.length);
+        for (uint256 i; i < listed.expiries.length; ++i) {
+            exp[i] = listed.expiries[i];
         }
+        _serializeProducts(k, products, listed);
         vm.serializeUint(k, "expiries", exp);
-        vm.serializeBytes32(k, "seriesIds", ids);
-        return vm.serializeAddress(k, "kuruBooks", books);
+        vm.serializeBytes32(k, "seriesIds", listed.ids);
+        return vm.serializeAddress(k, "kuruBooks", listed.books);
+    }
+
+    function _serializeProducts(string memory k, ProductPlan[] memory products, ListedData memory listed) internal {
+        string[] memory symbols = new string[](products.length);
+        string[] memory assetSymbols = new string[](products.length);
+        address[] memory underlyings = new address[](products.length);
+        address[] memory assets = new address[](products.length);
+        bytes32[] memory feeds = new bytes32[](products.length);
+        bytes32[] memory quoteFeeds = new bytes32[](products.length);
+        bytes32[] memory risks = new bytes32[](products.length);
+        address[] memory settlementFeeds = new address[](products.length);
+        uint256[] memory spots = new uint256[](products.length);
+        for (uint256 i; i < products.length; ++i) {
+            symbols[i] = products[i].underlyingSymbol;
+            assetSymbols[i] = products[i].assetSymbol;
+            underlyings[i] = products[i].underlying;
+            assets[i] = products[i].asset;
+            feeds[i] = products[i].pythFeed;
+            quoteFeeds[i] = products[i].pythQuoteFeed;
+            risks[i] = products[i].riskSetId;
+            settlementFeeds[i] = address(products[i].settlementFeed);
+            spots[i] = products[i].spotWad;
+        }
+        vm.serializeString(k, "productSymbols", symbols);
+        vm.serializeString(k, "productAssetSymbols", assetSymbols);
+        vm.serializeAddress(k, "productUnderlyings", underlyings);
+        vm.serializeAddress(k, "productSettlementAssets", assets);
+        vm.serializeBytes32(k, "productIds", listed.productIds);
+        vm.serializeBytes32(k, "productPythFeedIds", feeds);
+        vm.serializeBytes32(k, "productPythQuoteFeedIds", quoteFeeds);
+        vm.serializeAddress(k, "productSettlementFeeds", settlementFeeds);
+        vm.serializeBytes32(k, "productSettlementConfigIds", listed.cfgIds);
+        vm.serializeBytes32(k, "productRiskSetIds", risks);
+        vm.serializeUint(k, "productSpotWads", spots);
+        vm.serializeUint(k, "productSeriesStarts", listed.starts);
     }
 }

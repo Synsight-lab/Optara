@@ -47,7 +47,7 @@ async function main() {
   const spot: SpotSource =
     (process.env.SPOT_SOURCE ?? (manifest.chainId === 31337 ? "restamp" : "hermes")) === "restamp"
       ? new RestampMockPythSource(client, (manifest.extra as any).pyth)
-      : new HermesSource({ endpoint: env("HERMES_URL", "https://hermes.pyth.network"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+      : new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
 
   const loops: Promise<never>[] = [];
   const every = (name: string, seconds: number, fn: () => Promise<unknown>) =>

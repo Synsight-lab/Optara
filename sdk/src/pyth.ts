@@ -33,9 +33,9 @@ export class MockPythSource implements SpotSource {
 }
 
 export interface HermesOptions {
-  /** e.g. https://hermes.pyth.network */
+  /** e.g. https://pyth.dourolabs.app/hermes */
   endpoint: string;
-  /** Hermes' update endpoint answers 401 without one (observed 2026-10-07). */
+  /** Hermes requires an API key after Pyth Core's August 2026 upgrade. */
   apiKey?: string;
   /** How the key is sent; Pyth's documentation for the keyed endpoint decides. Default `Authorization: Bearer`. */
   apiKeyHeader?: string;

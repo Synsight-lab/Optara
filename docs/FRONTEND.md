@@ -138,11 +138,16 @@ locally with one command from the repo root:
 ```bash
 pnpm install && (cd contract && forge build)
 pnpm dev        # anvil + local stack + quoted Kuru books + publishers + keepers + the app on http://localhost:5173
+pnpm dev:fork   # same stack, but deployed on an Anvil fork of Monad mainnet
 ```
 
 On the local devnet, "Connect wallet" offers five funded test wallets (Alice…Erin, anvil accounts 5–9; signed by
 anvil, never offered elsewhere). Real networks: `VITE_NETWORK` (`monad-testnet` | `monad-mainnet`), `VITE_RPC_URL`,
 `VITE_PUBLISHER_URL` (required to open positions), `VITE_INDEXER_URL` (optional: lists otherwise come from events).
+Fork mode defaults to `https://rpc.monad.xyz`; use `DEVNET_FORK_URL=<rpc> pnpm dev` or
+`DEVNET_FORK_URL=<rpc> pnpm dev:fork` to point Anvil at another upstream, and `DEVNET_FORK_BLOCK=<block>` for a
+pinned fork. The app and services still use `http://127.0.0.1:8545`, so transactions stay on the fork while the fork
+can read live mainnet state.
 
 | Path | What it is |
 |---|---|
@@ -174,4 +179,3 @@ Decisions taken while building:
 Tests: `pnpm --filter @optara/frontend test` runs units, FE-001 (every group state × health), FE-002, FE-003
 (component test of the disclosure gate), FE-004 (checked against `Errors.sol`), then the F1–F13 flows through the
 app's own builders against the local stack with a real publisher.
-
