@@ -6,37 +6,22 @@ import { useConnection } from "wagmi";
 import type { Hex } from "viem";
 import {
   ArrowRight,
-  Calendar,
-  CheckCircle2,
-  Clock,
   HelpCircle,
-  Info,
   ShieldCheck,
-  Sparkles,
   TrendingDown,
   TrendingUp,
-  Wallet,
-  Zap,
 } from "lucide-react";
 import { AmountInput, Card, Details, EmptyState, Row, Skeleton, Term, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
+import { BuyOutcome, buyCheck } from "../components/BuyOutcome.tsx";
+import { LimitsPanel } from "../components/LimitsPanel.tsx";
+import { lessSlip, useSlippage, withSlip } from "../lib/optara/limits.ts";
 import { TxButton } from "../components/TxButton.tsx";
 import { buySteps } from "../lib/optara/actions.ts";
 import { availability, type ActionContext } from "../lib/optara/availability.ts";
 import { recordTrade } from "../lib/optara/activity.ts";
 import { disclosuresFor } from "../lib/optara/disclosures.ts";
-import {
-  fmtDuration,
-  fmtExpiry,
-  fmtExpiryShort,
-  fmtNative,
-  fmtPrice,
-  fmtQty,
-  fmtWad,
-  optionTypeName,
-  parseFixed,
-  WAD,
-} from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiry, fmtExpiryShort, fmtLevel, fmtNative, fmtPrice, fmtQty, fmtWad, optionTypeName, parseFixed, seriesName, WAD } from "../lib/optara/format.ts";
 import {
   useChainTime,
   useProductMarket,
@@ -46,12 +31,10 @@ import {
   useTokenBalance,
 } from "../lib/optara/hooks.ts";
 import { kuruTakerFee, previewBuyerFee } from "../lib/optara/reads.ts";
+import { legOf, moveNeeded, moveText, priceLevel } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useQuickGuide } from "../state.tsx";
 
-const SLIPPAGE_BPS = 100n;
-const withSlip = (x: bigint) => (x * (10_000n + SLIPPAGE_BPS)) / 10_000n + 1n;
-const lessSlip = (x: bigint) => (x * (10_000n - SLIPPAGE_BPS)) / 10_000n;
 const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** BigInt(18 - decimals);
 
 export function TradePage() {
@@ -172,20 +155,23 @@ export function TradePage() {
         </button>
       </div>
 
+      <QuickTradeIntro asset={product.underlyingSymbol} quote={product.assetSymbol} />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
       <div className="ticket space-y-5 p-4 sm:p-6">
         <div className="flex items-center justify-between gap-2">
           <div>
             <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">
-              Trade {product.underlyingSymbol}
+              Build your trade
             </h1>
-            <p className="mt-0.5 text-[13px] text-muted">Three taps: direction, target, amount</p>
+            <p className="mt-0.5 text-[13px] text-muted">Direction, target, amount. The quote updates as you go.</p>
           </div>
           <span className="pill border border-good/25 bg-good/10 text-good">Capped risk</span>
         </div>
 
         <div>
           <div className="label mb-2">
-            1 · Where is {product.underlyingSymbol} headed?
+            Direction
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -237,11 +223,11 @@ export function TradePage() {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="label">
-              2 · Target and expiry
+              Target and expiry
             </span>
             {productMarket && (
               <span className="text-[13px] text-muted">
-                Spot <b className="num font-display text-ink">${fmtWad(productMarket.spotWad, 0)}</b>
+                Spot <b className="num font-display text-ink">${fmtLevel(productMarket.spotWad)}</b>
               </span>
             )}
           </div>
@@ -267,13 +253,13 @@ export function TradePage() {
             ))}
           </div>
 
-          {/* Strike Cards */}
+          {/* Strike cards: the target, and how far the price has to move to reach it */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {candidates.map((s) => {
               const isSelected = s.id === selectedSeries.id;
-              const strike = Number(s.strikeWad) / 1e18;
+              const leg = legOf(s);
               const spot = productMarket ? Number(productMarket.spotWad) / 1e18 : undefined;
-              const diffPct = spot ? (((strike - spot) / spot) * 100).toFixed(0) : undefined;
+              const move = spot !== undefined ? moveNeeded(leg, spot, leg.strike) : undefined;
 
               return (
                 <button
@@ -287,26 +273,25 @@ export function TradePage() {
                       : "border-line bg-surface-2/60 text-ink hover:border-primary/40"
                   )}
                 >
-                  <span className="num text-base font-extrabold">${fmtWad(s.strikeWad, 0)}</span>
-                  {diffPct !== undefined && (
-                    <span
-                      className={cx(
-                        "num text-[10px] font-semibold mt-0.5",
-                        Number(diffPct) > 0 ? "text-good" : "text-bad"
-                      )}
-                    >
-                      {Number(diffPct) > 0 ? `+${diffPct}%` : `${diffPct}%`}
+                  <span className="num text-base font-extrabold">{priceLevel(leg.strike)}</span>
+                  {move !== undefined && (
+                    <span className={cx("num text-[11px] font-semibold mt-0.5", move <= 0 ? "text-good" : "text-muted")}>
+                      {move <= 0 ? "Already past" : `Needs to ${moveText(leg, move, 0)}`}
                     </span>
                   )}
                 </button>
               );
             })}
           </div>
+          <p className="mt-2 text-xs text-muted">
+            The target is the strike. {direction === "call" ? "Above it" : "Below it"}, every option pays the difference in{" "}
+            {product.assetSymbol} at expiry.
+          </p>
         </div>
 
         <div>
           <div className="label mb-2">
-            3 · How much to invest?
+            Premium to spend
           </div>
           <TradeForm
             series={selectedSeries}
@@ -322,11 +307,70 @@ export function TradePage() {
             to={`/series/${selectedSeries.id}`}
             className="text-xs text-primary font-semibold hover:underline inline-flex items-center gap-1"
           >
-            See payoff chart and details <ArrowRight className="h-3 w-3" />
+            See payoff chart, details and what backs this option <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </div>
+      <TradeSideGuide series={selectedSeries} spot={productMarket?.spotWad} />
+      </div>
     </div>
+  );
+}
+
+function QuickTradeIntro({ asset, quote }: { asset: string; quote: string }) {
+  return (
+    <section className="page-band">
+      <div className="grid gap-3 md:grid-cols-3">
+        <GuideItem title="1. Pick direction" text={`Up buys a call. Down buys a put on ${asset}.`} />
+        <GuideItem title="2. Pick target" text={`The target is the price ${asset} must pass by expiry.`} />
+        <GuideItem title="3. Pay premium" text={`Your option pays out in ${quote}. Max loss is the total paid.`} />
+      </div>
+    </section>
+  );
+}
+
+function GuideItem({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="info-row">
+      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-good" />
+      <span>
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="block text-xs leading-5 text-muted">{text}</span>
+      </span>
+    </div>
+  );
+}
+
+function TradeSideGuide({ series, spot }: { series: Series; spot?: bigint }) {
+  const leg = legOf(series);
+  const spotN = spot !== undefined ? Number(spot) / 1e18 : undefined;
+  const move = spotN !== undefined ? moveNeeded(leg, spotN, leg.strike) : undefined;
+  return (
+    <aside className="page-band space-y-3 lg:sticky lg:top-[88px]">
+      <div>
+        <div className="text-[11px] font-bold uppercase text-faint">Selected option</div>
+        <div className="mt-1 flex items-center gap-2">
+          <TokenIcon symbol={series.underlyingSymbol} className="h-8 w-8" />
+          <div>
+            <div className="font-display text-lg font-bold">{optionTypeName(series.optionType)} {priceLevel(leg.strike)}</div>
+            <div className="text-xs text-muted">Expires {fmtExpiry(series.expiry)}</div>
+          </div>
+        </div>
+      </div>
+      <div className="info-row">
+        <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div className="text-sm">
+          {move === undefined
+            ? "Waiting for live spot."
+            : move <= 0
+            ? "This option is already past its target."
+            : `It starts paying intrinsic value after the price ${moveText(leg, move, 1, true)}.`}
+        </div>
+      </div>
+      <div className="rounded-lg border border-good/25 bg-good/8 p-3 text-xs leading-5 text-good">
+        Buying is capped risk: you cannot be liquidated and cannot owe more later.
+      </div>
+    </aside>
   );
 }
 
@@ -346,6 +390,7 @@ function TradeForm({
   const { data: balance } = useTokenBalance(series.settlementAsset, address);
 
   const premiumIn = parseFixed(amount, series.assetDecimals);
+  const [slip] = useSlippage();
   const ask = market?.quote?.ask;
   const kuruMarket = market?.quote?.market;
 
@@ -364,6 +409,10 @@ function TradeForm({
       : undefined;
 
   const total = premiumIn !== undefined && fees.data ? premiumIn + fees.data.optara : undefined;
+  // Far above fair value, the buyer must confirm first (re-asked whenever the option or amount changes).
+  const check = buyCheck(estQty, total, series.assetDecimals, market?.mark);
+  const [ack, setAck] = useState(false);
+  useEffect(() => setAck(false), [series.id, amount]);
   const tooMuch = total !== undefined && balance !== undefined && total > balance;
 
   const ctx: ActionContext = {
@@ -386,73 +435,72 @@ function TradeForm({
       ? buySteps(
           series,
           premiumIn,
-          lessSlip(estQty),
-          withSlip(fees.data.optara),
-          withSlip(fees.data.kuru),
+          lessSlip(estQty, slip),
+          withSlip(fees.data.optara, slip),
+          withSlip(fees.data.kuru, slip),
           address
         )
       : undefined;
 
-  // Estimated payout if price moves past strike by 10%
-  const strikeNum = Number(series.strikeWad) / 1e18;
-  const spotNum = productMarket ? Number(productMarket.spotWad) / 1e18 : strikeNum;
-  const estPayoutPerOption =
-    series.optionType === 0
-      ? Math.max(0, spotNum * 1.15 - strikeNum)
-      : Math.max(0, strikeNum - spotNum * 0.85);
-
-  const estTotalPayout = estQty ? (Number(estQty) / 1e18) * estPayoutPerOption : 0;
+  const spotNum = productMarket ? Number(productMarket.spotWad) / 1e18 : undefined;
+  const qtyNum = estQty !== undefined ? Number(estQty) / 1e18 : undefined;
 
   return (
     <div className="space-y-3.5">
       <AmountInput
-        label="You pay"
+        label="Premium to spend"
         value={amount}
         onChange={onAmountChange}
         unit={series.assetSymbol}
         presets={["25", "50", "100", "250"]}
         max={balance !== undefined ? fmtNative(balance, series.assetDecimals, 2).replace(/,/g, "") : undefined}
         maxLabel="Wallet"
-        invalid={tooMuch ? `Wallet holds ${fmtNative(balance!, series.assetDecimals)} ${series.assetSymbol}.` : undefined}
+        hint="Paid from your wallet, not your margin account. A small Optara fee is added on top; the total is shown below."
+        invalid={tooMuch ? `You need ${fmtNative(total!, series.assetDecimals)} ${series.assetSymbol} including fees; your wallet holds ${fmtNative(balance!, series.assetDecimals)}.` : undefined}
       />
 
-      <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
+      <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5 space-y-2.5">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[13px] text-muted">You receive about</span>
+          <span className="text-[13px] text-muted">You get about</span>
           <span className="num font-display text-2xl font-bold tracking-tight">
-            {estQty !== undefined ? fmtQty(estQty) : "—"}
+            {estQty !== undefined ? `${fmtQty(estQty)} option${qtyNum === 1 ? "" : "s"}` : "—"}
           </span>
         </div>
-        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-muted">
-          <span>Max loss is what you pay</span>
-          {estTotalPayout > 0 && (
-            <span className="num font-semibold text-good">up to +${estTotalPayout.toFixed(0)} if ±15%</span>
-          )}
-        </div>
 
-        <div className="mt-2.5">
-          <Details summary={<span>Total <b className="num">{total !== undefined ? `${fmtNative(total, series.assetDecimals)} ${series.assetSymbol}` : "—"}</b></span>}>
-            <Row
-              label="Premium"
-              value={premiumIn !== undefined ? `${fmtNative(premiumIn, series.assetDecimals)} ${series.assetSymbol}` : "—"}
-            />
-            <Row
-              label={<Term tip="Charged by the order book.">Venue fee</Term>}
-              value={fees.data ? `≈ ${fmtNative(fees.data.kuru, series.assetDecimals)}` : "—"}
-            />
-            <Row
-              label={<Term tip="Funds insurance and keepers.">Optara fee</Term>}
-              value={fees.data ? `${fmtNative(fees.data.optara, series.assetDecimals)}` : "—"}
-            />
-          </Details>
-        </div>
+        {ask === undefined && kuruMarket !== undefined && (
+          <p className="text-xs text-warn">Nobody is selling this option right now. Try another target or expiry.</p>
+        )}
+
+        <BuyOutcome series={series} qty={estQty} total={total} spot={spotNum} mark={market?.mark} ack={ack} onAck={setAck} />
+
+        <Details summary={<span>Total cost <b className="num">{total !== undefined ? `${fmtNative(total, series.assetDecimals)} ${series.assetSymbol}` : "—"}</b></span>}>
+          <Row
+            label="Premium"
+            value={premiumIn !== undefined ? `${fmtNative(premiumIn, series.assetDecimals)} ${series.assetSymbol}` : "—"}
+          />
+          <Row
+            label={<Term tip="Charged by the Kuru order book. It comes out of the premium, so you get slightly fewer options.">Order book fee (in premium)</Term>}
+            value={fees.data ? `≈ ${fmtNative(fees.data.kuru, series.assetDecimals)}` : "—"}
+          />
+          <Row
+            label={<Term tip="Added on top of the premium. Funds the insurance fund and the keepers that settle trades.">Optara fee (added)</Term>}
+            value={fees.data ? `${fmtNative(fees.data.optara, series.assetDecimals)}` : "—"}
+          />
+          <Row
+            label="Price per option"
+            value={ask !== undefined ? `${fmtPrice(ask)} ${series.assetSymbol}` : "—"}
+          />
+        </Details>
       </div>
 
+      <LimitsPanel limits={buyLimits(series, premiumIn, estQty, fees.data, slip)} />
+
       <TxButton
-        label={estQty ? `Buy ${fmtQty(estQty)}` : "Buy"}
+        label={estQty && total !== undefined ? `Buy ${fmtQty(estQty)} for ${fmtNative(total, series.assetDecimals)} ${series.assetSymbol}` : "Buy"}
+        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, series.assetDecimals)} ${series.assetSymbol} (fees included) for about ${fmtQty(estQty)} ${seriesName(series)} options${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
         steps={steps}
-        disabled={!a.enabled || !steps || tooMuch}
-        disabledReason={a.reason}
+        disabled={!a.enabled || !steps || tooMuch || (check.needsAck && !ack)}
+        disabledReason={a.reason ?? (check.needsAck && !ack ? "Confirm the price above first." : undefined)}
         disclosures={disclosuresFor("buy", series.underlyingSymbol)}
         successMessage="Bought. Tokens are in your wallet."
 
@@ -460,4 +508,16 @@ function TradeForm({
       />
     </div>
   );
+}
+
+/** The limits a buy is signed with (VenueRouter.buyThroughVenue). */
+export function buyLimits(s: Series, premiumIn: bigint | undefined, estQty: bigint | undefined, fees: { optara: bigint; kuru: bigint } | undefined, slip: number) {
+  if (!premiumIn || !estQty || !fees) return [];
+  const n = (x: bigint) => `${fmtNative(x, s.assetDecimals)} ${s.assetSymbol}`;
+  return [
+    { label: "Premium budget", value: n(premiumIn), tip: "The most premium you spend. Anything not used is refunded." },
+    { label: "Fewest options accepted", value: fmtQty(lessSlip(estQty, slip)), tip: "If the order book would give you fewer options than this, the buy is cancelled." },
+    { label: "Max Optara fee", value: n(withSlip(fees.optara, slip)), tip: "The buyer fee can't exceed this." },
+    { label: "Max order-book fee", value: n(withSlip(fees.kuru, slip)), tip: "Kuru's fee can't exceed this." },
+  ];
 }

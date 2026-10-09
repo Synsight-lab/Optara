@@ -11,7 +11,7 @@ import { TokenIcon } from "../components/Icons.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { createSeriesSteps } from "../lib/optara/actions.ts";
 import { ADDR, publicClient } from "../lib/optara/client.ts";
-import { fmtDuration, fmtExpiry, fmtExpiryShort, fmtWad, parseFixed } from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiry, fmtExpiryShort, fmtLevel, fmtWad, parseFixed } from "../lib/optara/format.ts";
 import { useChainTime, useSeriesList } from "../lib/optara/hooks.ts";
 
 const SERIES_CREATOR: Hex = keccak256(toHex("optara.role.SERIES_CREATOR"));
@@ -180,7 +180,7 @@ export function NewMarketPage() {
         <Card>
           <EmptyState
             title="Already listed"
-            body={`${product.underlyingSymbol} $${fmtWad(strikeWad!, 0)} ${optionType === 0 ? "Call" : "Put"} · ${fmtExpiryShort(expiry!)} exists.`}
+            body={`${product.underlyingSymbol} $${fmtLevel(strikeWad!)} ${optionType === 0 ? "Call" : "Put"} · ${fmtExpiryShort(expiry!)} exists.`}
             action={<button onClick={() => navigate(`/series/${existingId}`)} className="btn-primary mt-2 text-xs">Open market</button>}
           />
         </Card>
@@ -189,7 +189,11 @@ export function NewMarketPage() {
       ) : canList ? (
         <section className="ticket p-4">
           <Details summary="Settlement and risk setup">
-            <p className="px-1 py-1 text-[13px] text-muted">Follows the nearest listed {optionType === 0 ? "call" : "put"}. Contract size 1.0 {product.underlyingSymbol}. Terms lock forever on listing.</p>
+            <p className="px-1 py-1 text-[13px] text-muted">
+              Uses the same price feeds and risk settings as the nearest listed {optionType === 0 ? "call" : "put"}. One option
+              covers 1 {product.underlyingSymbol}. The terms can never change once listed. Listing creates the option token
+              only: it can be traded once an order book is opened for it and someone quotes prices.
+            </p>
           </Details>
           <div className="mt-3">
             <TxButton

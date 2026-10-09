@@ -1,5 +1,5 @@
 /** `/series/:id` (and `/trade/:id`): terms, payoff, simulator and every action on one series (FRONTEND.md §2, §4, §7). */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
@@ -32,6 +32,11 @@ import {
 } from "lucide-react";
 import { AmountInput, Card, CopyButton, Details, EmptyState, Pill, Row, Segmented, Skeleton, Stat, Term, cx, useTicker } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
+import { BackingCard } from "../components/BackingCard.tsx";
+import { LimitsPanel } from "../components/LimitsPanel.tsx";
+import { lessSlip, useSlippage, withSlip } from "../lib/optara/limits.ts";
+import { buyLimits } from "./Trade.tsx";
+import { BuyOutcome, buyCheck } from "../components/BuyOutcome.tsx";
 import { PayoffChart } from "../components/PayoffChart.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { availability, type ActionContext, type ActionKey } from "../lib/optara/availability.ts";
@@ -49,20 +54,7 @@ import {
 import { ADDR, publicClient } from "../lib/optara/client.ts";
 import { recordTrade } from "../lib/optara/activity.ts";
 import { disclosuresFor } from "../lib/optara/disclosures.ts";
-import {
-  fmtDuration,
-  fmtExpiry,
-  fmtIv,
-  fmtNative,
-  fmtPrice,
-  fmtQty,
-  fmtWad,
-  optionTypeName,
-  parseFixed,
-  parseQty,
-  shortAddr,
-  WAD,
-} from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiry, fmtIv, fmtLevel, fmtNative, fmtPrice, fmtQty, fmtWad, optionTypeName, parseFixed, parseQty, seriesName, shortAddr, WAD } from "../lib/optara/format.ts";
 import {
   useAccountView,
   useChainTime,
@@ -73,17 +65,17 @@ import {
   useWalletWrappers,
 } from "../lib/optara/hooks.ts";
 import { kuruSellFee, kuruTakerFee, previewBuyerFee, previewMint, previewRedeem } from "../lib/optara/reads.ts";
+import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
 
 type Tab = "trade" | "write" | "manage" | "redeem" | "buy" | "sell";
-const SLIPPAGE_BPS = 100n; // FRONTEND.md §7: 1% default
-const withSlip = (x: bigint) => (x * (10_000n + SLIPPAGE_BPS)) / 10_000n + 1n;
-const lessSlip = (x: bigint) => (x * (10_000n - SLIPPAGE_BPS)) / 10_000n;
 /** WAD amount in the settlement asset → native units. */
 const toNative = (wad: bigint, decimals: number) => wad / 10n ** BigInt(18 - decimals);
 const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** BigInt(18 - decimals);
+/** A chart quantity: up to 4 decimals, no trailing zeros. */
+const fmtQtyNum = (q: number) => q.toLocaleString("en-US", { maximumFractionDigits: 4 });
 
 export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const { id } = useParams();
@@ -104,7 +96,10 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   useEffect(() => {
     if (fromUrl) setTab(fromUrl);
   }, [fromUrl]);
-  const [qtyForChart, setQtyForChart] = useState(1);
+  // What the open ticket would trade: quantity, and the all-in price per option (fees included) when known.
+  const [preview, setPreview] = useState<{ qty: number; cost?: number }>({ qty: 1 });
+  const setQtyForChart = useCallback((qty: number, cost?: number) => setPreview({ qty, cost }), []);
+  const qtyForChart = preview.qty;
 
   if (!series) {
     return (
@@ -153,7 +148,9 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const spotNum = product ? Number(product.spotWad) / 1e18 : undefined;
   const markNum = market?.mark !== undefined ? Number(market.mark) / 1e18 : undefined;
   const side = canonicalTab === "write" ? "short" : "long";
-  const premiumForChart = (side === "long" ? market?.quote?.ask : market?.quote?.bid) ?? market?.mark;
+  const quoted = (side === "long" ? market?.quote?.ask : market?.quote?.bid) ?? market?.mark;
+  const premiumForChart = preview.cost ?? (quoted !== undefined ? Number(quoted) / 1e18 : undefined);
+  const feesIncluded = preview.cost !== undefined;
 
   const select = (t: Tab) => {
     setTab(t);
@@ -196,7 +193,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 <StatePill state={state} />
               </div>
               <h1 className="font-display mt-1.5 text-2xl font-bold tracking-tight sm:text-[28px]">
-                {series.underlyingSymbol} ${fmtWad(series.strikeWad, 0)} {optionTypeName(series.optionType)}
+                {series.underlyingSymbol} ${fmtLevel(series.strikeWad)} {optionTypeName(series.optionType)}
               </h1>
               <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
                 Expires {fmtExpiry(series.expiry)}
@@ -213,7 +210,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
             <div className="grid grid-cols-3 gap-2">
               <Stat
                 label={`${series.underlyingSymbol} spot`}
-                value={product ? `$${fmtWad(product.spotWad, 0)}` : "…"}
+                value={product ? `$${fmtLevel(product.spotWad)}` : "…"}
                 sub={product?.spotFresh ? "Live" : "Delayed"}
                 tone={product?.spotFresh ? "good" : "warn"}
               />
@@ -262,13 +259,16 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
         )}
       </section>
 
-      <div className="flex flex-col gap-3">
+      <SeriesQuickFacts series={series} state={state} spot={product?.spotWad} mark={market?.mark} ask={market?.quote?.ask} />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         <div className="space-y-4">
           <Card
-            title={side === "long" ? "What you could make" : "What writing risks"}
+            title={side === "long" ? "What happens at expiry" : "What happens at expiry if you write"}
             action={
               <span className="text-[13px] text-muted">
-                {Number(qtyForChart.toFixed(2))} option{qtyForChart === 1 ? "" : "s"} · drag the chart
+                {fmtQtyNum(qtyForChart)} option{qtyForChart === 1 ? "" : "s"}
+                {premiumForChart !== undefined && ` at ${usd(premiumForChart)} each${feesIncluded ? ", fees included" : ""}`}
               </span>
             }
           >
@@ -276,8 +276,9 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
               <PayoffChart
                 optionType={series.optionType}
                 strike={Number(series.strikeWad) / 1e18}
+                size={legOf(series).size}
                 spot={spotNum}
-                premium={premiumForChart !== undefined ? Number(premiumForChart) / 1e18 : 0}
+                premium={premiumForChart ?? 0}
                 qty={qtyForChart}
                 side={side}
                 assetSymbol={series.assetSymbol}
@@ -286,22 +287,17 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
             ) : (
               <Skeleton className="h-60 w-full" />
             )}
-
-            {/* Interactive Price Target Simulator Slider */}
-            <PriceTargetSimulator
-              series={series}
-              spot={spotNum}
-              premium={premiumForChart !== undefined ? Number(premiumForChart) / 1e18 : 0}
-              qty={qtyForChart}
-              side={side}
-            />
+            <p className="mt-2 text-xs text-muted">The amount comes from the order form below. Change it there to update the chart.</p>
           </Card>
+
+          <div id="backing">
+            <BackingCard series={series} spot={spotNum} />
+          </div>
 
           {/* Immutable Contract Terms */}
           <Terms s={series} market={market?.quote?.market} />
         </div>
 
-        {/* Right: brokerage ticket */}
         <div className="lg:sticky lg:top-16">
           <section className="ticket p-4 sm:p-5">
             <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-surface-2/70 p-1 scrollbar-none">
@@ -313,12 +309,13 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                   <button
                     key={t.value}
                     onClick={() => select(t.value)}
-                    disabled={isDisabled}
                     title={isDisabled ? a[0]?.reason : undefined}
                     className={cx(
-                      "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-semibold transition disabled:opacity-35 cursor-pointer",
+                      "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-semibold transition cursor-pointer",
                       isSelected
                         ? "bg-primary text-white shadow"
+                        : isDisabled
+                        ? "text-muted/60 hover:text-ink"
                         : "text-muted hover:text-ink"
                     )}
                   >
@@ -380,100 +377,55 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   );
 }
 
-// ------------------------------------------------------------------ Interactive Price Target Simulator
-function PriceTargetSimulator({
+function SeriesQuickFacts({
   series,
+  state,
   spot,
-  premium,
-  qty,
-  side,
+  mark,
+  ask,
 }: {
   series: Series;
-  spot?: number;
-  premium: number;
-  qty: number;
-  side: "long" | "short";
+  state: string;
+  spot?: bigint;
+  mark?: bigint;
+  ask?: bigint;
 }) {
-  const strike = Number(series.strikeWad) / 1e18;
-  const basePrice = spot ?? strike;
-  const [targetPrice, setTargetPrice] = useState(basePrice);
-
-  useEffect(() => {
-    if (spot) setTargetPrice(spot);
-  }, [spot]);
-
   const isCall = series.optionType === 0;
-  const grossPayoffPerOption = isCall
-    ? Math.max(0, targetPrice - strike)
-    : Math.max(0, strike - targetPrice);
-
-  const netProfitPerOption =
-    side === "long" ? grossPayoffPerOption - premium : premium - grossPayoffPerOption;
-
-  const totalNet = netProfitPerOption * qty;
-  const totalCost = premium * qty;
-  const roi = totalCost > 0 ? ((totalNet / totalCost) * 100).toFixed(0) : "0";
-  const pctFromSpot = spot ? (((targetPrice - spot) / spot) * 100).toFixed(1) : "0";
-
+  const spotN = spot !== undefined ? Number(spot) / 1e18 : undefined;
+  const strike = Number(series.strikeWad) / 1e18;
+  const move =
+    spotN === undefined
+      ? undefined
+      : isCall
+      ? (strike - spotN) / spotN
+      : (spotN - strike) / spotN;
+  const target =
+    move === undefined
+      ? "Waiting for live spot"
+      : move <= 0
+      ? "Already past target"
+      : `${isCall ? "+" : "-"}${(move * 100).toFixed(1)}% to target`;
   return (
-    <div className="mt-3 rounded-2xl border border-line bg-surface-2/60 p-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold">Try a settlement price</span>
-        <span className="num font-display text-[15px] font-bold">${targetPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+    <section className="page-band">
+      <div className="grid gap-3 md:grid-cols-4">
+        <SimpleFact label="Direction" value={isCall ? "Up / Call" : "Down / Put"} />
+        <SimpleFact label="Target" value={`$${fmtWad(series.strikeWad, 0)}`} sub={target} />
+        <SimpleFact
+          label="Buy price"
+          value={ask !== undefined ? `${fmtPrice(ask)} ${series.assetSymbol}` : mark !== undefined ? `${fmtPrice(mark)} fair` : "No quote"}
+        />
+        <SimpleFact label="Status" value={state.replace("_", " ")} />
       </div>
+    </section>
+  );
+}
 
-      <input
-        type="range"
-        min={Math.round(basePrice * 0.5)}
-        max={Math.round(basePrice * 1.5)}
-        step={Math.round(basePrice * 0.005) || 1}
-        value={targetPrice}
-        onChange={(e) => {
-          setTargetPrice(Number(e.target.value));
-          e.target.style.setProperty("--fill", `${((Number(e.target.value) - basePrice * 0.5) / (basePrice) * 100).toFixed(1)}%`);
-        }}
-        className="mt-3 w-full cursor-pointer"
-      />
-
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {[
-          { label: "Spot", mult: 1.0 },
-          { label: "+5%", mult: 1.05 },
-          { label: "+10%", mult: 1.1 },
-          { label: "+20%", mult: 1.2 },
-          { label: "−10%", mult: 0.9 },
-        ].map((p) => (
-          <button
-            key={p.label}
-            type="button"
-            onClick={() => spot && setTargetPrice(Math.round(spot * p.mult))}
-            className="chip !py-1 !text-[11px] cursor-pointer"
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-2.5 text-center">
-        <div>
-          <div className="text-[11px] text-muted">Move</div>
-          <div className={cx("num font-display mt-0.5 text-sm font-bold", Number(pctFromSpot) >= 0 ? "text-good" : "text-bad")}>
-            {Number(pctFromSpot) >= 0 ? `+${pctFromSpot}%` : `${pctFromSpot}%`}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted">Net</div>
-          <div className={cx("num font-display mt-0.5 text-sm font-bold", totalNet >= 0 ? "text-good" : "text-bad")}>
-            {totalNet >= 0 ? `+$${totalNet.toFixed(0)}` : `−$${Math.abs(totalNet).toFixed(0)}`}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted">Return</div>
-          <div className={cx("num font-display mt-0.5 text-sm font-bold", totalNet >= 0 ? "text-good" : "text-bad")}>
-            {totalNet >= 0 ? `+${roi}%` : `${roi}%`}
-          </div>
-        </div>
-      </div>
+function SimpleFact({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface-2/60 p-3">
+      <div className="text-[11px] font-bold uppercase text-faint">{label}</div>
+      <div className="mt-1 font-display text-lg font-bold">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
   );
 }
@@ -496,7 +448,7 @@ function TradePanel({
   market?: Hex;
   walletQty: bigint;
   initialSide: "buy" | "sell";
-  onQty: (q: number) => void;
+  onQty: (q: number, cost?: number) => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">(initialSide);
   useEffect(() => setSide(initialSide), [initialSide, s.id]);
@@ -532,11 +484,15 @@ function BuyPanel({
   ctx: ActionContext;
   ask?: bigint;
   market?: Hex;
-  onQty: (q: number) => void;
+  onQty: (q: number, cost?: number) => void;
 }) {
   const { address } = useConnection();
   const [amount, setAmount] = useState("50");
   const premiumIn = parseFixed(amount, s.assetDecimals);
+  const [slip] = useSlippage();
+  const { data: pm } = useProductMarket(s.productId);
+  const spot = pm ? Number(pm.spotWad) / 1e18 : undefined;
+  const { data: sm } = useSeriesMarket(s);
   const { data: balance } = useTokenBalance(s.settlementAsset, address);
   const a = availability("buy", ctx);
 
@@ -554,9 +510,16 @@ function BuyPanel({
       ? (toWadFromNative(premiumIn - fees.data.kuru, s.assetDecimals) * WAD) / ask
       : undefined;
 
-  useEffect(() => onQty(estQty ? Math.max(Number(estQty) / 1e18, 0.01) : 1), [estQty, onQty]);
-
   const total = premiumIn !== undefined && fees.data ? premiumIn + fees.data.optara : undefined;
+  // Far above fair value, the buyer must confirm first (re-asked whenever the option or amount changes).
+  const check = buyCheck(estQty, total, s.assetDecimals, sm?.mark);
+  const [ack, setAck] = useState(false);
+  useEffect(() => setAck(false), [s.id, amount]);
+  useEffect(() => {
+    if (!estQty) return onQty(1);
+    const q = Number(estQty) / 1e18;
+    onQty(q, total !== undefined ? Number(total) / 10 ** s.assetDecimals / q : undefined);
+  }, [estQty, total, s.assetDecimals, onQty]);
   const tooMuch = total !== undefined && balance !== undefined && total > balance;
 
   const steps =
@@ -564,9 +527,9 @@ function BuyPanel({
       ? buySteps(
           s,
           premiumIn,
-          lessSlip(estQty),
-          withSlip(fees.data.optara),
-          withSlip(fees.data.kuru),
+          lessSlip(estQty, slip),
+          withSlip(fees.data.optara, slip),
+          withSlip(fees.data.kuru, slip),
           address
         )
       : undefined;
@@ -581,10 +544,11 @@ function BuyPanel({
       </div>
 
       <AmountInput
-        label="You pay"
+        label="Premium to spend"
         value={amount}
         onChange={setAmount}
         unit={s.assetSymbol}
+        hint="Paid from your wallet, not your margin account. A small Optara fee is added on top; the total is shown below."
         presets={["25", "50", "100", "250"]}
         max={balance !== undefined ? fmtNative(balance, s.assetDecimals, 2).replace(/,/g, "") : undefined}
         maxLabel="Wallet"
@@ -599,32 +563,39 @@ function BuyPanel({
           </span>
         </div>
         <div className="mt-0.5 text-right text-xs text-muted">
-          {ask !== undefined ? `${fmtWad(ask, 2)} ${s.assetSymbol} each` : "Waiting for book"} · capped risk
+          {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option before fees` : "Nobody is selling this option right now"}
         </div>
 
         <div className="mt-2.5">
-          <Details summary={<span>Total <b className="num">{total !== undefined ? `${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "—"}</b></span>}>
+          <BuyOutcome series={s} qty={estQty} total={total} spot={spot} mark={sm?.mark} ack={ack} onAck={setAck} />
+        </div>
+
+        <div className="mt-2.5">
+          <Details summary={<span>Total cost <b className="num">{total !== undefined ? `${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "—"}</b></span>}>
             <Row
               label="Premium"
               value={premiumIn !== undefined ? `${fmtNative(premiumIn, s.assetDecimals)} ${s.assetSymbol}` : "—"}
             />
             <Row
-              label={<Term tip="Charged by the order book.">Venue fee</Term>}
+              label={<Term tip="Charged by the Kuru order book. It comes out of the premium, so you get slightly fewer options.">Order book fee (in premium)</Term>}
               value={fees.data ? `≈ ${fmtNative(fees.data.kuru, s.assetDecimals)}` : "—"}
             />
             <Row
-              label={<Term tip="Funds insurance and keepers.">Optara fee</Term>}
+              label={<Term tip="Added on top of the premium. Funds the insurance fund and the keepers that settle trades.">Optara fee (added)</Term>}
               value={fees.data ? `${fmtNative(fees.data.optara, s.assetDecimals)}` : "—"}
             />
           </Details>
         </div>
       </div>
 
+      <LimitsPanel limits={buyLimits(s, premiumIn, estQty, fees.data, slip)} />
+
       <TxButton
-        label={estQty ? `Buy ${fmtQty(estQty)}` : "Buy"}
+        label={estQty && total !== undefined ? `Buy ${fmtQty(estQty)} for ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "Buy"}
+        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included) for about ${fmtQty(estQty)} ${seriesName(s)} options${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
         steps={steps}
-        disabled={!a.enabled || !steps || tooMuch}
-        disabledReason={a.reason}
+        disabled={!a.enabled || !steps || tooMuch || (check.needsAck && !ack)}
+        disabledReason={a.reason ?? (check.needsAck && !ack ? "Confirm the price above first." : undefined)}
         disclosures={disclosuresFor("buy", s.underlyingSymbol)}
         successMessage="Bought. Tokens are in your wallet."
         onDone={() => recordTrade(address, s.id, "buy")}
@@ -634,7 +605,7 @@ function BuyPanel({
 }
 
 // ------------------------------------------------------------------ Write Panel
-function WritePanel({
+export function WritePanel({
   s,
   ctx,
   bid,
@@ -645,14 +616,14 @@ function WritePanel({
   ctx: ActionContext;
   bid?: bigint;
   market?: Hex;
-  onQty: (q: number) => void;
+  onQty: (q: number, cost?: number) => void;
 }) {
   const { address } = useConnection();
   const { selected } = useAccountState();
   const [amount, setAmount] = useState("1");
   const [sellNow, setSellNow] = useState(true);
+  const [slip] = useSlippage();
   const qty = parseQty(amount);
-  useEffect(() => onQty(qty ? Number(qty) / 1e18 : 1), [qty, onQty]);
   const a = availability("write", ctx);
 
   const preview = useQuery({
@@ -671,6 +642,17 @@ function WritePanel({
   });
   const net = grossProceeds !== undefined && sellFee.data !== undefined ? grossProceeds - sellFee.data : undefined;
   const [fee, equityAfter, imAfter, ok] = preview.data ?? [];
+  // Premium kept per option: sale proceeds after the order-book fee, less the Optara fee paid from the account.
+  const kept = sellable && net !== undefined && fee !== undefined ? net - fee : undefined;
+  const qtyNum = qty ? Number(qty) / 1e18 : undefined;
+  useEffect(() => {
+    if (!qtyNum) return onQty(1);
+    onQty(qtyNum, kept !== undefined ? Number(kept) / 10 ** s.assetDecimals / qtyNum : undefined);
+  }, [qtyNum, kept, s.assetDecimals, onQty]);
+  const leg = legOf(s);
+  const keptNum = kept !== undefined ? Number(kept) / 10 ** s.assetDecimals : undefined;
+  const writerBe = keptNum !== undefined && qtyNum ? breakeven(leg, keptNum / qtyNum) : undefined;
+  const isCall = s.optionType === 0;
 
   if (!ctx.hasAccount && ctx.connected) return <AccountSetup s={s} />;
   if (!a.enabled && ctx.connected) return <Blocked reason={a.reason} />;
@@ -678,8 +660,8 @@ function WritePanel({
   const steps =
     address && selected !== undefined && qty && fee !== undefined
       ? [
-          ...mintSteps(selected, s, qty, withSlip(fee), address),
-          ...(sellable && net !== undefined ? sellSteps(s, qty, lessSlip(net), withSlip(sellFee.data!), address) : []),
+          ...mintSteps(selected, s, qty, withSlip(fee, slip), address),
+          ...(sellable && net !== undefined ? sellSteps(s, qty, lessSlip(net, slip), withSlip(sellFee.data!, slip), address) : []),
         ]
       : undefined;
 
@@ -687,16 +669,16 @@ function WritePanel({
     <div className="space-y-3.5">
       <div className="flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/8 px-3 py-2 text-[13px] text-accent">
         <Coins className="h-4 w-4 shrink-0" />
-        <span>You keep the premium today. Margin account covers the payout.</span>
+        <span>You collect the premium now. If the option ends in the money, the payout is taken from your margin account.</span>
       </div>
 
       <AmountInput
-        label="Contracts to write"
+        label="Options to write"
         value={amount}
         onChange={setAmount}
         unit="options"
         presets={["0.1", "0.5", "1", "2"]}
-        hint="Min 0.01. Needs enough margin after writing."
+        hint={`Steps of 0.01. One option covers ${leg.size} ${s.underlyingSymbol}.`}
       />
 
       <label
@@ -716,8 +698,8 @@ function WritePanel({
           <span className="block font-semibold">Sell instantly for cash</span>
           <span className="block text-muted">
             {market && bid !== undefined
-              ? `Bid ${fmtWad(bid)} ${s.assetSymbol}. Cash lands in your wallet.`
-              : "No bids yet. You keep the tokens instead."}
+              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option. The cash goes to your wallet.`
+              : "Nobody is bidding right now. The new option tokens go to your wallet; you can sell them later."}
           </span>
         </span>
       </label>
@@ -725,28 +707,47 @@ function WritePanel({
       <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
         {sellable && net !== undefined && (
           <div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
-            <span className="text-[13px] text-muted">Cash to wallet</span>
+            <span className="text-[13px] text-muted">Cash to your wallet now</span>
             <span className="num font-display text-xl font-bold text-good">
               +{fmtNative(net, s.assetDecimals)} {s.assetSymbol}
             </span>
           </div>
         )}
+        {keptNum !== undefined && qtyNum && (
+          <ul className="space-y-1.5 border-b border-line py-2.5 text-[13px]">
+            <li className="flex justify-between gap-3">
+              <span className="text-muted">You keep it all if {s.underlyingSymbol} ends {isCall ? "at or below" : "at or above"}</span>
+              <span className="num shrink-0 font-semibold">{priceLevel(leg.strike)}</span>
+            </li>
+            <li className="flex justify-between gap-3">
+              <span className="text-muted">You start losing {isCall ? "above" : "below"}</span>
+              <span className="num shrink-0 font-semibold">{writerBe !== undefined ? priceLevel(writerBe) : "—"}</span>
+            </li>
+            <li className="flex justify-between gap-3">
+              <span className="text-muted">Every $100 {isCall ? "above" : "below"} that costs you</span>
+              <span className="num shrink-0 font-semibold text-bad">{usd(-qtyNum * leg.size * 100)}</span>
+            </li>
+          </ul>
+        )}
         <Details summary="Margin and fees">
           <Row
-            label="Optara fee"
+            label={<Term tip="Charged when the options are written, paid from your margin account.">Optara fee (from account)</Term>}
             value={fee !== undefined ? `${fmtNative(fee, s.assetDecimals)} ${s.assetSymbol}` : "—"}
           />
           {sellable && (
             <Row
-              label="Venue fee"
+              label={<Term tip="Charged by the Kuru order book on the sale. Already taken out of the cash above.">Order book fee</Term>}
               value={sellFee.data !== undefined ? `${fmtNative(sellFee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"}
             />
           )}
           <Row
-            strong
-            label={<Term tip="Equity and required margin after writing.">Equity vs required</Term>}
-            value={equityAfter !== undefined ? `${fmtWad(equityAfter)} / ${fmtWad(imAfter!)}` : "—"}
+            label={<Term tip="Cash plus the value of your positions, after this trade.">Account value after</Term>}
+            value={equityAfter !== undefined ? `$${fmtWad(equityAfter)}` : "—"}
             tone={ok === false ? "bad" : ok ? "good" : undefined}
+          />
+          <Row
+            label={<Term tip="The account value you need to open this position. It comes from stress-testing big price and volatility moves.">Needed to open</Term>}
+            value={imAfter !== undefined ? `$${fmtWad(imAfter)}` : "—"}
           />
         </Details>
         {ok === false && (
@@ -756,8 +757,21 @@ function WritePanel({
         )}
       </div>
 
+      <LimitsPanel
+        limits={[
+          ...(fee !== undefined ? [{ label: "Max writing fee", value: `${fmtNative(withSlip(fee, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "The Optara writing fee can't exceed this." }] : []),
+          ...(sellable && net !== undefined && sellFee.data !== undefined
+            ? [
+                { label: "Least cash accepted", value: `${fmtNative(lessSlip(net, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "If the sale would pay less than this, it is cancelled and you keep the options." },
+                { label: "Max order-book fee", value: `${fmtNative(withSlip(sellFee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "Kuru's fee can't exceed this." },
+              ]
+            : []),
+        ]}
+      />
+
       <TxButton
-        label={sellable ? `Write for +${net !== undefined ? fmtNative(net, s.assetDecimals) : ""}` : `Write ${amount || "0"}`}
+        summary={qty ? `Write ${fmtQty(qty)} ${seriesName(s)} options from account #${selected}${sellable && net !== undefined ? ` and sell them for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : ""}` : undefined}
+        label={sellable && net !== undefined ? `Write ${amount} and collect ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : `Write ${amount || "0"} option${amount === "1" ? "" : "s"}`}
         tone="accent"
         steps={ok ? steps : undefined}
         disabled={!a.enabled || !steps || ok === false}
@@ -770,7 +784,7 @@ function WritePanel({
 }
 
 // ------------------------------------------------------------------ Account Setup (1-Click Onboarding)
-function AccountSetup({ s }: { s: Series }) {
+export function AccountSetup({ s }: { s: Series }) {
   const { refresh, select } = useAccountState();
   const { address } = useConnection();
   const { data: balance } = useTokenBalance(s.settlementAsset, address);
@@ -806,6 +820,7 @@ function AccountSetup({ s }: { s: Series }) {
 
       <TxButton
         label="Create Account & Deposit"
+        summary={deposit ? `New account, then ${fmtNative(deposit, s.assetDecimals)} ${s.assetSymbol} from your wallet into it` : undefined}
         steps={steps}
         disabled={!deposit}
         successMessage="Your Optara account is active!"
@@ -832,9 +847,10 @@ function SellPanel({
   bid?: bigint;
   market?: Hex;
   walletQty: bigint;
-  onQty: (q: number) => void;
+  onQty: (q: number, cost?: number) => void;
 }) {
   const { address } = useConnection();
+  const [slip] = useSlippage();
   const [amount, setAmount] = useState("");
   const qty = parseQty(amount);
   useEffect(() => onQty(qty ? Number(qty) / 1e18 : 1), [qty, onQty]);
@@ -852,7 +868,7 @@ function SellPanel({
   const tooMuch = qty !== undefined && qty > walletQty;
   const steps =
     address && qty && net !== undefined && fee.data !== undefined
-      ? sellSteps(s, qty, lessSlip(net), withSlip(fee.data), address)
+      ? sellSteps(s, qty, lessSlip(net, slip), withSlip(fee.data, slip), address)
       : undefined;
 
   return (
@@ -868,13 +884,25 @@ function SellPanel({
       />
 
       <div className="rounded-2xl border border-line bg-surface-2 p-4 space-y-1">
-        <Row label="Current Highest Bid" value={bid !== undefined ? `$${fmtWad(bid)} ${s.assetSymbol}` : "No bids"} />
-        <Row label="Kuru Venue Fee" value={fee.data !== undefined ? `${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
-        <Row strong label="Net Cash to Wallet" value={net !== undefined ? `+$${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : "—"} tone="good" />
+        <Row label="Best bid per option" value={bid !== undefined ? `${fmtPrice(bid)} ${s.assetSymbol}` : "Nobody is bidding right now"} />
+        <Row label={<Term tip="Charged by the Kuru order book on the sale.">Order book fee</Term>} value={fee.data !== undefined ? `−${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
+        <Row strong label="Cash to your wallet" value={net !== undefined ? `+${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : "—"} tone="good" />
       </div>
+
+      <LimitsPanel
+        limits={
+          net !== undefined && fee.data !== undefined
+            ? [
+                { label: "Least cash accepted", value: `${fmtNative(lessSlip(net, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "If the sale would pay less than this, it is cancelled and you keep the options." },
+                { label: "Max order-book fee", value: `${fmtNative(withSlip(fee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "Kuru's fee can't exceed this." },
+              ]
+            : []
+        }
+      />
 
       <TxButton
         label="Sell Options Now"
+        summary={qty && net !== undefined ? `Sell ${fmtQty(qty)} ${seriesName(s)} options for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : undefined}
         steps={steps}
         disabled={!steps || tooMuch}
         disabledReason={a.reason}
@@ -1028,21 +1056,27 @@ function RedeemPanel({ s, ctx, walletQty }: { s: Series; ctx: ActionContext; wal
       <SettlementTimeline state={ctx.groupState} />
 
       <div className="rounded-2xl border border-line bg-surface-2 p-4 space-y-2">
-        <Row label="Option Tokens in Wallet" value={fmtQty(walletQty)} />
+        <Row label="Option tokens in your wallet" value={fmtQty(walletQty)} />
         <Row
           strong
-          label="Your Cash Payout"
+          label="Your cash payout"
           value={
-            payout.data
-              ? `$${fmtNative(payout.data[0], s.assetDecimals)} ${s.assetSymbol}${payout.data[1] ? "" : " (estimated)"}`
-              : "—"
+            walletQty === 0n
+              ? "—"
+              : payout.data
+              ? `${fmtNative(payout.data[0], s.assetDecimals)} ${s.assetSymbol}${payout.data[1] ? "" : " (before any shortfall cut)"}`
+              : "Known once the price is fixed"
           }
           tone="good"
         />
+        {payout.data && payout.data[0] === 0n && walletQty > 0n && (
+          <p className="text-xs text-muted">This option expired out of the money, so it pays nothing.</p>
+        )}
       </div>
 
       <TxButton
-        label="Redeem Tokens for Cash"
+        label="Redeem tokens for cash"
+        summary={payout.data ? `Burn ${fmtQty(walletQty)} option tokens for ${fmtNative(payout.data[0], s.assetDecimals)} ${s.assetSymbol}` : undefined}
         steps={steps}
         disabled={!r.enabled}
         disabledReason={r.reason}
@@ -1100,11 +1134,12 @@ function Terms({ s, market }: { s: Series; market?: Hex }) {
       {open ? (
         <div className="flex flex-col gap-1 text-xs pt-2">
           <Row label="Type" value={`European ${optionTypeName(s.optionType).toLowerCase()}`} />
-          <Row label="Strike" value={`$${fmtWad(s.strikeWad, 2)} ${s.assetSymbol}`} />
-          <Row label="Contract size" value={`1.000 ${s.underlyingSymbol}`} />
+          <Row label="Strike" value={`$${fmtLevel(s.strikeWad)}`} />
+          <Row label="Contract size" value={`1 option = ${legOf(s).size} ${s.underlyingSymbol}`} />
           <Row label="Settles in" value={s.assetSymbol} />
           <Row label="Expiry" value={fmtExpiry(s.expiry)} />
-          <Row label="Settlement price" value="Reference price at expiry" />
+          <Row label="Settlement price" value="Official feed price at the expiry time" />
+          <Row label="Payout per option" value={s.optionType === 0 ? "Settlement price − strike, if above" : "Strike − settlement price, if below"} />
           <Row
             label="Option token"
             value={
@@ -1139,26 +1174,35 @@ function Blocked({ reason }: { reason?: string }) {
 export function SettlementTimeline({ state }: { state: string }) {
   const steps = [
     { key: "EXPIRED", label: "Expired" },
-    { key: "FINALIZED", label: "Price Fixed" },
-    { key: "ALL_SETTLED", label: "Accounts Settled" },
-    { key: "REDEEMABLE", label: "Payouts Open" },
+    { key: "FINALIZED", label: "Price fixed" },
+    { key: "ALL_SETTLED", label: "Accounts settled" },
+    { key: "REDEEMABLE", label: "Payouts open" },
   ];
-  const order = ["ACTIVE", "EXPIRED", "ORACLE_STALLED", "FINALIZED", "ALL_SETTLED", "REDEEMABLE"];
+  const order = ["ACTIVE", "EXPIRED", "FINALIZED", "ALL_SETTLED", "REDEEMABLE"];
   const at = order.indexOf(state === "ORACLE_STALLED" ? "EXPIRED" : state);
+  // The step being worked on is the one after the last finished one.
+  const current = state === "REDEEMABLE" ? -1 : steps.findIndex((st) => order.indexOf(st.key) > at);
 
   return (
-    <ol className="flex items-center gap-1.5 py-1">
+    <ol className="grid grid-cols-4 gap-1.5" aria-label="Settlement progress">
       {steps.map((st, i) => {
         const done = at >= order.indexOf(st.key);
+        const now = i === current;
         return (
-          <li key={st.key} className="flex flex-1 flex-col items-center gap-1 text-center">
-            <div className={cx("h-1.5 w-full rounded-full transition-all", done ? "bg-good" : "bg-line")} />
-            <span className={cx("text-[10px] font-semibold leading-tight", done ? "text-ink" : "text-muted")}>
-              {st.label}
+          <li key={st.key} className="flex flex-col gap-1.5" aria-current={now ? "step" : undefined}>
+            <div className={cx("h-1.5 rounded-full", done ? "bg-good" : now ? "bg-primary/60 animate-pulse" : "bg-line")} />
+            <span className={cx("flex items-center gap-1 text-[11px] font-semibold leading-tight", done ? "text-ink" : now ? "text-primary" : "text-muted")}>
+              <span
+                className={cx(
+                  "grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9px]",
+                  done ? "bg-good text-white" : now ? "bg-primary text-white" : "border border-line",
+                )}
+              >
+                {done ? "✓" : i + 1}
+              </span>
+              <span className="min-w-0">{st.label}</span>
             </span>
-            {i === 0 && state === "ORACLE_STALLED" && (
-              <span className="text-[9px] text-bad font-bold">Feed delayed</span>
-            )}
+            {i === 0 && state === "ORACLE_STALLED" && <span className="text-[10px] font-bold text-bad">Price feed late</span>}
           </li>
         );
       })}

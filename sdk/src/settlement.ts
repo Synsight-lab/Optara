@@ -1,5 +1,6 @@
-import { encodeAbiParameters, type Address, type Hex, type PublicClient } from "viem";
+import { BaseError, ContractFunctionRevertedError, encodeAbiParameters, type Address, type Hex, type PublicClient } from "viem";
 import { settlementOracleAbi } from "./abi.ts";
+import { decodeRevert } from "./errors.ts";
 
 /** Chainlink AggregatorV3 reads used to prove the round in force (ORACLES.md §5.2). */
 export const aggregatorV3Abi = [
@@ -217,6 +218,16 @@ export async function buildSettlementProof(
     });
     return { settlementData, sourceIndex, priceWad, observationTime: BigInt(observationTime) };
   } catch (e) {
-    return { settlementData, sourceIndex, error: (e as Error).message.split("\n")[0] };
+    return { settlementData, sourceIndex, error: revertReason(e) };
   }
+}
+
+/** "InvalidSettlementProof(7)" rather than viem's generic "The contract function reverted". */
+function revertReason(e: unknown): string {
+  const r = e instanceof BaseError ? e.walk((x) => x instanceof ContractFunctionRevertedError) : undefined;
+  if (r instanceof ContractFunctionRevertedError) {
+    if (r.data?.errorName) return `${r.data.errorName}(${(r.data.args ?? []).map(String).join(", ")})`;
+    if (r.raw) return decodeRevert(r.raw);
+  }
+  return (e as Error).message.split("\n")[0]!;
 }

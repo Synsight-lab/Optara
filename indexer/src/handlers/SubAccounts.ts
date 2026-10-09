@@ -4,7 +4,7 @@
  * totals move by the difference between the stored and the new balance, so they are replay-safe too.
  */
 import { indexer, type Account, type Position } from "envio";
-import { max0 } from "../lib.ts";
+import { logId, max0 } from "../lib.ts";
 
 indexer.onEvent({ contract: "SubAccounts", event: "SubAccountCreated", fields: { block: ["timestamp"] } }, async ({ event, context }) => {
   const a: Account = {
@@ -46,6 +46,15 @@ indexer.onEvent({ contract: "SubAccounts", event: "BalanceUpdated", fields: { bl
     updatedAt: BigInt(event.block.timestamp),
   };
   context.Position.set(p);
+  context.BalanceChange.set({
+    id: logId(event),
+    accountId,
+    seriesId,
+    delta: event.params.delta,
+    balance,
+    block: BigInt(event.block.number),
+    timestamp: BigInt(event.block.timestamp),
+  });
   if (prev === balance) return;
   const s = await context.Series.getOrThrow(seriesId);
   context.Series.set({

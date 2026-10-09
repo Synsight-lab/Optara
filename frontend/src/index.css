@@ -35,8 +35,8 @@
   --color-monad-offwhite: #f4f3ff;
   --color-monad-black: #08080f;
 
-  --radius-card: 1rem;
-  --radius-ticket: 1.25rem;
+  --radius-card: 0.75rem;
+  --radius-ticket: 0.875rem;
   --shadow-ticket: 0 24px 64px -24px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
   --shadow-pop: 0 16px 48px -16px rgb(0 0 0 / 0.55);
 }
@@ -97,7 +97,7 @@ body {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .num {
@@ -152,7 +152,7 @@ body {
 
 @media (min-width: 768px) {
   .app-column {
-    max-width: 1200px;
+    max-width: 1280px;
     padding-inline: 24px;
   }
 }
@@ -168,8 +168,16 @@ body {
   box-shadow: var(--shadow-ticket);
 }
 
+@utility page-band {
+  @apply rounded-xl border border-line bg-surface/80 p-4 md:p-5;
+}
+
+@utility info-row {
+  @apply flex items-start gap-3 rounded-lg border border-line bg-surface-2/60 p-3;
+}
+
 @utility btn {
-  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98]
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98]
     disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2
     focus-visible:outline-primary;
 }
@@ -200,7 +208,7 @@ body {
   box-shadow: 0 8px 24px -8px rgb(255 77 109 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 @utility input {
-  @apply w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-base outline-none transition
+  @apply w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-base outline-none transition
     placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/25;
 }
 @utility pill {

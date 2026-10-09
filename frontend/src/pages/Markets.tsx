@@ -2,20 +2,22 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Hex } from "viem";
-import { ChevronRight, Coins, Plus, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronRight, Coins, Plus, Search, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, EmptyState, Pill, Skeleton, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
-import { fmtDuration, fmtExpiryShort, fmtPrice, fmtWad, seriesName } from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiryShort, fmtLevel, fmtPrice, fmtWad, seriesName } from "../lib/optara/format.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
 import { getSeriesMarket } from "../lib/optara/reads.ts";
+import { breakeven, legOf, moveNeeded, moveText, priceLevel } from "../lib/optara/payoff.ts";
+import { IS_LOCAL } from "../config/network.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { tradeMap } from "../lib/optara/activity.ts";
 
 type Intent = "call" | "put" | "earn";
-type SortKey = "closest" | "leverage" | "cheapest";
+type SortKey = "closest" | "easiest" | "cheapest";
 
 const PAGE_SIZE = 15;
 /** Above this many contracts we skip the quote prefetch and sort with static data only. */
@@ -40,7 +42,7 @@ export function MarketsPage() {
 
   return (
     <div className="space-y-4">
-      <LandingHero products={products} seriesCount={series?.length ?? 0} />
+      <LandingHero products={products} series={series ?? []} now={now} />
 
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-3 lg:sticky lg:top-[84px]">
@@ -63,10 +65,13 @@ export function MarketsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-1">
-            <IntentButton active={intent === "call"} onClick={() => setIntent("call")} tone="up" icon={<TrendingUp className="h-4 w-4" />} title="Up" sub="Calls" />
-            <IntentButton active={intent === "put"} onClick={() => setIntent("put")} tone="down" icon={<TrendingDown className="h-4 w-4" />} title="Down" sub="Puts" />
-            <IntentButton active={intent === "earn"} onClick={() => setIntent("earn")} tone="earn" icon={<Coins className="h-4 w-4" />} title="Earn" sub="Write" />
+          <div className="page-band space-y-2">
+            <div className="text-[11px] font-bold uppercase text-faint">Choose an action</div>
+            <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-1">
+            <IntentButton active={intent === "call"} onClick={() => setIntent("call")} tone="up" icon={<TrendingUp className="h-4 w-4" />} title="Up" sub="Buy calls" />
+            <IntentButton active={intent === "put"} onClick={() => setIntent("put")} tone="down" icon={<TrendingDown className="h-4 w-4" />} title="Down" sub="Buy puts" />
+            <IntentButton active={intent === "earn"} onClick={() => setIntent("earn")} tone="earn" icon={<Coins className="h-4 w-4" />} title="Earn" sub="Write options" />
+            </div>
           </div>
         </aside>
 
@@ -84,36 +89,68 @@ export function MarketsPage() {
   );
 }
 
-function LandingHero({ products, seriesCount }: { products: Series[]; seriesCount: number }) {
+function LandingHero({ products, series, now }: { products: Series[]; series: Series[]; now?: bigint }) {
+  const symbols = [...new Set(products.map((p) => p.underlyingSymbol))];
+  const live = series.filter((s) => now === undefined || s.expiry > now);
+  const next = live.reduce<bigint | undefined>((m, s) => (m === undefined || s.expiry < m ? s.expiry : m), undefined);
+  const list = symbols.length <= 1 ? symbols.join("") : `${symbols.slice(0, -1).join(", ")} and ${symbols.at(-1)}`;
   return (
-    <section className="overflow-hidden rounded-[22px] border border-line bg-surface/80 p-4 shadow-ticket md:p-6">
-      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_360px] md:items-end">
+    <section className="overflow-hidden rounded-xl border border-line bg-surface/80 p-4 shadow-ticket md:p-6">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
-            Live fork simulation
-          </div>
-          <h1 className="font-display max-w-2xl text-3xl font-bold leading-tight tracking-tight md:text-5xl">
-            Trade listed option markets across MON, ETH and BTC
+          {IS_LOCAL && (
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
+              Local demo · test money only
+            </div>
+          )}
+          <h1 className="font-display max-w-2xl text-3xl font-bold leading-tight md:text-5xl">
+            Trade {list} with a fixed max loss
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted md:text-base">
-            Fresh one-hour contracts sit beside weekly expiries, with mock Kuru books quoted against the local fork.
+            Pick an asset, choose Up or Down, then set how much premium to spend. Buyers can only lose what they pay;
+            writers use margin and collect premium upfront.
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link to="/trade" className="btn-primary">
+              Buy an option <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link to="/write" className="btn-ghost">
+              Earn premium
+            </Link>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <Metric label="Products" value={products.length.toString()} />
-          <Metric label="Series" value={seriesCount.toString()} />
-          <Metric label="Expiry" value="1h" />
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+          <PlainStep icon={<TrendingUp className="h-4 w-4" />} title="Buyers" text="Pay once. No liquidation." />
+          <PlainStep icon={<Coins className="h-4 w-4" />} title="Writers" text="Deposit collateral. Earn premium." />
+          <PlainStep icon={<ShieldCheck className="h-4 w-4" />} title="Settlement" text="Cash payout at expiry." />
         </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+          <Metric label="Assets" value={symbols.length.toString()} />
+          <Metric label="Open options" value={live.length.toString()} />
+          <Metric label="Next expiry" value={next !== undefined && now !== undefined ? fmtDuration(next - now) : "—"} />
       </div>
     </section>
   );
 }
 
+function PlainStep({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <div className="info-row">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span>
+      <span>
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="block text-xs leading-5 text-muted">{text}</span>
+      </span>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface-2 p-3">
+    <div className="rounded-lg border border-line bg-surface-2 p-3">
       <div className="text-[11px] font-semibold uppercase text-faint">{label}</div>
-      <div className="font-display mt-1 text-2xl font-bold">{value}</div>
+      <div className="font-display mt-1 text-xl font-bold md:text-2xl">{value}</div>
     </div>
   );
 }
@@ -122,7 +159,7 @@ function IntentButton({ active, onClick, tone, icon, title, sub }: { active: boo
   const ring = tone === "up" ? "border-good/60 bg-good/8" : tone === "down" ? "border-bad/60 bg-bad/8" : "border-accent/50 bg-accent/8";
   const fg = tone === "up" ? "text-good" : tone === "down" ? "text-bad" : "text-accent";
   return (
-    <button onClick={onClick} aria-pressed={active} className={cx("flex min-h-[64px] flex-col items-start justify-center rounded-2xl border p-2.5 cursor-pointer", active ? ring : "border-line bg-surface")}>
+    <button onClick={onClick} aria-pressed={active} className={cx("flex min-h-[64px] flex-col items-start justify-center rounded-lg border p-2.5 cursor-pointer", active ? ring : "border-line bg-surface")}>
       <span className={cx("flex items-center gap-1 text-sm font-bold", active ? fg : "text-ink")}>{icon}{title}</span>
       <span className="mt-0.5 text-[11px] text-muted">{sub}</span>
     </button>
@@ -136,12 +173,12 @@ function MarketHero({ product }: { product: Series }) {
       <div className="flex items-center gap-2.5">
         <TokenIcon symbol={product.underlyingSymbol} className="h-10 w-10" />
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-lg font-bold tracking-tight">{product.underlyingSymbol} options</h1>
+          <h1 className="font-display truncate text-lg font-bold tracking-tight">{product.underlyingSymbol} options</h1>
           <p className="truncate text-xs text-muted">Cash-settled in {product.assetSymbol}</p>
         </div>
         <div className="text-right">
           <div className="text-[11px] text-muted">Spot</div>
-          <div className="num font-display text-[26px] font-bold leading-none tracking-tight">{m ? fmtSpot(product.underlyingSymbol, m.spotWad) : <Skeleton className="h-7 w-20" />}</div>
+          <div className="num font-display whitespace-nowrap text-xl font-bold leading-none tracking-tight">{m ? `$${fmtLevel(m.spotWad)}` : <Skeleton className="h-7 w-20" />}</div>
         </div>
         <Link to="/new" aria-label="List a new market" title="List a new market" className="btn-ghost !px-2.5 !py-2 shrink-0">
           <Plus className="h-4 w-4" />
@@ -156,23 +193,17 @@ function MarketHero({ product }: { product: Series }) {
   );
 }
 
-function fmtSpot(symbol: string, wad: bigint) {
-  const decimals = symbol === "MON" ? 4 : 0;
-  return `$${fmtWad(wad, decimals)}`;
-}
-
 function premiumOf(mk: { mark?: bigint; quote?: { ask?: bigint; bid?: bigint } } | undefined, intent: Intent): bigint | undefined {
   if (!mk) return undefined;
   return intent === "earn" ? (mk.quote?.bid ?? mk.mark) : (mk.quote?.ask ?? mk.mark);
 }
 
-function leverageOf(s: Series, spotN: number | undefined, premium: bigint | undefined): number | undefined {
+/** How far the price must move, in the option's direction, before a buyer at this price profits (0.05 = 5%). */
+function moveToProfit(s: Series, spotN: number | undefined, premium: bigint | undefined): number | undefined {
   if (spotN === undefined || premium === undefined) return undefined;
-  const prem = Number(premium) / 1e18;
-  if (!(prem > 0)) return undefined;
-  const strike = Number(s.strikeWad) / 1e18;
-  const payout = s.optionType === 0 ? Math.max(0, spotN * 1.15 - strike) : Math.max(0, strike - spotN * 0.85);
-  return payout / prem;
+  const leg = legOf(s);
+  const be = breakeven(leg, Number(premium) / 1e18);
+  return be === undefined ? undefined : moveNeeded(leg, spotN, be);
 }
 
 type StatusKey = "all" | "active" | "expiring" | "expired" | "yours";
@@ -248,7 +279,7 @@ function MarketList({
     const expired = now !== undefined && s.expiry <= now;
     return {
       s, premium, expired,
-      lev: leverageOf(s, spotN, premium),
+      move: moveToProfit(s, spotN, premium),
       dist: spotN === undefined ? Infinity : Math.abs(strike - spotN),
       tradedAt: trades.get(s.id.toLowerCase())?.at ?? 0,
     };
@@ -257,7 +288,7 @@ function MarketList({
   const sorted = useMemo(() => {
     const arr = [...enriched].sort((a, b) => {
       switch (sort) {
-        case "leverage": return (b.lev ?? -1) - (a.lev ?? -1);
+        case "easiest": return (a.move ?? Infinity) - (b.move ?? Infinity);
         case "cheapest":
           if (a.premium === undefined) return 1;
           if (b.premium === undefined) return -1;
@@ -302,8 +333,8 @@ function MarketList({
       if (timer) clearTimeout(timer);
     };
   }, [sorted.length, loadingMore, shown.length]);
-  const grouped = sort === "closest" || sort === "leverage" || sort === "cheapest" || sort === "strikeAsc" || sort === "strikeDesc";
-  const needsQuotes = sort === "leverage" || sort === "cheapest";
+  const grouped = sort === "closest" || sort === "easiest" || sort === "cheapest" || sort === "strikeAsc" || sort === "strikeDesc";
+  const needsQuotes = sort === "easiest" || sort === "cheapest";
 
   return (
     <div className="space-y-2">
@@ -347,7 +378,7 @@ function MarketList({
           className="input min-h-[44px] flex-1 cursor-pointer !py-2 text-[13px] font-semibold"
         >
           <option value="closest">Closest to spot</option>
-          <option value="leverage" disabled={!prefetch}>Highest leverage{!prefetch ? " (narrow search first)" : ""}</option>
+          <option value="easiest" disabled={!prefetch || intent === "earn"}>Smallest move to profit{!prefetch ? " (narrow search first)" : ""}</option>
           <option value="cheapest" disabled={!prefetch}>Cheapest first{!prefetch ? " (narrow search first)" : ""}</option>
           <option value="strikeAsc">Strike low to high</option>
           <option value="strikeDesc">Strike high to low</option>
@@ -363,9 +394,9 @@ function MarketList({
       )}
 
       <p className="px-1 text-[13px] leading-snug text-muted">
-        {intent === "call" && <>Targets above spot. More climb past target, more payout.</>}
-        {intent === "put" && <>Targets below spot. Falls through it, you profit.</>}
-        {intent === "earn" && <>Back a contract. Keep premium today.</>}
+        {intent === "call" && <>Calls pay if the price ends above the target. Each row shows how far it has to rise for you to profit.</>}
+        {intent === "put" && <>Puts pay if the price ends below the target. Each row shows how far it has to fall for you to profit.</>}
+        {intent === "earn" && <>Write an option and collect its price now. You owe the payout if it ends past the target. Needs a margin account.</>}
         {" "}<button onClick={onGuide} className="font-semibold text-primary cursor-pointer">Learn</button>
       </p>
 
@@ -392,7 +423,7 @@ function MarketList({
                   <OptionRow
                     s={s} spot={spot} spotN={spotN} intent={intent} expired={expired}
                     held={walletIds.has(s.id.toLowerCase()) || positionIds.has(s.id.toLowerCase())}
-                    onOpen={() => navigate(`/series/${s.id}?tab=${expired ? "redeem" : intent === "earn" ? "write" : "trade"}`)}
+                    onOpen={() => navigate(expired ? `/series/${s.id}?tab=redeem` : intent === "earn" ? `/write/${s.id}` : `/series/${s.id}?tab=trade`)}
                   />
                 </Fragment>
               ))}
@@ -427,38 +458,49 @@ function MarketList({
 
 function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Series; spot?: bigint; spotN?: number; intent: Intent; expired?: boolean; held?: boolean; onOpen(): void }) {
   const { data: mk } = useSeriesMarket(s);
-  const strike = Number(s.strikeWad) / 1e18;
-  const away = spotN !== undefined ? ((strike - spotN) / spotN) * 100 : undefined;
-  const price = intent === "earn" ? (mk?.quote?.bid ?? mk?.mark) : (mk?.quote?.ask ?? mk?.mark);
+  const leg = legOf(s);
+  const quote = intent === "earn" ? mk?.quote?.bid : mk?.quote?.ask;
+  // With no order on the book, show the protocol's fair value, labelled as such.
+  const price = quote ?? mk?.mark;
   const priceN = price !== undefined ? Number(price) / 1e18 : undefined;
-  const breakeven = priceN !== undefined ? (s.optionType === 0 ? strike + priceN : strike - priceN) : undefined;
-  const upside = priceN && spotN ? (s.optionType === 0 ? Math.max(0, spotN * 1.15 - strike) / priceN : Math.max(0, strike - spotN * 0.85) / priceN) : undefined;
+  const be = priceN !== undefined ? breakeven(leg, priceN) : undefined;
+  const beMove = be !== undefined && spotN !== undefined ? moveNeeded(leg, spotN, be) : undefined;
   const itm = spot !== undefined && (s.optionType === 0 ? spot > s.strikeWad : spot < s.strikeWad);
+  const toStrike = spotN !== undefined ? moveNeeded(leg, spotN, leg.strike) : undefined;
+
+  const detail = expired
+    ? `${seriesName(s)} · expired`
+    : intent === "earn"
+    ? toStrike === undefined
+      ? seriesName(s)
+      : itm
+      ? "In the money now: a writer would owe a payout"
+      : `You keep it all unless the price ${moveText(leg, toStrike, 1, true)}`
+    : be === undefined || beMove === undefined
+    ? seriesName(s)
+    : beMove <= 0
+    ? `Profitable at today's price (breakeven ${priceLevel(be)})`
+    : `Profit if the price ${moveText(leg, beMove, 1, true)}, past ${priceLevel(be)}`;
 
   return (
     <li>
       <button onClick={onOpen} className="flex min-h-[68px] w-full items-center gap-2.5 rounded-2xl px-2.5 py-2.5 text-left transition active:scale-[0.99] hover:bg-primary-soft/50 cursor-pointer">
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className={cx("num font-display text-[17px] font-bold tracking-tight", expired && "text-muted")}>${fmtWad(s.strikeWad, s.underlyingSymbol === "MON" ? 4 : 0)}</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className={cx("num font-display text-[17px] font-bold tracking-tight", expired && "text-muted")}>{priceLevel(leg.strike)}</span>
+            <span className={cx("text-xs font-semibold", s.optionType === 0 ? "text-good" : "text-bad")}>{s.optionType === 0 ? "Call" : "Put"}</span>
             {expired && <span className="pill border border-line bg-surface-2 text-muted !text-[11px]">Expired</span>}
             {held && !expired && <span className="pill bg-primary-soft text-primary !text-[11px]">Yours</span>}
-            {away !== undefined && (
-              <span className={cx("num text-xs font-semibold", away > 0 ? "text-good" : away < 0 ? "text-bad" : "text-muted")}>
-                {away > 0 ? `+${away.toFixed(1)}%` : `${away.toFixed(1)}%`}
-              </span>
-            )}
+            {itm && !expired && <span className="pill border border-good/25 bg-good/10 text-good !text-[11px]">In the money</span>}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-muted">
-            {seriesName(s)}
-            {breakeven !== undefined ? ` · BE $${s.underlyingSymbol === "MON" ? breakeven.toFixed(4) : Math.round(breakeven).toLocaleString()}` : ""}
-            {itm && !expired ? " · ITM" : ""}
-          </span>
+          <span className="mt-0.5 block truncate text-xs text-muted">{detail}</span>
         </span>
-        <Sparkline optionType={s.optionType} strike={strike} spot={spotN} />
+        <Sparkline optionType={s.optionType} strike={leg.strike} spot={spotN} />
         <span className="shrink-0 text-right">
           <span className="num font-display block text-[15px] font-semibold">{price !== undefined ? fmtPrice(price) : "—"}</span>
-          <span className="block text-[11px] text-muted">{expired ? "settled" : intent === "earn" ? "you collect" : upside !== undefined ? `up to ${upside.toFixed(1)}×` : ""}</span>
+          <span className="block text-[11px] text-muted">
+            {expired ? "" : quote === undefined ? (price !== undefined ? "fair value, no orders" : "no orders") : intent === "earn" ? "you collect" : "per option"}
+          </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
       </button>

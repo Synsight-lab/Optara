@@ -2,7 +2,9 @@ import { useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router";
 import {
   Activity,
+  Coins,
   Compass,
+  HelpCircle,
   Menu,
   Moon,
   PieChart,
@@ -12,7 +14,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { fmtWad } from "../lib/optara/format.ts";
+import { fmtLevel, fmtWad } from "../lib/optara/format.ts";
 import { useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
 import { useQuickGuide, useTheme } from "../state.tsx";
 import { ConnectButton } from "./ConnectButton.tsx";
@@ -30,11 +32,10 @@ export function Layout() {
 
   return (
     <div className="app-shell flex min-h-screen flex-col overflow-x-clip">
-      {/* App bar — compact, like a mobile header */}
       <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-xl">
-        <div className="app-column flex h-[60px] items-center gap-2">
+        <div className="app-column flex h-[64px] items-center gap-3">
           <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="Optara home">
-            <span className="font-display grid h-9 w-9 place-items-center rounded-2xl bg-primary text-[18px] font-bold text-white shadow-lg">
+            <span className="font-display grid h-9 w-9 place-items-center rounded-xl bg-primary text-[18px] font-bold text-white shadow-lg">
               O
             </span>
             <span className="leading-none">
@@ -45,18 +46,29 @@ export function Layout() {
             </span>
           </Link>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            <div className="hidden items-center gap-1 md:flex">
+          <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            <div className="hidden items-center gap-1 lg:flex">
               <DesktopNav to="/" label="Markets" />
               <DesktopNav to="/trade" label="Trade" />
+              <DesktopNav to="/write" label="Earn" />
               <DesktopNav to="/portfolio" label="Portfolio" />
+            </div>
+            <div className="hidden items-center gap-1 xl:flex">
               <DesktopNav to="/settlement" label="Settle" />
               <DesktopNav to="/liquidations" label="Liquidations" />
               <DesktopNav to="/system" label="System" />
             </div>
-            <SpotPill />
             <button
-              className="rounded-xl border border-line p-2 text-muted transition hover:text-ink cursor-pointer"
+              onClick={openGuide}
+              className="hidden rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink md:inline-flex md:items-center md:gap-1.5"
+            >
+              <HelpCircle className="h-4 w-4" /> Guide
+            </button>
+            <div className="hidden sm:block">
+              <SpotPill />
+            </div>
+            <button
+              className="rounded-lg border border-line p-2 text-muted transition hover:text-ink cursor-pointer"
               onClick={toggleTheme}
               aria-label="Toggle theme"
             >
@@ -67,7 +79,6 @@ export function Layout() {
         </div>
       </header>
 
-      {/* Single app column — phone-like on every screen */}
       <main className="app-column w-full flex-1 pb-28 pt-3 sm:pt-4 md:pb-8 md:pt-6">
         <Outlet />
       </main>
@@ -100,6 +111,9 @@ export function Layout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+            <Link to="/write" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-accent/40 bg-accent/10 p-3.5 text-sm font-semibold text-accent">
+              <Coins className="h-4 w-4" /> Earn: write options
+            </Link>
             <Link to="/new" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-primary/40 bg-primary-soft p-3.5 text-sm font-semibold text-primary">
               <Zap className="h-4 w-4" /> New market
             </Link>
@@ -128,7 +142,7 @@ function DesktopNav({ to, label }: { to: string; label: string }) {
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        cx("rounded-xl px-3 py-2 text-[13px] font-semibold transition", isActive ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-ink")
+        cx("rounded-lg px-3 py-2 text-[13px] font-semibold transition", isActive ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-ink")
       }
     >
       {label}
@@ -157,7 +171,7 @@ function SpotPill() {
   return (
     <div className="flex items-center gap-1.5 rounded-xl border border-line bg-surface/70 px-2 py-1.5" title={m.spotFresh ? "Live" : "Delayed"}>
       <TokenIcon symbol={first.underlyingSymbol} className="h-4 w-4" />
-      <span className="num font-display text-[13px] font-semibold">${fmtWad(m.spotWad, 0)}</span>
+      <span className="num font-display text-[13px] font-semibold">${fmtLevel(m.spotWad)}</span>
       <span className={cx("h-1.5 w-1.5 rounded-full", m.spotFresh ? "live-dot bg-good" : "bg-warn")} />
     </div>
   );

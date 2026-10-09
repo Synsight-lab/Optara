@@ -8,12 +8,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useChainId, useConfig, useConnection, useSwitchChain } from "wagmi";
 import { getWalletClient } from "wagmi/actions";
 import type { TransactionReceipt } from "viem";
-import { CHAIN, EXPLORER_URL, NETWORK_LABEL } from "../config/network.ts";
+import { CHAIN, EXPLORER_URL, IS_LOCAL_FORK, NETWORK_LABEL } from "../config/network.ts";
 import type { Step } from "../lib/optara/actions.ts";
 import { pendingDisclosures, type DisclosureId } from "../lib/optara/disclosures.ts";
 import { TxError, type Wallet } from "../lib/optara/tx.ts";
 import { useToasts } from "../state.tsx";
 import { DisclosureModal } from "./DisclosureModal.tsx";
+import { TestWalletConfirm, type TestConfirmRequest } from "./TestWalletConfirm.tsx";
 import { Spinner, cx } from "./ui.tsx";
 
 type Phase = "idle" | "wallet" | "mining" | "done" | "failed";
@@ -27,10 +28,18 @@ export interface TxButtonProps {
   tone?: "primary" | "accent";
   onDone?: (receipts: TransactionReceipt[]) => void;
   successMessage?: string;
+  /** What the action moves, in words, e.g. "1,000 USDC from your wallet into account #9". Shown when confirming. */
+  summary?: string;
 }
 
-export function TxButton({ label, steps, disabled, disabledReason, disclosures = [], tone = "primary", onDone, successMessage }: TxButtonProps) {
-  const { isConnected } = useConnection();
+export function TxButton({ label, steps, disabled, disabledReason, disclosures = [], tone = "primary", onDone, successMessage, summary }: TxButtonProps) {
+  const { isConnected, connector, address } = useConnection();
+  // Test wallets sign without any popup (anvil holds their keys), so each transaction is confirmed in-app instead.
+  const isTestWallet = connector?.type === "test";
+  // A browser wallet on a local fork of a real chain shares that chain's id, so it would send to the REAL network.
+  const browserOnFork = IS_LOCAL_FORK && !!connector && !isTestWallet;
+  const [confirm, setConfirm] = useState<(TestConfirmRequest & { resolve: (ok: boolean) => void }) | undefined>();
+  const askConfirm = (r: TestConfirmRequest) => new Promise<boolean>((resolve) => setConfirm({ ...r, resolve }));
   const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const config = useConfig();
@@ -57,13 +66,27 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
     }
     setStatus({});
     const receipts: TransactionReceipt[] = [];
-    for (const step of steps) {
+    for (const [i, step] of steps.entries()) {
       try {
         if (step.done && (await step.done(wallet))) {
           setStatus((s) => ({ ...s, [step.key]: "done" }));
           continue;
         }
         setStatus((s) => ({ ...s, [step.key]: "wallet" }));
+        if (isTestWallet) {
+          const ok = await askConfirm({
+            walletName: connector?.name ?? "Test wallet",
+            address: address ?? wallet.account.address,
+            action: label,
+            stepLabel: step.label,
+            stepHint: step.hint,
+            stepIndex: i,
+            stepCount: steps.length,
+            summary,
+          });
+          setConfirm(undefined);
+          if (!ok) throw new TxError("You rejected the transaction.", undefined, true);
+        }
         const receipt = await step.run(wallet, () => setStatus((s) => ({ ...s, [step.key]: "mining" })));
         receipts.push(receipt);
         setStatus((s) => ({ ...s, [step.key]: "done" }));
@@ -83,6 +106,19 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
   }
 
   if (!isConnected) return <button className="btn-ghost w-full !py-3 text-[15px]" disabled>Connect wallet to continue</button>;
+  if (browserOnFork) {
+    return (
+      <div className="space-y-1.5">
+        <button className="btn-ghost w-full !py-3 text-[15px]" disabled>
+          Use a test wallet on this fork
+        </button>
+        <p className="text-center text-[13px] leading-snug text-warn">
+          This local fork uses {NETWORK_LABEL[CHAIN.id] ?? CHAIN.name}'s network id, so a browser wallet would send this to the real
+          network. Disconnect and pick a test wallet (Alice…Erin).
+        </p>
+      </div>
+    );
+  }
   if (wrongChain) {
     return (
       <button className="btn-primary w-full !py-3 text-[15px]" onClick={() => switchChain({ chainId: CHAIN.id })} disabled={switching}>
@@ -101,7 +137,7 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
         title={disabled ? disabledReason : undefined}
       >
         {running && <Spinner />}
-        {running ? "Confirm in wallet…" : label}
+        {running ? (isTestWallet ? "Confirm in the window…" : "Confirm in wallet…") : label}
       </button>
       {disabled && disabledReason && <p className="text-center text-[13px] leading-snug text-muted">{disabledReason}</p>}
       {showSteps && (
@@ -119,6 +155,9 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
             );
           })}
         </ol>
+      )}
+      {confirm && (
+        <TestWalletConfirm req={confirm} onConfirm={() => confirm.resolve(true)} onReject={() => confirm.resolve(false)} />
       )}
       {askDisclosures.length > 0 && (
         <DisclosureModal

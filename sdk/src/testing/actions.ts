@@ -1,6 +1,6 @@
 /** User actions on the local stack for service tests: accounts, deposits, mints, oracle pushes. */
 import { erc20Abi, parseEventLogs, type TransactionReceipt, type Abi, type Address, type ContractFunctionArgs, type ContractFunctionName, type Hex, type LocalAccount } from "viem";
-import { liveSpotOracleAbi, optionClearingAbi, portfolioRiskManagerAbi, subAccountsAbi, volSurfaceOracleAbi } from "../abi.ts";
+import { liveSpotOracleAbi, optionClearingAbi, optionSeriesRegistryAbi, portfolioRiskManagerAbi, subAccountsAbi, volSurfaceOracleAbi } from "../abi.ts";
 import type { OracleUpdate } from "../oracleUpdate.ts";
 import { decodeRevert } from "../errors.ts";
 import { withGasBuffer } from "../chain.ts";
@@ -164,6 +164,14 @@ const mockBookAbi = [
 ] as const;
 const mintableAbi = [{ type: "function", name: "mint", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [] }] as const;
 
+function makerSizeForProduct(p: ReturnType<typeof stackProducts>[number], override?: bigint): bigint {
+  if (override !== undefined) return override;
+  const symbol = p.underlyingSymbol.toUpperCase();
+  if (symbol === "MON" || symbol === "WMON") return 100_000n * 10n ** 18n;
+  if (symbol === "BTC" || symbol === "WBTC") return 20n * 10n ** 18n;
+  return 200n * 10n ** 18n;
+}
+
 /**
  * A market maker (stack account 0) quotes the mock Kuru books of the stack's series (all, or `indices`) `spreadBps`
  * around the protocol's mark (`priceOf`), `size` options each side: bids funded with USDC, asks with options it
@@ -173,7 +181,6 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
   const products = stackProducts(s.manifest);
   const px = s.manifest.proxies;
   const mm = stackAccount(0);
-  const size = opts.size ?? 5n * 10n ** 18n;
   const spread = opts.spreadBps ?? 500n;
   const maxSeriesPerAccount = Number(
     await s.test.readContract({ address: px.SubAccounts.proxy, abi: subAccountsAbi, functionName: "maxSeriesPerAccount" }),
@@ -183,9 +190,11 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
   for (const p of products) {
     const now = (await s.test.getBlock()).timestamp;
     const livePrice = productSpotPrice(p, products.length === 1 ? opts.price : undefined);
+    const size = makerSizeForProduct(p, opts.size);
     const indices = (opts.indices ?? p.seriesIds.map((_, i) => i)).filter((i) => p.expiries[Math.floor(i / 8)]! > now);
     if (indices.length === 0) continue;
-    await pushOracles(s, 4, await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false }));
+    // a fresh surface too: on a fork with real Kuru this runs after listing every Kuru market, which takes minutes
+    await pushOracles(s, 4, await freshOracleUpdateForProduct(s, p, { price: livePrice }));
     await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "approve", args: [px.OptionClearing.proxy, 2n ** 256n - 1n] });
     for (let start = 0; start < indices.length; start += chunkSize) {
       const chunk = indices.slice(start, start + chunkSize);
@@ -195,7 +204,6 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
       await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 100_000_000_000_000n] });
       for (const i of chunk) {
         const id = p.seriesIds[i]! as Hex;
-        const book = p.kuruBooks[i]! as Address;
         let mid: bigint;
         try {
           [mid] = await s.test.readContract({ address: px.PortfolioRiskManager.proxy, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [id] });
@@ -203,14 +211,175 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
           continue;
         }
         const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
-        await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
-        const u = await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false });
-        await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
-        const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
-        await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
-        await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
+        // With real Kuru (a fork) the Kuru books aren't mocks and are quoted by quoteRealKuru; their slots here are zero.
+        const books = [p.kuruBooks[i], ...(p.optaraDirectBooks?.[i] ? [p.optaraDirectBooks[i]] : [])].filter((b) => b && !/^0x0{40}$/i.test(b)) as Address[];
+        for (const book of books) {
+          await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
+          const u = await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false });
+          await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
+          const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
+          await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
+          await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
+        }
       }
     }
   }
   return firstAccount;
+}
+
+// ------------------------------------------------------------------ real Kuru on a mainnet fork
+
+/** Kuru's Router on Monad mainnet (deployments/config/monad-mainnet.json; verified by test/fork/KuruAdapter.fork.t.sol). */
+export const KURU_MAINNET_ROUTER: Address = "0xd651346d7c789536ebf06dc72aE3C8502cd695CC";
+
+const kuruRouterAbi = [
+  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "marginAccountAddress", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  {
+    type: "function",
+    name: "deployProxy",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "_type", type: "uint8" },
+      { name: "_baseAssetAddress", type: "address" },
+      { name: "_quoteAssetAddress", type: "address" },
+      { name: "_sizePrecision", type: "uint96" },
+      { name: "_pricePrecision", type: "uint32" },
+      { name: "_tickSize", type: "uint32" },
+      { name: "_minSize", type: "uint96" },
+      { name: "_maxSize", type: "uint96" },
+      { name: "_takerFeeBps", type: "uint256" },
+      { name: "_makerFeeBps", type: "uint256" },
+      { name: "_kuruAmmSpread", type: "uint96" },
+    ],
+    outputs: [{ name: "proxy", type: "address" }],
+  },
+] as const;
+const kuruBookAbi = [
+  { type: "function", name: "addBuyOrder", stateMutability: "nonpayable", inputs: [{ type: "uint32" }, { type: "uint96" }, { type: "bool" }], outputs: [] },
+  { type: "function", name: "addSellOrder", stateMutability: "nonpayable", inputs: [{ type: "uint32" }, { type: "uint96" }, { type: "bool" }], outputs: [] },
+] as const;
+const kuruMarginAbi = [
+  { type: "function", name: "deposit", stateMutability: "payable", inputs: [{ type: "address" }, { type: "address" }, { type: "uint256" }], outputs: [] },
+] as const;
+const venueRegistryWriteAbi = [
+  { type: "function", name: "registerMarket", stateMutability: "nonpayable", inputs: [{ type: "bytes32" }, { type: "address" }, { type: "bytes32" }, { type: "bytes" }], outputs: [] },
+] as const;
+const venueIdAbi = [{ type: "function", name: "VENUE_ID", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] }] as const;
+
+const wrapperOf = async (s: LocalStack, seriesId: Hex) =>
+  (await s.test.readContract({ address: s.manifest.proxies.OptionSeriesRegistry.proxy as Address, abi: optionSeriesRegistryAbi, functionName: "getSeries", args: [seriesId] })).wrapper as Address;
+
+export interface RealKuruMarket {
+  seriesId: Hex;
+  market: Address;
+  /** Price units per 1 settlement-asset unit of price (Kuru's uint32 price = price × pricePrecision). */
+  pricePrecision: bigint;
+  /** Size units per whole option (Kuru's uint96 size = options × sizePrecision). */
+  sizePrecision: bigint;
+}
+
+/** Size: 0.01 option steps, matching the ledger's minimum position. */
+const KURU_SIZE_PRECISION = 10n ** 16n;
+/**
+ * Price steps per product: Kuru prices are uint32, so precision must fit the dearest option (in-the-money BTC calls
+ * reach ~$20k) while resolving the cheapest (MON options are fractions of a cent).
+ */
+const kuruPricePrecision = (spot: number) => (spot < 10 ? 1_000_000n : 10_000n);
+
+/**
+ * Lists every live series on REAL Kuru (a mainnet fork): impersonates Kuru's router owner to deploy one genuine
+ * order book per option token (market deployment is owner-gated), then registers it with Optara's VenueRegistry
+ * (account 1 holds VENUE_ADMIN locally).
+ */
+export async function listOnRealKuru(s: LocalStack, router: Address = KURU_MAINNET_ROUTER): Promise<RealKuruMarket[]> {
+  const t = s.test;
+  const owner = await t.readContract({ address: router, abi: kuruRouterAbi, functionName: "owner" });
+  await t.impersonateAccount({ address: owner });
+  await t.setBalance({ address: owner, value: 10n ** 21n });
+  const kuruVenue = await t.readContract({ address: s.manifest.kuruAdapter as Address, abi: venueIdAbi, functionName: "VENUE_ID" });
+  const now = (await t.getBlock()).timestamp;
+  const out: RealKuruMarket[] = [];
+  try {
+    for (const p of stackProducts(s.manifest)) {
+      const pricePrecision = kuruPricePrecision(productSpotPrice(p));
+      for (let i = 0; i < p.seriesIds.length; i++) {
+        if (p.expiries[Math.floor(i / 8)]! <= now) continue;
+        const seriesId = p.seriesIds[i]! as Hex;
+        const wrapper = await wrapperOf(s, seriesId);
+        const args = [0, wrapper, p.settlementAsset as Address, KURU_SIZE_PRECISION, Number(pricePrecision), 1, 10n ** 14n, 10n ** 27n, 30n, 10n, 100n] as const;
+        const { result: market } = await t.simulateContract({ account: owner, address: router, abi: kuruRouterAbi, functionName: "deployProxy", args });
+        const hash = await t.writeContract({ account: owner, chain: t.chain, address: router, abi: kuruRouterAbi, functionName: "deployProxy", args });
+        await t.waitForTransactionReceipt({ hash });
+        if (!(await t.getCode({ address: market }))) throw new Error(`Kuru did not deploy a market for ${seriesId}`);
+        await send(s, stackAccount(1), { address: s.manifest.proxies.VenueRegistry.proxy as Address, abi: venueRegistryWriteAbi, functionName: "registerMarket", args: [kuruVenue, market, seriesId, "0x"] });
+        out.push({ seriesId, market, pricePrecision, sizePrecision: KURU_SIZE_PRECISION });
+      }
+    }
+  } finally {
+    await t.stopImpersonatingAccount({ address: owner });
+  }
+  return out;
+}
+
+/**
+ * Market making on real Kuru: account 0 writes options into its wallet, deposits them and the quote token into Kuru's
+ * MarginAccount, and rests one ask and one bid per book `spreadBps` around Optara's fair value (resting orders on
+ * Kuru are funded from the MarginAccount, unlike the mocks, which hold inventory themselves).
+ */
+export async function quoteRealKuru(s: LocalStack, markets: RealKuruMarket[], opts: { router?: Address; size?: bigint; spreadBps?: bigint } = {}): Promise<number> {
+  const t = s.test;
+  const px = s.manifest.proxies;
+  const mm = stackAccount(0);
+  const spread = opts.spreadBps ?? 500n;
+  const margin = await t.readContract({ address: opts.router ?? KURU_MAINNET_ROUTER, abi: kuruRouterAbi, functionName: "marginAccountAddress" });
+  const bySeries = new Map(markets.map((m) => [m.seriesId.toLowerCase(), m]));
+  const maxSeriesPerAccount = Number(await t.readContract({ address: px.SubAccounts.proxy, abi: subAccountsAbi, functionName: "maxSeriesPerAccount" }));
+  let quoted = 0;
+  for (const p of stackProducts(s.manifest)) {
+    const indices = p.seriesIds.map((id, i) => [id, i] as const).filter(([id]) => bySeries.has(id.toLowerCase())).map(([, i]) => i);
+    if (indices.length === 0) continue;
+    const price = productSpotPrice(p);
+    const size = makerSizeForProduct(p, opts.size);
+    const asset = p.settlementAsset as Address;
+    const decimals = await t.readContract({ address: asset, abi: erc20Abi, functionName: "decimals" });
+    await send(s, mm, { address: asset, abi: erc20Abi, functionName: "approve", args: [px.OptionClearing.proxy, 2n ** 256n - 1n] });
+    await send(s, mm, { address: asset, abi: erc20Abi, functionName: "approve", args: [margin, 2n ** 256n - 1n] });
+    for (let start = 0; start < indices.length; start += Math.max(1, maxSeriesPerAccount)) {
+      const chunk = indices.slice(start, start + Math.max(1, maxSeriesPerAccount));
+      // fresh spot AND volatility surface: listing every market first can outlast the deploy-time surface
+      await pushOracles(s, 4, await freshOracleUpdateForProduct(s, p, { price }));
+      await send(s, mm, { address: asset, abi: mintableAbi, functionName: "mint", args: [mm.address, 150_000_000_000_000n] });
+      const account = await createAccountForAsset(s, 0, asset);
+      await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 100_000_000_000_000n] });
+      for (const i of chunk) {
+        const id = p.seriesIds[i]! as Hex;
+        const m = bySeries.get(id.toLowerCase())!;
+        let mid: bigint;
+        try {
+          [mid] = await t.readContract({ address: px.PortfolioRiskManager.proxy, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [id] });
+        } catch {
+          continue;
+        }
+        const units = (mid * m.pricePrecision) / 10n ** 18n;
+        const ask = (units * (10_000n + spread)) / 10_000n + 1n;
+        const bid = (units * (10_000n - spread)) / 10_000n;
+        const sizeUnits = (size * m.sizePrecision) / 10n ** 18n;
+        const wrapper = await wrapperOf(s, id);
+        // write the ask inventory into the maker's wallet, then fund both sides in Kuru's MarginAccount
+        const u = await freshOracleUpdateForProduct(s, p, { price, surface: false });
+        await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, mm.address, 2n ** 255n, u], value: await spotFee(s, u) });
+        await send(s, mm, { address: wrapper, abi: erc20Abi, functionName: "approve", args: [margin, 2n ** 256n - 1n] });
+        await send(s, mm, { address: margin, abi: kuruMarginAbi, functionName: "deposit", args: [mm.address, wrapper, size] });
+        await send(s, mm, { address: m.market, abi: kuruBookAbi, functionName: "addSellOrder", args: [Number(ask), sizeUnits, false] });
+        if (bid > 0n) {
+          const quoteNeeded = (bid * size * 10n ** BigInt(decimals)) / m.pricePrecision / 10n ** 18n + 1n;
+          await send(s, mm, { address: margin, abi: kuruMarginAbi, functionName: "deposit", args: [mm.address, asset, quoteNeeded] });
+          await send(s, mm, { address: m.market, abi: kuruBookAbi, functionName: "addBuyOrder", args: [Number(bid), sizeUnits, false] });
+        }
+        quoted++;
+      }
+    }
+  }
+  return quoted;
 }

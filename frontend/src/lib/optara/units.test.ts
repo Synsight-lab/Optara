@@ -1,6 +1,6 @@
 /** FRONTEND.md §11 "Units": formatting, parsing, health classification. */
 import { describe, expect, it } from "vitest";
-import { fmtDuration, fmtFixed, fmtIv, fmtPrice, fmtQty, fmtWad, parseFixed, parseQty, seriesName } from "./format.ts";
+import { fmtDuration, fmtFixed, fmtIv, fmtLevel, fmtPrice, fmtQty, fmtWad, parseFixed, parseQty, seriesName } from "./format.ts";
 import { classifyHealth, healthBar } from "./health.ts";
 import type { Health } from "./types.ts";
 
@@ -18,7 +18,11 @@ describe("format", () => {
     expect(fmtIv(6n * 10n ** 17n)).toBe("60.0%");
     expect(fmtQty(15n * 10n ** 17n)).toBe("1.5");
     expect(fmtQty(2n * E18)).toBe("2");
-    expect(fmtPrice(10n ** 15n)).toBe("<0.01");
+    expect(fmtPrice(10n ** 15n)).toBe("0.001");
+    expect(fmtPrice(243n * 10n ** 14n)).toBe("0.0243");
+    expect(fmtLevel(2430n * 10n ** 13n)).toBe("0.0243");
+    expect(fmtLevel(4500n * E18)).toBe("4,500");
+    expect(fmtLevel(248030n * 10n ** 16n)).toBe("2,480.30");
     expect(fmtPrice(0n)).toBe("0.00");
     expect(fmtPrice(69_54n * 10n ** 16n)).toBe("69.54");
   });

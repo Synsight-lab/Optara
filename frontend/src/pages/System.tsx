@@ -13,12 +13,12 @@ import {
   ShieldCheck,
   Zap,
 } from "lucide-react";
-import { Card, CopyButton, Pill, Row, Skeleton } from "../components/ui.tsx";
+import { Card, CopyButton, Pill, Row, Skeleton, Term } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { INDEXER_URL, MANIFEST, PUBLISHER_URL, RPC_URL } from "../config/network.ts";
-import { fmtDuration, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
+import { fmtDuration, fmtLevel, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
-import { getInsurance } from "../lib/optara/reads.ts";
+import { getInsurance, getUpgrades } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 export function SystemPage() {
@@ -42,6 +42,7 @@ export function SystemPage() {
         {assets.map((a) => (
           <Reserves key={a.settlementAsset} s={a} />
         ))}
+        <Upgrades />
         <Services />
         <Contracts />
       </div>
@@ -68,12 +69,12 @@ function ProductStatus({ s }: { s: Series }) {
         <Skeleton className="h-28 w-full" />
       ) : (
         <div className="space-y-2 text-xs">
-          <Row label="Spot Oracle Feed" value={`$${fmtWad(m.spotWad, 2)} ${s.assetSymbol}`} strong />
+          <Row label="Live price (Pyth)" value={`$${fmtLevel(m.spotWad)}`} strong />
           <Row
-            label="Spot Freshness"
+            label="Last price update"
             value={
               <span className="flex items-center gap-2">
-                {now !== undefined ? `${fmtDuration(now - m.spotPublishTime)} ago` : "…"}
+                {now === undefined ? "…" : now - m.spotPublishTime <= 0n ? "just now" : `${fmtDuration(now - m.spotPublishTime)} ago`}
                 <Pill tone={m.spotFresh ? "good" : "warn"} dot>
                   {m.spotFresh ? "Live" : "Delayed"}
                 </Pill>
@@ -81,10 +82,10 @@ function ProductStatus({ s }: { s: Series }) {
             }
           />
           <Row
-            label="Implied Volatility Surface"
+            label={<Term tip="The signed volatility data used to price options. New positions need it to be fresh.">Volatility data</Term>}
             value={
               <Pill tone={m.surface === "FRESH" ? "good" : m.surface === "STALE" ? "warn" : "bad"}>
-                {m.surface === "FRESH" ? "Fresh & Quorum Signed" : m.surface.toLowerCase().replace("_", " ")}
+                {m.surface === "FRESH" ? "Fresh, signed by publishers" : m.surface === "STALE" ? "Late" : m.surface === "NONE" ? "Not published" : "Expired"}
                 {m.surfaceStaleSeconds > 0n ? ` (${fmtDuration(m.surfaceStaleSeconds)} late)` : ""}
               </Pill>
             }
@@ -93,7 +94,7 @@ function ProductStatus({ s }: { s: Series }) {
             label="Trading State"
             value={
               <Pill tone={m.closeOnly ? "warn" : "good"}>
-                {m.closeOnly ? "Close-Only Mode" : "Open for New Positions"}
+                {m.closeOnly ? "Closing only" : "Open for new trades"}
               </Pill>
             }
           />
@@ -126,14 +127,14 @@ function Reserves({ s }: { s: Series }) {
       ) : (
         <div className="space-y-4">
           {[
-            ["Insurance Fund (Bad Debt Buffer)", data.balance, data.minimumSeed],
-            ["Keeper Reserve (Automation Bounty)", data.keeperReserve, data.minimumKeeperReserve],
+            ["Insurance fund (covers writers who can't pay)", data.balance, data.minimumSeed],
+            ["Keeper reserve (pays settlement rewards)", data.keeperReserve, data.minimumKeeperReserve],
           ].map(([label, v, min]) => (
             <div key={label as string} className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
               <div className="flex justify-between text-xs">
                 <span className="font-semibold text-ink">{label as string}</span>
                 <span className="num font-bold text-ink">
-                  ${fmtNative(v as bigint, s.assetDecimals)} {s.assetSymbol}
+                  {fmtNative(v as bigint, s.assetDecimals)} {s.assetSymbol}
                 </span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-surface">
@@ -143,9 +144,11 @@ function Reserves({ s }: { s: Series }) {
                 />
               </div>
               <div className="mt-1.5 flex justify-between text-[11px] text-muted">
-                <span>Minimum floor: ${fmtNative(min as bigint, s.assetDecimals)}</span>
-                <span className={(v as bigint) >= (min as bigint) * 2n ? "text-good" : "text-warn"}>
-                  {(v as bigint) >= (min as bigint) * 2n ? "Fully funded (200%+)" : "Adequate"}
+                <span>Minimum: {fmtNative(min as bigint, s.assetDecimals)}</span>
+                <span className={(v as bigint) >= (min as bigint) * 2n ? "text-good" : (v as bigint) >= (min as bigint) ? "text-warn" : "text-bad"}>
+                  {(min as bigint) === 0n
+                    ? "No minimum set"
+                    : `${Number(((v as bigint) * 100n) / (min as bigint))}% of minimum${(v as bigint) < (min as bigint) ? " · below minimum" : ""}`}
                 </span>
               </div>
             </div>
@@ -231,6 +234,71 @@ function Contracts() {
       <p className="mt-4 text-[11px] text-muted border-t border-line pt-3">
         Deployed at block {MANIFEST.deployedAtBlock} on Monad (Chain ID: {MANIFEST.chainId}). All upgrades are timelocked with 7-day governance execution delay.
       </p>
+    </Card>
+  );
+}
+
+/** Scheduled contract upgrades: what will change, and when it can take effect (FRONTEND.md §2 "pending upgrades"). */
+function Upgrades() {
+  const { data: now } = useChainTime();
+  const { data, isLoading, error } = useQuery({ queryKey: ["upgrades"], queryFn: () => getUpgrades(MANIFEST.upgradeAdmin), refetchInterval: 30_000 });
+  const nameOf = (a: string) => Object.entries(MANIFEST.proxies).find(([, p]) => p.proxy.toLowerCase() === a.toLowerCase())?.[0] ?? shortAddr(a);
+  const pending = (data ?? []).filter((u) => u.state === "PENDING");
+  const past = (data ?? []).filter((u) => u.state !== "PENDING").slice(0, 5);
+
+  return (
+    <Card
+      className="lg:col-span-2"
+      title={
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-warn" />
+          <span className="font-bold text-ink">Scheduled upgrades</span>
+          {pending.length > 0 && <Pill tone="warn">{pending.length} pending</Pill>}
+        </div>
+      }
+    >
+      <p className="text-xs leading-relaxed text-muted">
+        Optara's contracts can only be upgraded after a public waiting period: 7 days, or 24 hours for an emergency fix
+        approved by a large multisig majority. Anything scheduled shows here first, so you can close positions or withdraw
+        before it takes effect if you disagree with it.
+      </p>
+      {isLoading ? (
+        <Skeleton className="mt-3 h-16 w-full" />
+      ) : error ? (
+        <p className="mt-3 text-xs text-bad">Couldn't read the upgrade schedule.</p>
+      ) : pending.length === 0 ? (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-good/30 bg-good/8 px-3 py-2.5 text-[13px] text-good">
+          <CheckCircle2 className="h-4 w-4" /> No upgrades are scheduled. Any change would appear here at least 24 hours ahead (7 days for normal upgrades).
+        </div>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {pending.map((u) => (
+            <li key={u.id} className="rounded-xl border border-warn/40 bg-warn/8 p-3 text-[13px]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">
+                  {nameOf(u.proxy)} {u.emergency && <Pill tone="bad">Emergency</Pill>}
+                </span>
+                <span className="num font-semibold">
+                  {now !== undefined && u.eta > now ? `can take effect in ${fmtDuration(u.eta - now)}` : "can take effect now"}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-muted">
+                New code <span className="num">{shortAddr(u.implementation)}</span> <CopyButton text={u.implementation} label="implementation" /> · earliest{" "}
+                {new Date(Number(u.eta) * 1000).toUTCString().replace(" GMT", " UTC")}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {past.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-line pt-2 text-xs text-muted">
+          {past.map((u) => (
+            <li key={u.id}>
+              {nameOf(u.proxy)} · {u.state === "EXECUTED" ? "upgraded" : "cancelled"} · {shortAddr(u.implementation)}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

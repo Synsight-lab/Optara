@@ -15,6 +15,7 @@ import {
   type OracleUpdate,
 } from "@optara/sdk";
 import { ADDR, KURU_VENUE, publicClient } from "./client.ts";
+import { ERROR_MESSAGES } from "./errors.ts";
 import { fetchOracleUpdate, oracleFee } from "./oracle.ts";
 import { send, type ContractCall, type Wallet } from "./tx.ts";
 import type { Series } from "./types.ts";
@@ -156,7 +157,10 @@ export function finalizeSteps(groupId: Hex, configId: Hex, expiry: bigint): Step
       hint: "Proves the price feed's round in force at expiry. Pays a keeper reward.",
       run: async (w, onSent) => {
         const proof = await buildSettlementProof(publicClient, ADDR.settlementOracle, configId, expiry);
-        if (proof.error) throw new Error(`No provable settlement price yet (${proof.error}).`);
+        if (proof.error) {
+          const name = proof.error.split("(")[0]!;
+          throw new Error(ERROR_MESSAGES[name] ?? `The settlement price can't be proven yet (${proof.error}).`);
+        }
         return send(w, { address: ADDR.settlement, abi: settlementWindowAbi, functionName: "finalizeGroup", args: [groupId, proof.settlementData] }, onSent);
       },
     },
@@ -175,6 +179,23 @@ export const ratioSteps = (groupId: Hex): Step[] => [
 
 export const startAuctionSteps = (accountId: bigint, underlying: Address, deps?: OracleDeps): Step[] => [
   riskStep("start-auction", "Start the liquidation auction", accountId, [], (u) => ({ address: ADDR.liquidation, abi: liquidationModuleAbi, functionName: "startAuction", args: [accountId, underlying, u] }), deps),
+];
+
+/** Ends a running auction once the account is back above its target (or has nothing left at risk). Anyone may call. */
+export const endAuctionSteps = (accountId: bigint, underlying: Address, deps?: OracleDeps): Step[] => [
+  riskStep("end-auction", "End the liquidation auction", accountId, [], (u) => ({ address: ADDR.liquidation, abi: liquidationModuleAbi, functionName: "endAuction", args: [accountId, underlying, u] }), deps),
+];
+
+/** Liquidate by handing in option tokens: they cancel the account's written options, and the account pays you. */
+export const wrapperLiquidationSteps = (accountId: bigint, s: Series, qty: bigint, liquidatorAccountId: bigint, minCash: bigint, deps?: OracleDeps): Step[] => [
+  riskStep(
+    "liquidate-wrapper",
+    "Hand in option tokens",
+    accountId,
+    [s.id],
+    (u) => ({ address: ADDR.liquidation, abi: liquidationModuleAbi, functionName: "liquidateWithWrapper", args: [accountId, s.id, qty, liquidatorAccountId, minCash, u] }),
+    deps,
+  ),
 ];
 
 export const sliceSteps = (accountId: bigint, underlying: Address, liquidatorAccountId: bigint, sliceBps: number, minCash: bigint, maxCash: bigint, deps?: OracleDeps): Step[] => [

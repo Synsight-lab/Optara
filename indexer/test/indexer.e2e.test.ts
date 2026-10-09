@@ -173,7 +173,8 @@ describe("IDX-001 rebuild from events", () => {
     expect([g.finalized, g.ratioSet, g.participants, g.priceWad]).toEqual([true, true, 0n, 4600n * E18]);
     const events = new Set((await idx.db.rows<any>("SettlementEvent", `"groupId" = $1`, [groupId])).map((e) => e.kind));
     expect([...events].sort()).toEqual(["CLAIMED", "REDEEMED", "SETTLED"]);
-    const product = (await idx.db.rows<any>("Product"))[0];
+    // the stack lists several products; the spot pushed above is this one's (ETH/USDC)
+    const product = await idx.db.one<any>("Product", stackProduct(s.manifest).productId);
     expect(product.spotPriceWad).toBe(6000n * E18);
   });
 

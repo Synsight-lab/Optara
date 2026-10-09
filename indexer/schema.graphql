@@ -90,6 +90,29 @@ type Position {
   updatedAt: BigInt!
 }
 
+# Every write (OptionClearing.ExternalLongMinted): profit-and-loss history (frontend lib/optara/pnl.ts).
+type Mint {
+  id: ID! # block_logIndex
+  accountId: BigInt! @index
+  seriesId: String!
+  qty: BigInt!
+  recipient: String!
+  fee: BigInt!
+  timestamp: BigInt!
+}
+
+# Every ledger balance change (append-only; Position keeps only the latest). Settlement zeroes positions in the same
+# block as AccountSettled, so this is how a settled quantity is attributed to each option.
+type BalanceChange {
+  id: ID! # block_logIndex
+  accountId: BigInt! @index
+  seriesId: String!
+  delta: BigInt!
+  balance: BigInt!
+  block: BigInt!
+  timestamp: BigInt!
+}
+
 type WrapperBalance {
   id: ID! # wrapper-holder
   series: Series!

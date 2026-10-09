@@ -97,7 +97,7 @@ export function OnboardingModal() {
                   <CheckCircle2 className="h-4 w-4" /> 3. Automatic Cash Settlement
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  No need to manually buy the underlying coin. At expiry, your profit is calculated automatically and sent directly to your wallet in USDC.
+                  You never handle the coin itself. At expiry the payout is worked out from the official price, and you redeem your option tokens for it in USDC.
                 </p>
               </div>
             </div>
@@ -116,7 +116,7 @@ export function OnboardingModal() {
                     You predict ETH will rise above the strike (e.g. $3,000). The higher ETH climbs, the bigger your payout!
                   </p>
                   <div className="mt-3 rounded-xl bg-surface/80 p-2.5 text-xs">
-                    <span className="text-muted">Example:</span> ETH ends at $3,500 → You get paid <b className="text-good font-semibold">+$500</b> per option.
+                    <span className="text-muted">Example:</span> $3,000 call, ETH ends at $3,500 → each option pays <b className="text-good font-semibold">$500</b>. Your profit is that minus what you paid.
                   </div>
                 </div>
 
@@ -130,7 +130,7 @@ export function OnboardingModal() {
                     You predict ETH will fall below the strike (e.g. $2,800). Great for profiting from market dumps or hedging your crypto bag!
                   </p>
                   <div className="mt-3 rounded-xl bg-surface/80 p-2.5 text-xs">
-                    <span className="text-muted">Example:</span> ETH drops to $2,300 → You get paid <b className="text-good font-semibold">+$500</b> per option.
+                    <span className="text-muted">Example:</span> $2,800 put, ETH drops to $2,300 → each option pays <b className="text-good font-semibold">$500</b>. Your profit is that minus what you paid.
                   </div>
                 </div>
               </div>

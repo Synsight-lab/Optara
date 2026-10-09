@@ -4,9 +4,10 @@
  *   2. the production local stack (contract/script/local/LocalStack.s.sol → deployments/local.json)
  *   3. a market maker quoting every Kuru book 5% around the protocol's mark, 5 options each side
  *   4. two surface publishers (A on :8790 cosigned by B on :8791) and the keepers (oracle pusher, settlement)
- *   5. periodic Pyth spot restamps for every listed product (DEVNET_LIVE_PRICE_RESTAMP=0 to keep them still)
+ *   5. periodic Pyth spot restamps for every listed product, with a matching settlement-feed round so expiries can be
+ *      settled (DEVNET_LIVE_PRICE_RESTAMP=0 to keep them still)
  *   6. the app on http://localhost:5173
- * Test wallets (Alice…Erin) hold 100,000 USDC each; pick one from "Connect wallet".
+ * Test wallets (Alice…Erin) hold USDC, USDT, WETH, WMON and WBTC; pick one from "Connect wallet".
  *
  * Mainnet fork mode:
  *   pnpm dev:fork
@@ -19,10 +20,22 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createTestClient, http, publicActions, walletActions, type Address, type Hex } from "viem";
+import { createPublicClient, createTestClient, erc20Abi, http, publicActions, walletActions, type Address, type Hex, type PublicClient } from "viem";
 import { loadManifest } from "@optara/sdk/node";
-import { anvil as anvilChain, chainFor, optionSeriesRegistryAbi } from "@optara/sdk";
-import { freshOracleUpdateForProduct, pushOracles, quoteBooks, stackAccount, stackPrivateKey, stackProducts, type LocalStack } from "@optara/sdk/testing";
+import { anvil as anvilChain, chainFor, optionSeriesRegistryAbi, SeriesCatalog } from "@optara/sdk";
+import {
+  KURU_MAINNET_ROUTER,
+  freshOracleUpdateForProduct,
+  heartbeatSettlementFeeds,
+  listOnRealKuru,
+  pushOracles,
+  quoteBooks,
+  quoteRealKuru,
+  stackAccount,
+  stackPrivateKey,
+  stackProducts,
+  type LocalStack,
+} from "@optara/sdk/testing";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const RPC = "http://127.0.0.1:8545";
@@ -30,6 +43,8 @@ const DEFAULT_FORK_URL = "https://rpc.monad.xyz";
 const FORK_URL = process.env.DEVNET_FORK_URL || process.env.FORK_RPC_URL;
 const FORK_BLOCK = process.env.DEVNET_FORK_BLOCK || process.env.FORK_BLOCK_NUMBER;
 const FORK_MODE = process.env.DEVNET_FORK === "1" || !!FORK_URL;
+/** On a fork, trade through Kuru's REAL router and order books (DEVNET_REAL_KURU=0 keeps the mocks). */
+const WANT_REAL_KURU = FORK_MODE && process.env.DEVNET_REAL_KURU !== "0";
 const procs: ChildProcess[] = [];
 const log = (m: string) => console.log(`\x1b[35m[devnet]\x1b[0m ${m}`);
 
@@ -57,6 +72,8 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 const PORTS = { 8545: "anvil", 8790: "publisher A", 8791: "publisher B", 5173: "the app" } as const;
+const TEST_WALLET_INDICES = [5, 6, 7, 8, 9] as const;
+const tokenMintAbi = [{ type: "function", name: "mint", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [] }] as const;
 
 /** True when nothing answers on the port (another `pnpm dev` or anvil would make this run deploy onto its chain). */
 const portFree = (port: number) =>
@@ -106,7 +123,7 @@ async function rpcBlockTimestamp(): Promise<number> {
   return Number(BigInt(j.result.timestamp));
 }
 
-async function forgeLocalStack(chainId: number) {
+async function forgeLocalStack(chainId: number, realKuru: boolean) {
   const startedAt = Date.now();
   const chainNow = await rpcBlockTimestamp();
   const p = run(
@@ -124,7 +141,13 @@ async function forgeLocalStack(chainId: number) {
       "--disable-code-size-limit",
       "-q",
     ],
-    { NETWORK: "local", FOUNDRY_DISABLE_NIGHTLY_WARNING: "1", RUST_LOG: "error", ...(await livePriceEnv(chainNow)) },
+    {
+      NETWORK: "local",
+      FOUNDRY_DISABLE_NIGHTLY_WARNING: "1",
+      RUST_LOG: "error",
+      ...(realKuru ? { LOCAL_KURU_ROUTER: KURU_MAINNET_ROUTER } : {}),
+      ...(await livePriceEnv(chainNow)),
+    },
     join(ROOT, "contract"),
   );
 
@@ -351,7 +374,7 @@ function quotePriceForProduct(product: ReturnType<typeof stackProducts>[number],
   return prices.USDC;
 }
 
-async function pushLiveSpots(s: LocalStack, from: number, products = stackProducts(s.manifest)) {
+async function pushLiveSpots(s: LocalStack, from: number, products = stackProducts(s.manifest)): Promise<LivePrices> {
   const prices = await pythPrices();
   await s.test.setBalance({ address: stackAccount(from).address, value: 10n ** 21n });
   for (const product of products) {
@@ -369,6 +392,50 @@ async function pushLiveSpots(s: LocalStack, from: number, products = stackProduc
     );
   }
   log(`Pyth spot restamp: ETH $${prices.ETH.toLocaleString()}, BTC $${prices.BTC.toLocaleString()}, MON $${prices.MON}, USDC $${prices.USDC}, USDT $${prices.USDT}`);
+  return prices;
+}
+
+/**
+ * Settlement-feed heartbeat (the local feeds are mocks that nobody else updates): a fresh round per product at the same
+ * price as the spot restamp, plus a backfill for any expired group whose observation window got no round. Without it,
+ * "Fix the settlement price" and the settlement keeper fail for every expiry (no round in force inside the window).
+ */
+async function pushSettlementRounds(s: LocalStack, from: number, catalog: SeriesCatalog, prices: LivePrices, products = stackProducts(s.manifest)) {
+  const byFeed = new Map<string, number>();
+  for (const product of products) if (product.settlementFeed) byFeed.set(product.settlementFeed.toLowerCase(), priceForProduct(product, prices));
+  const r = await heartbeatSettlementFeeds(s, stackAccount(from), catalog, byFeed);
+  if (r.backfilled) log(`settlement feeds: backfilled ${r.backfilled} missed expiry window${r.backfilled === 1 ? "" : "s"}`);
+}
+
+async function fundUiWallets(s: LocalStack) {
+  const extra = s.manifest.extra as Record<string, Address>;
+  const funder = stackAccount(0);
+  const tokens = [
+    { symbol: "USDC", address: extra.usdc, amount: 250_000n * 10n ** 6n },
+    { symbol: "USDT", address: extra.usdt, amount: 250_000n * 10n ** 6n },
+    { symbol: "WETH", address: extra.weth, amount: 100n * 10n ** 18n },
+    { symbol: "WMON", address: extra.wmon, amount: 1_000_000n * 10n ** 18n },
+    { symbol: "WBTC", address: extra.wbtc, amount: 10n * 10n ** 18n },
+  ].filter((t): t is { symbol: string; address: Address; amount: bigint } => !!t.address);
+
+  for (const index of TEST_WALLET_INDICES) {
+    const user = stackAccount(index).address;
+    await s.test.setBalance({ address: user, value: 100n * 10n ** 18n });
+    for (const token of tokens) {
+      const before = await s.test.readContract({ address: token.address, abi: erc20Abi, functionName: "balanceOf", args: [user] });
+      if (before >= token.amount) continue;
+      const hash = await s.test.writeContract({
+        account: funder,
+        chain: s.test.chain,
+        address: token.address,
+        abi: tokenMintAbi,
+        functionName: "mint",
+        args: [user, token.amount - before],
+      });
+      await s.test.waitForTransactionReceipt({ hash });
+    }
+  }
+  log("funded UI wallets Alice-Erin with gas, USDC, USDT, WETH, WMON and WBTC");
 }
 
 async function main() {
@@ -389,12 +456,25 @@ async function main() {
   log(`anvil ready on chain ${chainId}${FORK_MODE ? " (forked)" : ""}`);
 
   log("deploying the local stack (forge)…");
-  await forgeLocalStack(chainId);
+  // Real Kuru only if its router is really on the forked chain.
+  const kuruCode = WANT_REAL_KURU ? await createPublicClient({ chain, transport: http(RPC) }).getCode({ address: KURU_MAINNET_ROUTER }) : undefined;
+  const realKuru = WANT_REAL_KURU && !!kuruCode && kuruCode !== "0x";
+  if (WANT_REAL_KURU && !realKuru) log(`Kuru's router isn't on this fork (${KURU_MAINNET_ROUTER}); using mock Kuru books`);
+  log(realKuru ? "Kuru: REAL router and order books (forked Monad mainnet)" : "Kuru: local mock router and books");
+  await forgeLocalStack(chainId, realKuru);
   const manifest = loadManifest("local");
   const test = createTestClient({ chain, mode: "anvil", transport: http(RPC), pollingInterval: 50, cacheTime: 0 }).extend(publicActions).extend(walletActions);
   const s: LocalStack = { anvil: { rpcUrl: RPC, port: 8545, process: procs[0]!, stop: async () => {} }, manifest, test: test as LocalStack["test"] };
 
+  await fundUiWallets(s);
   await validateManifestSeries(s);
+  if (realKuru) {
+    log("Kuru: deploying a genuine Kuru market for every live option (impersonating Kuru's router owner)…");
+    const markets = await listOnRealKuru(s, KURU_MAINNET_ROUTER);
+    log(`Kuru: ${markets.length} markets deployed and registered; market maker quoting them through Kuru's MarginAccount…`);
+    const quoted = await quoteRealKuru(s, markets, { router: KURU_MAINNET_ROUTER });
+    log(`Kuru: resting bids and asks on ${quoted} real Kuru books`);
+  }
   log("market maker: quoting every book");
   await quoteBooks(s);
 
@@ -410,11 +490,18 @@ async function main() {
     // Its own account (10, funded here): sharing the deployer's or the keeper's would race their nonces.
     const PRICE_RESTAMPER = 10;
     const products = stackProducts(manifest);
+    const catalog = new SeriesCatalog(test as unknown as PublicClient, manifest.proxies.OptionSeriesRegistry.proxy, BigInt(manifest.deployedAtBlock), 10_000n);
+    let busy = false; // one pass at a time: a slow pass must not overlap the next (same account, same nonces)
     setInterval(async () => {
+      if (busy) return;
+      busy = true;
       try {
-        await pushLiveSpots(s, PRICE_RESTAMPER, products);
+        const prices = await pushLiveSpots(s, PRICE_RESTAMPER, products);
+        await pushSettlementRounds(s, PRICE_RESTAMPER, catalog, prices, products);
       } catch (e) {
-        log(`live spot restamp skipped: ${(e as Error).message.split("\n")[0]}`);
+        log(`live price restamp skipped: ${(e as Error).message.split("\n")[0]}`);
+      } finally {
+        busy = false;
       }
     }, Number(process.env.DEVNET_LIVE_PRICE_SECONDS ?? 60) * 1000);
   }

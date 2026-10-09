@@ -10,6 +10,11 @@
  *   GET /system                             (products: spot, surface, close-only; insurance; indexer progress)
  *   GET /positions                          (every non-zero position; keepers' participant source)
  *   GET /alerts                             (SECURITY.md §5)
+ *   GET /history/:owner                     (trades, writes, redemptions, balance changes, settlements, liquidations:
+ *                                            the frontend's profit and loss; ids are block_logIndex)
+ *   GET /series/:id/positions               (every account's non-zero position in one series: who wrote it)
+ *   GET /auctions/active                    (liquidation auctions not yet ended)
+ *   GET /upgrades                           (UpgradeScheduled events; the caller reads each one's state on-chain)
  */
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { isAddress, type PublicClient } from "viem";
@@ -34,6 +39,9 @@ export function startApi(deps: { db: Db; monitor: Monitor; client: PublicClient;
       const [a, b, c] = url.pathname.split("/").filter(Boolean);
 
       if (a === "series" && !b) return send(res, 200, await db.rows("Series", "TRUE", [], "ORDER BY expiry, \"strikeWad\""));
+      if (a === "series" && b && isHex32(b) && c === "positions") {
+        return send(res, 200, await db.rows("Position", `"seriesId" = $1 AND balance <> 0`, [b], `ORDER BY balance`));
+      }
       if (a === "series" && b && isHex32(b)) {
         const s = await db.one("Series", b);
         return s ? send(res, 200, s) : send(res, 404, { error: "unknown series" });
@@ -70,6 +78,24 @@ export function startApi(deps: { db: Db; monitor: Monitor; client: PublicClient;
         ]);
         return send(res, 200, { liquidations, settlements, fees });
       }
+      if (a === "history" && b && isAddress(b)) {
+        const accounts = await db.rows<{ accountId: bigint }>("Account", `lower(owner) = lower($1)`, [b], `ORDER BY "accountId"`);
+        const ids = accounts.map((x) => x.accountId.toString());
+        const byAccount = <T>(table: string, extra = "") =>
+          ids.length ? db.rows<T>(table, `"accountId" = ANY($1)${extra}`, [ids]) : Promise.resolve([] as T[]);
+        const [trades, mints, redeems, balances, settled, liquidated, liquidating] = await Promise.all([
+          db.rows("Trade", `lower(trader) = lower($1)`, [b]),
+          byAccount("Mint"),
+          db.rows("SettlementEvent", `kind = 'REDEEMED' AND lower(holder) = lower($1)`, [b]),
+          byAccount("BalanceChange"),
+          byAccount("SettlementEvent", ` AND kind = 'SETTLED'`),
+          byAccount("Liquidation"),
+          ids.length ? db.rows("Liquidation", `"liquidatorAccountId" = ANY($1)`, [ids]) : Promise.resolve([]),
+        ]);
+        return send(res, 200, { accountIds: ids, trades, mints, redeems, balances, settled, liquidations: [...liquidated, ...liquidating] });
+      }
+      if (a === "auctions" && b === "active") return send(res, 200, await db.rows("Auction", `active = true`, [], `ORDER BY "startTime"`));
+      if (a === "upgrades") return send(res, 200, await db.rows("GovernanceEvent", `kind = 'UPGRADE_SCHEDULED'`, [], "ORDER BY timestamp DESC"));
       if (a === "liquidatable") return send(res, 200, monitor.liquidatable());
       if (a === "surfaces" && b && isHex32(b) && c === "latest") {
         const [s] = await db.rows("Surface", `"productId" = $1`, [b], "ORDER BY seq DESC LIMIT 1");

@@ -14,6 +14,7 @@ import {MockERC20} from "../../test/mocks/MockDependencies.sol";
 import {MockPyth} from "../../test/mocks/MockPyth.sol";
 import {MockAggregator} from "../../test/mocks/MockAggregator.sol";
 import {MockKuruRouter, MockKuruOrderBook} from "../../test/mocks/MockVenues.sol";
+import {OptaraDirectAdapter, OptaraDirectMarket} from "../../src/venues/OptaraDirectAdapter.sol";
 
 /// @title LocalStack
 /// @notice A complete local environment on anvil (DEPLOYMENT.md §4.1) for the keepers, publisher, indexer and
@@ -74,6 +75,8 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         bytes32[] cfgIds;
         bytes32[] ids;
         address[] books;
+        address directAdapter;
+        address[] directBooks;
         uint256[] starts;
         uint64[] expiries;
     }
@@ -139,12 +142,18 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             upgradeDelay: 7 days,
             emergencyDelay: 24 hours,
             pyth: address(m.pyth),
-            kuruRouter: address(m.kuru),
+            kuruRouter: _realKuru() != address(0) ? _realKuru() : address(m.kuru),
             surfaceQuorum: 2,
             maxSeriesPerAccount: 16,
             maxBucketsPerAccount: 4,
             minPositionQty: 1e16
         });
+    }
+
+    /// @dev Non-zero on a mainnet fork with real Kuru: the adapter uses Kuru's own router, no mock Kuru books are made,
+    ///      and the devnet (frontend/scripts/devnet.ts) creates genuine Kuru markets for each series afterwards.
+    function _realKuru() internal view returns (address) {
+        return vm.envOr("LOCAL_KURU_ROUTER", address(0));
     }
 
     function _envPrice(string memory key, uint256 fallbackPrice) internal view returns (uint256) {
@@ -312,19 +321,37 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         uint256 perProduct = listed.expiries.length * 8;
         listed.ids = new bytes32[](products.length * perProduct);
         listed.books = new address[](products.length * perProduct);
+        listed.directBooks = new address[](products.length * perProduct);
         listed.starts = new uint256[](products.length + 1);
         listed.productIds = new bytes32[](products.length);
         listed.cfgIds = new bytes32[](products.length);
+        listed.directAdapter = _deployDirectAdapter(d);
         for (uint256 i; i < products.length; ++i) {
             listed.starts[i] = i * perProduct;
             listed.productIds[i] = d.registry.computeProductId(products[i].underlying, products[i].asset);
             listed.cfgIds[i] = d.settlementOracle.computeConfigId(_listing(products[i], false).settlement);
-            _listSeries(d, products[i], listed.expiries, listed.ids, listed.books, listed.starts[i]);
+            _listSeries(
+                d,
+                products[i],
+                listed.expiries,
+                listed.ids,
+                listed.books,
+                listed.directBooks,
+                listed.starts[i],
+                listed.directAdapter
+            );
             _publish(m, d, products[i], listed.productIds[i], listed.expiries);
         }
         listed.starts[products.length] = listed.ids.length;
         _fundUsers(m);
         _writeManifest(vm.envOr("NETWORK", string("local")), d, c, _extra(m, products, listed));
+    }
+
+    /// @dev The venues every listed series gets a book on (read once: a view call after `vm.broadcast` would use it up).
+    struct Venues {
+        bytes32 kuru;
+        bytes32 direct;
+        address directAdapter;
     }
 
     function _listSeries(
@@ -333,25 +360,70 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         uint64[] memory expiries,
         bytes32[] memory ids,
         address[] memory books,
-        uint256 offset
+        address[] memory directBooks,
+        uint256 offset,
+        address directAdapter
     ) internal {
-        bytes32 kuru = d.kuruAdapter.VENUE_ID();
+        Venues memory v = Venues({
+            kuru: d.kuruAdapter.VENUE_ID(),
+            direct: OptaraDirectAdapter(directAdapter).VENUE_ID(),
+            directAdapter: directAdapter
+        });
         for (uint256 i; i < expiries.length * 8; ++i) {
-            (ids[offset + i], books[offset + i]) = _createSeriesBook(
-                d, plan, kuru, expiries[i / 8], i % 2 == 0 ? OptionType.CALL : OptionType.PUT, plan.strikes[(i / 2) % 4]
+            (ids[offset + i], books[offset + i], directBooks[offset + i]) = _createSeriesBooks(
+                d, plan, v, expiries[i / 8], i % 2 == 0 ? OptionType.CALL : OptionType.PUT, plan.strikes[(i / 2) % 4]
             );
         }
     }
 
-    function _createSeriesBook(
+    function _deployDirectAdapter(Deployment memory d) internal returns (address adapter) {
+        vm.broadcast(keys[0]);
+        adapter = address(new OptaraDirectAdapter());
+        bytes32 direct = OptaraDirectAdapter(adapter).VENUE_ID();
+        Call[] memory calls = new Call[](2);
+        calls[0] = Call({
+            role: "governance",
+            to: address(d.venues),
+            data: abi.encodeCall(d.venues.registerAdapter, (direct, adapter)),
+            label: "register Optara direct adapter"
+        });
+        calls[1] = Call({
+            role: "governance",
+            to: address(d.venues),
+            data: abi.encodeCall(d.venues.setAdapterEnabled, (direct, true)),
+            label: "enable Optara direct adapter"
+        });
+        _send(keys[1], calls);
+    }
+
+    function _createSeriesBooks(
         Deployment memory d,
         ProductPlan memory plan,
-        bytes32 kuru,
+        Venues memory v,
         uint64 expiry,
         OptionType optionType,
         uint256 strike
-    ) internal returns (bytes32 id, address book) {
-        SeriesParams memory sp = SeriesParams({
+    ) internal returns (bytes32 id, address book, address directBook) {
+        SeriesParams memory sp = _seriesParams(d, plan, expiry, optionType, strike);
+        vm.broadcast(keys[1]);
+        id = d.registry.createSeries(sp);
+        (book, directBook) = _deployBooks(d, plan, d.registry.getSeries(id).wrapper, v.directAdapter);
+        if (book != address(0)) {
+            vm.broadcast(keys[1]);
+            d.venues.registerMarket(v.kuru, book, id, "");
+        }
+        vm.broadcast(keys[1]);
+        d.venues.registerMarket(v.direct, directBook, id, "");
+    }
+
+    function _seriesParams(
+        Deployment memory d,
+        ProductPlan memory plan,
+        uint64 expiry,
+        OptionType optionType,
+        uint256 strike
+    ) internal view returns (SeriesParams memory) {
+        return SeriesParams({
             underlying: plan.underlying,
             settlementAsset: plan.asset,
             optionType: optionType,
@@ -362,16 +434,24 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             volSurfaceProductId: d.registry.computeProductId(plan.underlying, plan.asset),
             riskParameterSetId: plan.riskSetId
         });
-        vm.broadcast(keys[1]);
-        id = d.registry.createSeries(sp);
-        address w = d.registry.getSeries(id).wrapper;
-        vm.startBroadcast(keys[0]); // Kuru deploys the book (owner-gated on the real Kuru)
-        MockKuruOrderBook b = new MockKuruOrderBook(IERC20(w), IERC20(plan.asset), 18, 6, 1e4, 1e16, 30);
-        MockKuruRouter(address(d.kuruAdapter.kuruRouter())).setMarket(address(b), _kuruParams(w, plan.asset));
+    }
+
+    /// @dev Kuru deploys its book (owner-gated on the real Kuru); the direct book quotes through the Optara adapter.
+    function _deployBooks(Deployment memory d, ProductPlan memory plan, address wrapper, address directAdapter)
+        internal
+        returns (address book, address directBook)
+    {
+        bool mockKuru = _realKuru() == address(0);
+        vm.startBroadcast(keys[0]);
+        if (mockKuru) {
+            MockKuruOrderBook b = new MockKuruOrderBook(IERC20(wrapper), IERC20(plan.asset), 18, 6, 1e4, 1e16, 30);
+            MockKuruRouter(address(d.kuruAdapter.kuruRouter())).setMarket(address(b), _kuruParams(wrapper, plan.asset));
+            book = address(b);
+        }
+        directBook = address(
+            new OptaraDirectMarket(IERC20(wrapper), IERC20(plan.asset), 18, 6, 1e4, 1e16, directAdapter, accts[0])
+        );
         vm.stopBroadcast();
-        book = address(b);
-        vm.broadcast(keys[1]);
-        d.venues.registerMarket(kuru, book, id, "");
     }
 
     function _kuruParams(address base, address quote) internal pure returns (IKuruRouter.MarketParams memory) {
@@ -422,6 +502,9 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         for (uint256 i = 5; i < 10; ++i) {
             m.usdc.mint(accts[i], 100_000e6);
             m.usdt.mint(accts[i], 100_000e6);
+            m.weth.mint(accts[i], 100e18);
+            m.wmon.mint(accts[i], 1_000_000e18);
+            m.wbtc.mint(accts[i], 10e18);
         }
         vm.stopBroadcast();
     }
@@ -443,7 +526,8 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         vm.serializeAddress(k, "ethUsdtSettlementFeed", address(m.ethUsdtFeed));
         vm.serializeAddress(k, "monUsdcSettlementFeed", address(m.monFeed));
         vm.serializeAddress(k, "btcUsdcSettlementFeed", address(m.btcFeed));
-        vm.serializeAddress(k, "kuruRouter", address(m.kuru));
+        vm.serializeAddress(k, "kuruRouter", _realKuru() != address(0) ? _realKuru() : address(m.kuru));
+        vm.serializeAddress(k, "optaraDirectAdapter", listed.directAdapter);
         vm.serializeBytes32(k, "ethUsdcProductId", listed.productIds[0]);
         vm.serializeBytes32(k, "ethUsdcPythFeedId", PYTH_ETH_USD);
         vm.serializeBytes32(k, "ethUsdcSettlementConfigId", listed.cfgIds[0]);
@@ -464,7 +548,8 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         _serializeProducts(k, products, listed);
         vm.serializeUint(k, "expiries", exp);
         vm.serializeBytes32(k, "seriesIds", listed.ids);
-        return vm.serializeAddress(k, "kuruBooks", listed.books);
+        vm.serializeAddress(k, "kuruBooks", listed.books);
+        return vm.serializeAddress(k, "optaraDirectBooks", listed.directBooks);
     }
 
     function _serializeProducts(string memory k, ProductPlan[] memory products, ListedData memory listed) internal {

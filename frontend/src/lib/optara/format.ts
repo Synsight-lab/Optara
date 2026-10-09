@@ -17,8 +17,28 @@ export function fmtFixed(x: bigint, decimals: number, dp = 2): string {
 }
 
 export const fmtWad = (x: bigint, dp = 2) => fmtFixed(x, 18, dp);
-/** A price: like fmtWad, but "<0.01" for small positive amounts that would round to zero. */
-export const fmtPrice = (x: bigint, dp = 2) => (x > 0n && x < 10n ** BigInt(18 - dp) / 2n ? `<${(10 ** -dp).toFixed(dp)}` : fmtWad(x, dp));
+/** Below 1: three significant digits (0.0243, 0.00125), never fewer than 2 decimals. */
+function fmtSmall(x: number): string {
+  if (x === 0) return "0.00";
+  const dp = Math.max(2, Math.min(18, 2 - Math.floor(Math.log10(Math.abs(x)))));
+  return x.toFixed(dp).replace(/(\.\d{2,}?)0+$/, "$1");
+}
+
+/** An amount per option (premium, bid, ask, mark): 2 decimals from 1 up; small amounts keep 3 significant digits. */
+export const fmtPrice = (x: bigint, dp = 2) => (x >= 10n ** 18n || x <= 0n ? fmtWad(x, dp) : fmtSmall(Number(x) / 1e18));
+
+/** A price level (spot, strike, settlement price): whole numbers stay whole, cents shown when present, small prices keep 3 significant digits. */
+export function fmtLevel(x: bigint): string {
+  if (x > 0n && x < 10n ** 18n) return fmtSmall(Number(x) / 1e18);
+  return x % 10n ** 16n === 0n && x % 10n ** 18n === 0n ? fmtWad(x, 0) : fmtWad(x, 2);
+}
+
+/** A level given as a plain number, same rules as fmtLevel. */
+export function fmtLevelNum(x: number): string {
+  if (x > 0 && x < 1) return fmtSmall(x);
+  const whole = Math.abs(x - Math.round(x)) < 0.005;
+  return x.toLocaleString("en-US", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+}
 export const fmtNative = (x: bigint, decimals: number, dp = 2) => fmtFixed(x, decimals, dp);
 export const fmtUsd = (x: bigint, decimals = 6, dp = 2) => `$${fmtFixed(x, decimals, dp)}`;
 /** IV (WAD) as a percentage: 0.6e18 → "60.0%". */
@@ -71,7 +91,7 @@ export const optionTypeName = (t: number) => (t === 0 ? "Call" : "Put");
 
 /** "ETH 4,500 Call · 9 Oct" — from the series terms, never from the wrapper symbol (§10). */
 export function seriesName(s: { underlyingSymbol?: string; strikeWad: bigint; optionType: number; expiry: bigint }): string {
-  return `${s.underlyingSymbol ?? ""} ${fmtWad(s.strikeWad, 0)} ${optionTypeName(s.optionType)} · ${fmtExpiryShort(s.expiry)}`.trim();
+  return `${s.underlyingSymbol ?? ""} ${fmtLevel(s.strikeWad)} ${optionTypeName(s.optionType)} · ${fmtExpiryShort(s.expiry)}`.trim();
 }
 
 /** bps → "3.00%". */

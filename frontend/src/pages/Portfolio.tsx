@@ -26,9 +26,14 @@ import {
 import { AmountInput, Card, EmptyState, Pill, Segmented, Skeleton, Stat, Term, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
+import { PnlCard } from "../components/PnlCard.tsx";
+import { KuruBalances } from "../components/KuruBalances.tsx";
+import { AuctionNotice } from "../components/AuctionNotice.tsx";
+import { subAccountsAbi } from "@optara/sdk";
+import { ADDR, publicClient } from "../lib/optara/client.ts";
 import { TxButton } from "../components/TxButton.tsx";
 import { createAccountStep, createdAccountId, depositSteps, setupAccountSteps, withdrawSteps } from "../lib/optara/actions.ts";
-import { fmtExpiry, fmtNative, fmtQty, fmtWad, optionTypeName, parseFixed, seriesName, WAD } from "../lib/optara/format.ts";
+import { fmtExpiry, fmtLevel, fmtNative, fmtQty, fmtWad, optionTypeName, parseFixed, seriesName, WAD } from "../lib/optara/format.ts";
 import {
   useAccountView,
   useLiquidationSpots,
@@ -110,6 +115,8 @@ export function PortfolioPage() {
         </div>
       </div>
 
+      <PnlCard owner={address!} accounts={accounts} series={series ?? []} />
+
       {/* Main Account View or Onboarding */}
       {accounts.length === 0 ? (
         <Onboarding asset={asset} />
@@ -119,6 +126,8 @@ export function PortfolioPage() {
 
       {/* Option Tokens in User's Wallet */}
       <WalletTokens owner={address!} />
+
+      <KuruBalances owner={address!} series={series ?? []} />
     </div>
   );
 }
@@ -183,6 +192,7 @@ function Onboarding({ asset }: { asset: Series }) {
 
           <TxButton
             label="Create account & deposit"
+            summary={deposit ? `New account, then ${fmtNative(deposit, asset.assetDecimals)} ${asset.assetSymbol} from your wallet into it` : undefined}
             steps={steps}
             disabled={!deposit}
             successMessage="Your margin account is ready."
@@ -198,16 +208,16 @@ function Onboarding({ asset }: { asset: Series }) {
         <ul className="space-y-3.5 text-xs sm:text-sm">
           {[
             [
-              "Capital Efficiency",
-              "Collateral is sized from realistic market scenarios, not the full worst case.",
+              "Less cash locked up",
+              "The cash you need is worked out by stress-testing big price and volatility moves, not by locking the full worst case."
             ],
             [
-              "Risk Offsetting",
-              "Longs and shorts on the same asset offset each other, lowering what you must lock up.",
+              "Hedges count",
+              "Options you own and options you wrote on the same asset offset each other, so a hedged account needs less."
             ],
             [
-              "Instant Cash Premiums",
-              "Premiums land in your wallet. Re-deposit them to strengthen margin.",
+              "Premium is paid to you now",
+              "When you write and sell, the premium goes to your wallet. Only cash inside the account protects it, so add some back if you like."
             ],
           ].map(([t, b]) => (
             <li key={t} className="flex gap-3">
@@ -236,6 +246,13 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
   const spots = useLiquidationSpots(accountId, product?.productId, product?.spotWad, !!a && a.positions.length > 0);
 
   const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
+  const { data: allSeries } = useSeriesList();
+  const { data: buckets } = useQuery({
+    queryKey: ["buckets", accountId.toString()],
+    queryFn: () => publicClient.readContract({ address: ADDR.ledger, abi: subAccountsAbi, functionName: "bucketsOf", args: [accountId] }),
+    refetchInterval: 15_000,
+  });
+  const symbolOf = (u: string) => allSeries?.find((s) => s.underlying.toLowerCase() === u.toLowerCase())?.underlyingSymbol ?? "these";
   const [amount, setAmount] = useState("");
   const value = parseFixed(amount, asset.assetDecimals);
 
@@ -246,12 +263,12 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
   if (a.health.state === "LIQUIDATABLE" || a.health.state === "INSOLVENT") {
     todo.push({
       tone: "bad",
-      text: "Account is below its liquidation threshold. Deposit collateral or close positions to avoid liquidation.",
+      text: "Your account value is below the liquidation line. Add cash or close positions now, or part of your positions can be taken over at a discount.",
     });
   } else if (a.health.state === "CLOSE_ONLY") {
     todo.push({
       tone: "warn",
-      text: "Close-only: below required margin. Deposit collateral or reduce risk to open new positions.",
+      text: "Close-only: your account value is below what's needed to open positions. You can still close. Add cash to write again.",
     });
   }
 
@@ -260,8 +277,8 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
       tone: "primary",
       text: (
         <>
-          You have {fmtNative(walletCash, asset.assetDecimals)} {asset.assetSymbol} in your wallet from option premiums.
-          Deposit it below to strengthen your margin buffer!
+          Your wallet holds {fmtNative(walletCash, asset.assetDecimals)} {asset.assetSymbol}. Cash in your wallet doesn't
+          protect this account; add some below if you want a bigger safety margin.
         </>
       ),
     });
@@ -278,6 +295,10 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
 
   return (
     <>
+      {(buckets ?? []).map((u) => (
+        <AuctionNotice key={u} accountId={accountId} underlying={u} symbol={symbolOf(u)} mine />
+      ))}
+
       {todo.length > 0 && (
         <div className="space-y-2">
           {todo.map((t, i) => (
@@ -307,20 +328,20 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
           {a.positions.length > 0 && (
             <div className="mt-5 border-t border-line pt-4">
               <div className="mb-2.5 text-[13px] font-semibold">
-                Liquidation estimates
+                Prices where this account would be liquidated
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
                   <Stat
-                    label={<Term tip="Estimated spot price at which equity falls to maintenance margin.">If Price Climbs To</Term>}
-                    value={spots.isLoading ? <Skeleton className="h-6 w-20" /> : spots.data?.up ? `$${fmtWad(spots.data.up, 0)}` : "—"}
+                    label={<Term tip="Estimated price at which your account value would fall to the liquidation line, if nothing else changed.">If the price rises to</Term>}
+                    value={spots.isLoading ? <Skeleton className="h-6 w-20" /> : spots.data?.up ? `$${fmtLevel(spots.data.up)}` : spots.data?.upTo ? `Above $${fmtLevel(spots.data.upTo)}` : "Never"}
                     sub={
                       spots.data?.up && product
-                        ? `+${(((Number(spots.data.up) / Number(product.spotWad)) - 1) * 100).toFixed(1)}% above current`
+                        ? `${(((Number(spots.data.up) / Number(product.spotWad)) - 1) * 100).toFixed(1)}% above today`
                         : spots.data?.upTo
-                        ? `Safe up to $${fmtWad(spots.data.upTo, 0)}`
-                        : "No upward risk"
+                        ? "Not reached in the range checked"
+                        : "Rising prices don't threaten this account"
                     }
                     tone="warn"
                   />
@@ -328,14 +349,14 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
 
                 <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
                   <Stat
-                    label={<Term tip="Estimated spot price below which equity falls to maintenance margin.">If Price Drops To</Term>}
-                    value={spots.isLoading ? <Skeleton className="h-6 w-20" /> : spots.data?.down ? `$${fmtWad(spots.data.down, 0)}` : "—"}
+                    label={<Term tip="Estimated price at which your account value would fall to the liquidation line, if nothing else changed.">If the price falls to</Term>}
+                    value={spots.isLoading ? <Skeleton className="h-6 w-20" /> : spots.data?.down ? `$${fmtLevel(spots.data.down)}` : spots.data?.downTo ? `Below $${fmtLevel(spots.data.downTo)}` : "Never"}
                     sub={
                       spots.data?.down && product
-                        ? `-${((1 - Number(spots.data.down) / Number(product.spotWad)) * 100).toFixed(1)}% below current`
+                        ? `${((1 - Number(spots.data.down) / Number(product.spotWad)) * 100).toFixed(1)}% below today`
                         : spots.data?.downTo
-                        ? `Safe down to $${fmtWad(spots.data.downTo, 0)}`
-                        : "No downward risk"
+                        ? "Not reached in the range checked"
+                        : "Falling prices don't threaten this account"
                     }
                     tone="warn"
                   />
@@ -346,16 +367,28 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
         </Card>
 
         {/* Collateral Manager (Deposit / Withdraw) */}
-        <Card title="Cash">
-          <div className="mb-4 grid grid-cols-2 gap-3 rounded-2xl bg-surface-2/60 p-3 border border-line">
+        <Card title={<span id="cash-card">Margin account cash</span>}>
+          <div className="mb-3 rounded-2xl border border-primary/25 bg-primary-soft/40 p-3 text-[13px] leading-relaxed">
+            <b>This cash is collateral for writing options.</b>{" "}
+            <span className="text-muted">
+              It backs the options you write, pays writing fees, and pays what you owe at expiry. Buying options doesn't use it:
+              buys are paid straight from your wallet. Anything not needed for your positions can be withdrawn any time.
+            </span>
+          </div>
+          <div className="mb-4 grid grid-cols-3 gap-3 rounded-2xl bg-surface-2/60 p-3 border border-line">
             <Stat
-              label="In account"
-              value={`$${fmtNative(a.cash, asset.assetDecimals)}`}
+              label={<Term tip="Cash in your wallet. Adding cash moves it from here into the account; withdrawing moves it back.">In your wallet</Term>}
+              value={walletCash !== undefined ? fmtNative(walletCash, asset.assetDecimals) : "…"}
               sub={asset.assetSymbol}
             />
             <Stat
-              label={<Term tip="Available to withdraw without breaching initial margin.">Safe To Withdraw</Term>}
-              value={`$${fmtNative(a.maxWithdrawable, asset.assetDecimals)}`}
+              label="In account"
+              value={fmtNative(a.cash, asset.assetDecimals)}
+              sub={asset.assetSymbol}
+            />
+            <Stat
+              label={<Term tip="The most you can take out while keeping enough to cover your open positions.">You can withdraw</Term>}
+              value={fmtNative(a.maxWithdrawable, asset.assetDecimals)}
               sub={asset.assetSymbol}
             />
           </div>
@@ -397,6 +430,13 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
 
             <TxButton
               label={tab === "deposit" ? "Deposit Collateral" : "Withdraw to Wallet"}
+              summary={
+                value
+                  ? tab === "deposit"
+                    ? `${fmtNative(value, asset.assetDecimals)} ${asset.assetSymbol} from your wallet into account #${accountId}`
+                    : `${fmtNative(value, asset.assetDecimals)} ${asset.assetSymbol} from account #${accountId} to your wallet`
+                  : undefined
+              }
               steps={steps}
               disabled={!value || tooMuch}
               successMessage={tab === "deposit" ? "Deposited." : "Withdrawn to your wallet."}
@@ -413,7 +453,7 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
         {a.positions.length === 0 ? (
           <EmptyState
             title="No open positions"
-            body="Write options or move tokens in from any series page."
+            body="Write options or move tokens in from any series page. Finished trades stay listed under Profit & loss above."
             action={
               <Link to="/" className="btn-ghost mt-2 text-xs">
                 Browse markets
@@ -449,13 +489,16 @@ function PositionRow({ s, balance }: { s: Series; balance: bigint }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-bold">{seriesName(s)}</span>
           <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
-            <Pill tone={balance > 0n ? "good" : "accent"}>{balance > 0n ? "Long" : "Written"}</Pill>
+            <Pill tone={balance > 0n ? "good" : "accent"}>{balance > 0n ? "Owned" : "Written"}</Pill>
             <span className="num">{fmtQty(balance < 0n ? -balance : balance)}</span>
             {m && <StatePill state={m.state} />}
           </span>
         </span>
-        <span className={cx("num shrink-0 text-sm font-bold", value !== undefined && value < 0n ? "text-bad" : "text-good")}>
-          {value !== undefined ? (value < 0n ? `−$${fmtWad(-value)}` : `+$${fmtWad(value)}`) : "—"}
+        <span className="shrink-0 text-right">
+          <span className={cx("num block text-sm font-bold", value !== undefined && value < 0n ? "text-bad" : "text-good")}>
+            {value !== undefined ? (value < 0n ? `−$${fmtWad(-value)}` : `$${fmtWad(value)}`) : "—"}
+          </span>
+          <span className="block text-[11px] text-muted">{balance > 0n ? "worth today" : "owed at today's value"}</span>
         </span>
       </Link>
     </li>
@@ -478,8 +521,8 @@ function WalletTokens({ owner }: { owner: Hex }) {
 
   return (
     <Card
-      title="Option Tokens in Your Wallet"
-      action={<span className="text-xs text-muted">ERC-20 option tokens held in your wallet. Tradeable elsewhere.</span>}
+      title="Options in your wallet"
+      action={<span className="text-xs text-muted">Options you bought. Sell them any time, or redeem them for cash after expiry.</span>}
     >
       {isLoading ? (
         <Skeleton className="h-20 w-full" />
@@ -487,7 +530,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
         <EmptyState
           icon="◇"
           title="No option tokens in wallet"
-          body="Options bought on any series page are held directly in your wallet."
+          body="Options you buy land here until you sell or redeem them. Finished trades stay listed under Profit & loss above."
           action={
             <Link to="/" className="btn-ghost mt-2 text-xs">
               Explore Markets
@@ -513,7 +556,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-ink">
-                    {s.underlyingSymbol} ${fmtWad(s.strikeWad, 0)} {optionTypeName(s.optionType)}
+                    {s.underlyingSymbol} ${fmtLevel(s.strikeWad)} {optionTypeName(s.optionType)}
                   </span>
                   {st && <StatePill state={st} />}
                 </div>

@@ -53,26 +53,28 @@ export function HealthBar({
           {health.initialMargin > 0n && <Marker pct={b.imPct} tone="primary" />}
           {health.maintenanceMargin > 0n && <Marker pct={b.mmPct} tone="bad" />}
         </div>
-        <div className="flex justify-between text-[11px] font-medium text-faint">
-          <span>Liquidation {health.maintenanceMargin > 0n ? `$${fmtWad(health.maintenanceMargin, 0)}` : "—"}</span>
-          <span className={cx("num font-semibold", buffer >= 0n ? "text-good" : "text-bad")}>
-            {buffer >= 0n ? `+$${fmtWad(buffer, 0)} buffer` : `−$${fmtWad(-buffer, 0)} short`}
-          </span>
-          <span>New positions ${fmtWad(health.initialMargin, 0)}</span>
+        <div className="flex flex-wrap justify-between gap-x-2 text-[11px] font-medium text-faint">
+          <span><span className="text-bad">|</span> Liquidation line {health.maintenanceMargin > 0n ? `$${fmtWad(health.maintenanceMargin, 0)}` : "—"}</span>
+          {health.initialMargin > 0n && (
+            <span className={cx("num font-semibold", buffer >= 0n ? "text-good" : "text-bad")}>
+              {buffer >= 0n ? `$${fmtWad(buffer, 0)} spare` : `$${fmtWad(-buffer, 0)} below what's needed`}
+            </span>
+          )}
+          <span><span className="text-primary">|</span> Needed to open ${fmtWad(health.initialMargin, 0)}</span>
         </div>
 
         {!compact && (
           <div className="grid grid-cols-3 gap-2 text-[13px]">
             <div className="rounded-xl border border-line bg-surface-2/60 p-2.5">
-              <div className="text-xs text-muted"><Term tip="Cash plus net position value.">Equity</Term></div>
+              <div className="text-xs text-muted"><Term tip="Cash in the account plus the value of its positions (written options count as debts).">Account value</Term></div>
               <div className="num font-display mt-0.5 text-[15px] font-semibold">${fmtWad(health.equity, 0)}</div>
             </div>
             <div className="rounded-xl border border-line bg-surface-2/60 p-2.5">
-              <div className="text-xs text-muted"><Term tip="Needed to open or withdraw.">Required</Term></div>
+              <div className="text-xs text-muted"><Term tip="Account value needed to write more options or withdraw. It comes from stress-testing big price and volatility moves.">Needed to open</Term></div>
               <div className="num font-display mt-0.5 text-[15px] font-semibold">${fmtWad(health.initialMargin, 0)}</div>
             </div>
             <div className="rounded-xl border border-line bg-surface-2/60 p-2.5">
-              <div className="text-xs text-muted"><Term tip="Below this you can be liquidated.">Liquidation at</Term></div>
+              <div className="text-xs text-muted"><Term tip="If the account value falls below this, anyone can take over part of your positions at a discount.">Liquidation line</Term></div>
               <div className="num font-display mt-0.5 text-[15px] font-semibold">${fmtWad(health.maintenanceMargin, 0)}</div>
             </div>
           </div>

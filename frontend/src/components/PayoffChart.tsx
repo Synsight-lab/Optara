@@ -1,81 +1,189 @@
 /**
- * Profit or loss at expiry against the settlement price, for buying (long) or writing (short) `qty` options at
- * `premium` each. Hover or drag across the chart to read any point; today's spot and breakeven are marked.
+ * Profit or loss at expiry, as one explorer: pick a settlement price (drag on the chart, use the arrow keys, or tap a
+ * preset) and the readout says in plain words what happens. Green is profit, red is loss; today's price, the strike
+ * and breakeven are marked. All math comes from lib/optara/payoff.ts.
  */
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { fmtLevelNum } from "../lib/optara/format.ts";
+import { breakeven as breakevenOf, chartRange, extremes, niceTicks, payoutPerOption, profitAt, usd, type Leg } from "../lib/optara/payoff.ts";
+import { cx } from "./ui.tsx";
 
 export interface PayoffProps {
   optionType: number; // 0 call, 1 put
   strike: number;
+  /** Underlying units per option; defaults to 1. */
+  size?: number;
   spot?: number;
-  premium: number; // per option, in the settlement asset
+  premium: number; // per option, in the settlement asset: all-in cost (long) or amount received (short)
   qty: number;
   side: "long" | "short";
   assetSymbol: string;
   underlyingSymbol: string;
 }
 
-const W = 640;
-const H = 260;
-const PAD = { l: 56, r: 16, t: 16, b: 34 };
+const SAMPLES = 200;
 
-const money = (x: number) => `${x < 0 ? "−" : ""}$${Math.abs(x).toLocaleString(undefined, { maximumFractionDigits: Math.abs(x) < 100 ? 2 : 0 })}`;
+/** Short axis money: "+$1.2k", "+$150M", "−$50", "$0". */
+function axisMoney(v: number): string {
+  if (v === 0) return "$0";
+  const abs = Math.abs(v);
+  const units: [number, string][] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "k"]];
+  const [div, suffix] = units.find(([d]) => abs >= d) ?? [1, ""];
+  const n = abs / div;
+  const body = div === 1 ? fmtLevelNum(abs) : `${n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1).replace(/\.0$/, "") : n.toFixed(2).replace(/\.?0+$/, "")}${suffix}`;
+  return `${v > 0 ? "+" : "−"}$${body}`;
+}
 
-export function PayoffChart({ optionType, strike, spot, premium, qty, side, assetSymbol, underlyingSymbol }: PayoffProps) {
+export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, side, assetSymbol, underlyingSymbol }: PayoffProps) {
   const svg = useRef<SVGSVGElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(640);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => e && setW(Math.max(280, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const narrow = W < 480;
+  const H = narrow ? 210 : 250;
+  const PAD = { l: narrow ? 50 : 60, r: 10, t: 32, b: 28 };
   const uid = useId().replace(/:/g, "");
-  const [hoverX, setHoverX] = useState<number | undefined>();
-  const sign = side === "long" ? 1 : -1;
-  const center = spot ?? strike;
-  const lo = Math.max(0, Math.min(center, strike) * 0.55);
-  const hi = Math.max(center, strike) * 1.55;
-  const pnl = (s: number) => sign * qty * ((optionType === 0 ? Math.max(s - strike, 0) : Math.max(strike - s, 0)) - premium);
-  const breakeven = optionType === 0 ? strike + premium : strike - premium;
+  const leg: Leg = useMemo(() => ({ optionType, strike, size }), [optionType, strike, size]);
+  const be = breakevenOf(leg, premium);
+  const [lo, hi] = useMemo(() => chartRange([spot ?? strike, strike, be ?? strike]), [spot, strike, be]);
 
-  const { points, yMin, yMax } = useMemo(() => {
+  // The price being explored. It follows today's price until the user picks one.
+  const [picked, setPicked] = useState<number | undefined>();
+  const price = Math.min(hi, Math.max(lo, picked ?? spot ?? strike));
+  useEffect(() => setPicked(undefined), [strike, optionType, side]);
+
+  const [dragging, setDragging] = useState(false);
+
+  const pnl = (s: number) => profitAt(leg, side, qty, premium, s);
+  const { points, yLo, yHi, yTicks } = useMemo(() => {
     const pts: [number, number][] = [];
-    for (let i = 0; i <= 160; i++) {
-      const s = lo + ((hi - lo) * i) / 160;
-      pts.push([s, pnl(s)]);
+    for (let i = 0; i <= SAMPLES; i++) {
+      const s = lo + ((hi - lo) * i) / SAMPLES;
+      pts.push([s, profitAt(leg, side, qty, premium, s)]);
     }
     const ys = pts.map((p) => p[1]);
-    let a = Math.min(0, ...ys);
-    let b = Math.max(0, ...ys);
-    const pad = (b - a) * 0.12 || 1;
-    a -= pad;
-    b += pad;
-    return { points: pts, yMin: a, yMax: b };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lo, hi, strike, premium, qty, side, optionType]);
+    const a = Math.min(0, ...ys);
+    const b = Math.max(0, ...ys);
+    const pad = (b - a) * 0.1 || 1;
+    const ticks = niceTicks(a, b, 4);
+    // Keep the loss side labelled even when it is small next to the upside.
+    if (a < 0 && !ticks.some((t) => t < 0)) ticks.push(a);
+    if (b > 0 && !ticks.some((t) => t > 0)) ticks.push(b);
+    if (!ticks.includes(0)) ticks.push(0);
+    return { points: pts, yLo: a - pad, yHi: b + pad, yTicks: ticks };
+  }, [lo, hi, leg, side, qty, premium]);
 
   const x = (s: number) => PAD.l + ((s - lo) / (hi - lo)) * (W - PAD.l - PAD.r);
-  const y = (v: number) => PAD.t + ((yMax - v) / (yMax - yMin)) * (H - PAD.t - PAD.b);
+  const y = (v: number) => PAD.t + ((yHi - v) / (yHi - yLo)) * (H - PAD.t - PAD.b);
   const line = points.map(([s, v], i) => `${i ? "L" : "M"}${x(s).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const area = `${line} L${x(hi).toFixed(1)},${y(0).toFixed(1)} L${x(lo).toFixed(1)},${y(0).toFixed(1)} Z`;
+  // Axis labels closer than 13px to the $0 label move away from it, so both stay readable.
+  const labelY = (v: number) => {
+    const base = y(v) + 4;
+    if (v === 0) return base;
+    const gap = y(v) - y(0);
+    return Math.abs(gap) < 13 ? y(0) + 4 + (gap >= 0 ? 13 : -13) : base;
+  };
+  const xTicks = niceTicks(lo, hi, narrow ? 3 : 5).filter((t) => x(t) > PAD.l + 14 && x(t) < W - PAD.r - 14);
 
-  const hoverS = hoverX === undefined ? undefined : lo + ((hoverX - PAD.l) / (W - PAD.l - PAD.r)) * (hi - lo);
-  const hoverV = hoverS === undefined ? undefined : pnl(hoverS);
-  const ticks = Array.from({ length: 5 }, (_, i) => lo + ((hi - lo) * i) / 4);
-
-  const onMove = (clientX: number) => {
+  const fromClientX = (clientX: number) => {
     const r = svg.current?.getBoundingClientRect();
     if (!r) return;
     const vx = ((clientX - r.left) / r.width) * W;
-    setHoverX(Math.max(PAD.l, Math.min(W - PAD.r, vx)));
+    setPicked(lo + ((Math.max(PAD.l, Math.min(W - PAD.r, vx)) - PAD.l) / (W - PAD.l - PAD.r)) * (hi - lo));
   };
 
+  // Readout for the picked price.
+  const net = pnl(price);
+  const payout = payoutPerOption(leg, price) * qty;
+  const total = premium * qty;
+  const fromToday = spot ? ((price - spot) / spot) * 100 : undefined;
+  const { maxGain, maxLoss } = extremes(leg, side, qty, premium);
+  const sentence =
+    side === "long"
+      ? payout === 0
+        ? `The option pays nothing. You lose the ${usd(total)} you paid.`
+        : net < 0
+        ? `The option pays ${usd(payout)}, less than the ${usd(total)} you paid.`
+        : `The option pays ${usd(payout)}, more than the ${usd(total)} you paid.`
+      : payout === 0
+      ? `You owe nothing and keep the whole ${usd(total)} premium.`
+      : net >= 0
+      ? `You owe ${usd(payout)} but keep the rest of the ${usd(total)} premium.`
+      : `You owe ${usd(payout)}, more than the ${usd(total)} premium you collected.`;
+
+  // Direction-aware presets: moves the option profits from, plus one against.
+  const dir = (optionType === 0 ? 1 : -1) * (side === "long" ? 1 : -1);
+  const presets = spot
+    ? [
+        { label: "Today", value: spot },
+        ...[0.05, 0.1, 0.2, -0.1].map((m) => ({ label: `${m * dir > 0 ? "+" : "−"}${Math.abs(m * 100)}%`, value: spot * (1 + m * dir) })),
+        ...(be !== undefined ? [{ label: "Breakeven", value: be }] : []),
+      ].filter((p) => p.value >= lo && p.value <= hi)
+    : [];
+
+  // Top-row labels: strike drops to a second line when it would collide with "Today".
+  const strikeRow = spot !== undefined && Math.abs(x(spot) - x(strike)) < 64 ? 2 : 1;
+  const tone = net >= 0 ? "text-good" : "text-bad";
+
   return (
-    <div className="relative">
+    <div className="space-y-3">
+      {/* Plain-language readout */}
+      <div className="grid grid-cols-[1fr_auto] items-end gap-x-3 gap-y-1 rounded-2xl border border-line bg-surface-2/70 px-4 py-3">
+        <div>
+          <div className="text-[13px] text-muted">If {underlyingSymbol} is at expiry</div>
+          <div className="num font-display text-xl font-bold tracking-tight sm:text-2xl">
+            ${fmtLevelNum(price)}
+            {fromToday !== undefined && (
+              <span className="block text-xs font-semibold text-muted sm:ml-1.5 sm:inline sm:text-[13px]">
+                {Math.abs(fromToday) < 0.05 ? "today's price" : `${fromToday > 0 ? "+" : "−"}${Math.abs(fromToday).toFixed(1)}% from today`}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[13px] text-muted">{net >= 0 ? "You make" : "You lose"}</div>
+          <div className={cx("num font-display text-xl font-bold tracking-tight sm:text-2xl", tone)}>{usd(Math.abs(net))}</div>
+        </div>
+        <p className="col-span-2 text-[13px] text-muted">{sentence}</p>
+      </div>
+
+      {/* Chart */}
+      <div ref={box}>
       <svg
         ref={svg}
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full touch-none select-none"
-        role="img"
-        aria-label={`Profit or loss at expiry for ${side === "long" ? "buying" : "writing"} ${qty} options`}
-        onMouseMove={(e) => onMove(e.clientX)}
-        onMouseLeave={() => setHoverX(undefined)}
-        onTouchMove={(e) => e.touches[0] && onMove(e.touches[0].clientX)}
-        onTouchEnd={() => setHoverX(undefined)}
+        className={cx("w-full select-none rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/60", dragging ? "cursor-grabbing" : "cursor-pointer")}
+        style={{ touchAction: "pan-y" }}
+        role="slider"
+        tabIndex={0}
+        aria-label={`Settlement price of ${underlyingSymbol}`}
+        aria-valuemin={lo}
+        aria-valuemax={hi}
+        aria-valuenow={price}
+        aria-valuetext={`$${fmtLevelNum(price)}: ${net >= 0 ? "profit" : "loss"} ${usd(Math.abs(net))}`}
+        onPointerDown={(e) => {
+          setDragging(true);
+          e.currentTarget.setPointerCapture(e.pointerId);
+          fromClientX(e.clientX);
+        }}
+        onPointerMove={(e) => dragging && fromClientX(e.clientX)}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+        onKeyDown={(e) => {
+          const step = (hi - lo) / 100;
+          if (e.key === "ArrowRight" || e.key === "ArrowUp") setPicked(Math.min(hi, price + step));
+          else if (e.key === "ArrowLeft" || e.key === "ArrowDown") setPicked(Math.max(lo, price - step));
+          else if (e.key === "Home" && spot) setPicked(spot);
+          else return;
+          e.preventDefault();
+        }}
       >
         <defs>
           <clipPath id={`above${uid}`}>
@@ -84,74 +192,103 @@ export function PayoffChart({ optionType, strike, spot, premium, qty, side, asse
           <clipPath id={`below${uid}`}>
             <rect x="0" y={y(0)} width={W} height={H} />
           </clipPath>
-          <linearGradient id={`gain${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--good)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--good)" stopOpacity="0.02" />
-          </linearGradient>
-          <linearGradient id={`loss${uid}`} x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%" stopColor="var(--bad)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--bad)" stopOpacity="0.02" />
-          </linearGradient>
         </defs>
-        {/* axes */}
-        <line x1={PAD.l} x2={W - PAD.r} y1={y(0)} y2={y(0)} stroke="var(--muted)" strokeOpacity="0.45" />
-        {ticks.map((t) => (
-          <text key={t} x={x(t)} y={H - 10} textAnchor="middle" className="fill-[var(--muted)] text-[11px]">
-            {Math.round(t).toLocaleString()}
+
+        {/* Grid and axes */}
+        {yTicks.map((v) => (
+          <g key={`y${v}`}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="var(--muted)" strokeOpacity={v === 0 ? 0.6 : 0.12} />
+            <text x={PAD.l - 8} y={labelY(v)} textAnchor="end" className="fill-[var(--muted)] text-[11px]">
+              {axisMoney(v)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((t) => (
+          <text key={`x${t}`} x={x(t)} y={H - 10} textAnchor="middle" className="fill-[var(--muted)] text-[11px]">
+            ${fmtLevelNum(t)}
           </text>
         ))}
-        {[yMax * 0.9, 0, yMin * 0.9].map((v) => (
-          <text key={v} x={PAD.l - 8} y={y(v) + 4} textAnchor="end" className="fill-[var(--muted)] text-[11px]">
-            {money(v)}
-          </text>
-        ))}
-        <path d={area} fill={`url(#gain${uid})`} clipPath={`url(#above${uid})`} />
-        <path d={area} fill={`url(#loss${uid})`} clipPath={`url(#below${uid})`} />
-        <path d={line} fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinejoin="round" />
-        {/* strike and breakeven */}
-        <line x1={x(strike)} x2={x(strike)} y1={PAD.t} y2={H - PAD.b} stroke="var(--muted)" strokeDasharray="2 4" strokeOpacity="0.6" />
-        {breakeven > lo && breakeven < hi && (
+
+        {/* Profit (green) and loss (red) */}
+        <path d={area} fill="var(--good)" fillOpacity="0.16" clipPath={`url(#above${uid})`} />
+        <path d={area} fill="var(--bad)" fillOpacity="0.16" clipPath={`url(#below${uid})`} />
+        <path d={line} fill="none" stroke="var(--good)" strokeWidth="2.5" strokeLinejoin="round" clipPath={`url(#above${uid})`} />
+        <path d={line} fill="none" stroke="var(--bad)" strokeWidth="2.5" strokeLinejoin="round" clipPath={`url(#below${uid})`} />
+        <text x={W - PAD.r - 4} y={PAD.t + 4} textAnchor="end" className="fill-[var(--good)] text-[11px] font-semibold">
+          profit
+        </text>
+        <text x={W - PAD.r - 4} y={H - PAD.b - 6} textAnchor="end" className="fill-[var(--bad)] text-[11px] font-semibold">
+          loss
+        </text>
+
+        {/* Markers: strike, today, breakeven */}
+        <line x1={x(strike)} x2={x(strike)} y1={PAD.t} y2={H - PAD.b} stroke="var(--muted)" strokeDasharray="2 4" strokeOpacity="0.7" />
+        <text x={x(strike)} y={strikeRow === 1 ? 13 : 27} textAnchor="middle" className="fill-[var(--muted)] text-[11px]">
+          strike
+        </text>
+        {spot !== undefined && spot >= lo && spot <= hi && (
           <g>
-            <circle cx={x(breakeven)} cy={y(0)} r="4" fill="var(--warn)" />
-            <text
-              x={x(breakeven)}
-              y={y(0) + (Math.abs(y(0) - PAD.t) < 40 || (spot !== undefined && Math.abs(x(spot) - x(breakeven)) < 110) ? 18 : -9)}
-              textAnchor="middle"
-              className="fill-[var(--warn)] text-[11px] font-semibold"
-            >
-              breakeven {Math.round(breakeven).toLocaleString()}
+            <line x1={x(spot)} x2={x(spot)} y1={PAD.t} y2={H - PAD.b} stroke="var(--accent)" strokeDasharray="5 4" strokeOpacity="0.8" />
+            <text x={x(spot)} y={13} textAnchor="middle" className="fill-[var(--accent)] text-[11px] font-semibold">
+              today
             </text>
           </g>
         )}
-        {spot !== undefined && spot > lo && spot < hi && (
+        {be !== undefined && be > lo && be < hi && (
           <g>
-            <line x1={x(spot)} x2={x(spot)} y1={PAD.t} y2={H - PAD.b} stroke="var(--accent)" strokeDasharray="5 4" />
-            <text x={x(spot) + 5} y={PAD.t + 12} className="fill-[var(--accent)] text-[11px] font-semibold">
-              now {Math.round(spot).toLocaleString()}
-            </text>
+            <circle cx={x(be)} cy={y(0)} r="4.5" fill="var(--warn)" stroke="var(--bg)" strokeWidth="1.5" />
+            {Math.abs(x(be) - x(price)) > 40 && x(be) < W - PAD.r - 70 && (
+              <text x={x(be)} y={y(0) + 16} textAnchor="middle" className="fill-[var(--warn)] text-[11px] font-semibold">
+                breakeven
+              </text>
+            )}
           </g>
         )}
-        {hoverX !== undefined && hoverS !== undefined && hoverV !== undefined && (
-          <g>
-            <line x1={hoverX} x2={hoverX} y1={PAD.t} y2={H - PAD.b} stroke="var(--ink)" strokeOpacity="0.35" />
-            <circle cx={hoverX} cy={y(hoverV)} r="5" fill="var(--primary)" stroke="var(--bg)" strokeWidth="2" />
-          </g>
-        )}
+
+        {/* The explored price */}
+        <line x1={x(price)} x2={x(price)} y1={PAD.t} y2={H - PAD.b} stroke="var(--ink)" strokeOpacity="0.5" />
+        <circle cx={x(price)} cy={y(net)} r="7" fill={net >= 0 ? "var(--good)" : "var(--bad)"} stroke="var(--bg)" strokeWidth="2.5" />
       </svg>
-      <div className="mt-2.5 flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface-2/70 px-3.5 py-2.5 text-sm">
-        {hoverS !== undefined && hoverV !== undefined ? (
-          <>
-            <span className="text-muted text-[13px]">
-              If {underlyingSymbol} settles at <b className="num font-display text-ink">{Math.round(hoverS).toLocaleString()}</b>
-            </span>
-            <span className={`num font-display text-[15px] font-bold ${hoverV >= 0 ? "text-good" : "text-bad"}`}>
-              {hoverV >= 0 ? "+" : "−"}{money(Math.abs(hoverV)).slice(1)} {assetSymbol}
-            </span>
-          </>
-        ) : (
-          <span className="text-[13px] text-muted">Drag across the curve to preview any settlement price.</span>
-        )}
       </div>
+
+      {/* Presets */}
+      {presets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-muted">Try:</span>
+          {presets.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => setPicked(p.value)}
+              className={cx("chip cursor-pointer !py-1 !text-xs", Math.abs(p.value - price) < (hi - lo) / 400 && "!border-primary/60 !text-primary")}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* The three numbers that matter */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Fact label="Breakeven" value={be !== undefined ? `$${fmtLevelNum(be)}` : "—"} dot="bg-warn" />
+        <Fact label="Most you can make" value={maxGain === "unlimited" ? "No limit" : usd(maxGain)} tone="text-good" />
+        <Fact label="Most you can lose" value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone="text-bad" />
+      </div>
+      <p className="text-xs text-muted">
+        Drag across the chart, use the arrow keys, or tap a button to try a price. Amounts are in {assetSymbol}.
+      </p>
+    </div>
+  );
+}
+
+function Fact({ label, value, tone, dot }: { label: string; value: string; tone?: string; dot?: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-2/60 px-2 py-2">
+      <div className="flex items-center justify-center gap-1 text-[11px] text-muted">
+        {dot && <span className={cx("h-2 w-2 rounded-full", dot)} />}
+        {label}
+      </div>
+      <div className={cx("num font-display mt-0.5 text-sm font-bold", tone)}>{value}</div>
     </div>
   );
 }

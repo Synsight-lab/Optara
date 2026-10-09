@@ -36,6 +36,8 @@ export const RPC_URL: string = (env.VITE_RPC_URL as string | undefined) ?? DEFAU
 export const CHAIN: Chain = chainFor(MANIFEST.chainId, RPC_URL);
 const LOCAL_RPC = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(RPC_URL);
 export const IS_LOCAL = MANIFEST.chainId === 31337 || (NETWORK === "local" && LOCAL_RPC);
+/** A local fork of a real chain: same chain id as the real network, so browser wallets would sign for the real one. */
+export const IS_LOCAL_FORK = IS_LOCAL && MANIFEST.chainId !== 31337;
 export const PUBLISHER_URL: string = (env.VITE_PUBLISHER_URL as string | undefined) ?? (IS_LOCAL ? "http://127.0.0.1:8790" : "");
 export const INDEXER_URL: string | undefined = (env.VITE_INDEXER_URL as string | undefined) || undefined;
 export const EXPLORER_URL: string | undefined =
