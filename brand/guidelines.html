@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optara Brand Guidelines</title>
+<link rel="icon" href="favicon/favicon.svg" type="image/svg+xml">
+<style>
+  @font-face { font-family: "Space Grotesk"; font-weight: 500; src: url(fonts/space-grotesk-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Space Grotesk"; font-weight: 700; src: url(fonts/space-grotesk-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 400; src: url(fonts/inter-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 500; src: url(fonts/inter-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url(fonts/inter-latin-600-normal.woff2) format("woff2"); }
+  :root {
+    --night: #0d0024; --monad-blue: #200052; --monad-purple: #836ef9; --monad-berry: #a0055d;
+    --off-white: #fbfaf9; --black: #0e100f; --mint: #5cf2c4; --ember: #ff7a3d; --lavender: #c3b6ff;
+    --muted: #b3a9d9; --line: rgb(255 255 255 / 0.09); --card: rgb(255 255 255 / 0.035);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--night); color: var(--off-white); font: 16px/1.6 Inter, system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 0 48px 96px; }
+  h1, h2, h3, .display { font-family: "Space Grotesk", Inter, sans-serif; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  h2 { font-size: 40px; line-height: 1.1; }
+  h3 { font-size: 20px; }
+  p { margin: 0; color: var(--muted); }
+  .eyebrow { font: 500 13px/1 "Space Grotesk", sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lavender); }
+  section { padding: 88px 0 0; }
+  .head { display: grid; grid-template-columns: 300px 1fr; gap: 48px; margin-bottom: 40px; align-items: start; }
+  .head p { max-width: 680px; font-size: 17px; }
+  .grid { display: grid; gap: 20px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); }
+  .tile { border-radius: 20px; border: 1px solid var(--line); overflow: hidden; background: var(--card); }
+  .stage { display: grid; place-items: center; min-height: 240px; padding: 32px; }
+  .cap { padding: 14px 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+  .cap b { color: var(--off-white); font-weight: 600; }
+  .on-blue { background: radial-gradient(120% 120% at 50% 20%, #2d0a78, var(--monad-blue) 55%, var(--night)); }
+  .on-black { background: var(--black); } .on-white { background: var(--off-white); } .on-purple { background: var(--monad-purple); }
+
+  /* cover */
+  .cover { position: relative; min-height: 720px; display: flex; align-items: center; background: linear-gradient(90deg, rgb(13 0 36 / 0.88), rgb(13 0 36 / 0.55) 48%, rgb(13 0 36 / 0) 72%), url(backgrounds/hero-1920x1080.jpg) center 70% / cover; border-bottom: 1px solid var(--line); }
+  .cover .in { max-width: 1280px; margin: 0 auto; padding: 0 48px 120px; width: 100%; }
+  .cover img.lock { height: 84px; display: block; margin-bottom: 56px; }
+  .cover h1 { font-size: 84px; line-height: 1; max-width: 900px; }
+  .cover h1 span { background: linear-gradient(90deg, var(--lavender), var(--monad-purple) 45%, var(--mint)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .cover p { font-size: 20px; margin-top: 24px; max-width: 620px; color: #d6cff5; }
+
+  /* story */
+  .story { display: grid; grid-template-columns: 1.05fr 1fr; gap: 20px; }
+  .anatomy { position: relative; }
+  .anatomy .stage { min-height: 460px; }
+  .anatomy img { width: 300px; }
+  .callout { position: absolute; font-size: 13px; color: var(--off-white); display: flex; align-items: center; gap: 8px; }
+  .callout i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  .points { display: grid; gap: 14px; }
+  .point { padding: 22px 24px; }
+  .point h3 { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .sw { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+
+  /* palette */
+  .chip { border-radius: 20px; overflow: hidden; border: 1px solid var(--line); }
+  .chip .c { height: 150px; position: relative; }
+  .chip .c span { position: absolute; left: 18px; bottom: 14px; font: 600 13px Inter; opacity: 0.85; }
+  .chip .m { padding: 14px 18px; background: var(--card); }
+  .chip .m b { display: block; font-family: "Space Grotesk"; font-size: 18px; }
+  .chip .m code { font: 500 13px ui-monospace, monospace; color: var(--lavender); }
+  .chip .m small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .src { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  .bar { height: 88px; border-radius: 20px; display: flex; align-items: end; padding: 14px 20px; font: 600 14px "Space Grotesk"; }
+
+  /* type */
+  .type .stage { justify-items: start; align-content: center; min-height: 300px; }
+  .specimen { font-family: "Space Grotesk"; font-weight: 700; font-size: 96px; line-height: 1; letter-spacing: -0.03em; }
+  .specimen-i { font-family: Inter; font-size: 40px; font-weight: 500; letter-spacing: -0.01em; }
+  .scale div { display: flex; align-items: baseline; gap: 24px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .scale small { width: 120px; color: var(--muted); font-size: 12px; flex: none; }
+
+  /* rules */
+  .rule .stage { min-height: 200px; }
+  .no { position: relative; }
+  .no::after { content: "✕"; position: absolute; top: 12px; right: 16px; color: var(--monad-berry); font-weight: 700; background: #fff; border-radius: 50%; width: 26px; height: 26px; display: grid; place-items: center; font-size: 13px; }
+  .clear { position: relative; padding: 36px; border: 1.5px dashed rgb(195 182 255 / 0.5); border-radius: 8px; }
+
+  /* applications */
+  .app img { display: block; width: 100%; }
+  .x { background: #000; }
+  .x .banner { display: block; width: 100%; }
+  .x .row { display: flex; align-items: end; gap: 16px; padding: 0 20px 18px; margin-top: -54px; }
+  .x .row img { width: 112px; height: 112px; border-radius: 50%; border: 4px solid #000; }
+  .x .who b { display: block; font: 700 20px Inter; }
+  .x .who span { color: #71767b; font-size: 15px; }
+  footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
+  @media (max-width: 900px) { .head, .story, .g2, .g3, .g4 { grid-template-columns: 1fr; } .cover h1 { font-size: 52px; } main { padding: 0 16px 64px; } .cover .in { padding: 0 16px; } }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="in">
+    <img class="lock" src="logo/optara-lockup-dark.svg" alt="optara">
+    <div class="eyebrow" style="margin-bottom:20px">Brand guidelines · v1</div>
+    <h1>European options, <span>uncapped.</span></h1>
+    <p>The mark and what it means, the colours we share with Monad, the type, and how it all comes together.</p>
+  </div>
+</header>
+
+<main>
+
+<section>
+  <div class="head"><div class="eyebrow">01 · The mark</div>
+    <div><h2>One coin, both sides of the trade, and a line that won't be capped.</h2>
+    <p style="margin-top:16px">The mark is a single coin cut by a call payoff. Each part is something Optara actually does, so the logo explains the product.</p></div></div>
+  <div class="story">
+    <div class="tile anatomy on-blue"><div class="stage"><img src="logo/optara-mark.svg" alt="Optara mark"></div>
+      <div class="callout" style="left:36px;top:70px"><i style="background:var(--monad-purple)"></i>Calls</div>
+      <div class="callout" style="left:36px;bottom:70px"><i style="background:var(--monad-berry)"></i>Puts</div>
+      <div class="callout" style="right:36px;top:60px"><i style="background:var(--mint)"></i>Uncapped upside</div>
+      <div class="callout" style="right:36px;bottom:110px"><i style="background:var(--ember)"></i>The strike</div>
+    </div>
+    <div class="points">
+      <div class="tile point"><h3><span class="sw" style="background:linear-gradient(var(--monad-purple),var(--monad-berry))"></span>The coin</h3>
+        <p>One account, one margin. Calls (Monad Purple, above) and puts (Monad Berry, below) live in the same coin because portfolio margin lets them offset. The round counter nods to Monad's own coin-like mark.</p></div>
+      <div class="tile point"><h3><span class="sw" style="background:var(--off-white)"></span>The payoff</h3>
+        <p><code>max(S − K, 0)</code>, the standard European call: flat below the strike, then rising one-for-one. It cuts clean through the coin.</p></div>
+      <div class="tile point"><h3><span class="sw" style="background:var(--mint)"></span>The breakout</h3>
+        <p>The ray leaves the circle and turns mint as it moves into the money. Optara options are uncapped: nothing stops the line.</p></div>
+      <div class="tile point"><h3><span class="sw" style="background:var(--ember)"></span>The strike</h3>
+        <p>An ember point where the payoff turns: the moment a trade happens. Its spark borrows the energy of Kuru, where Optara's options trade.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><div class="eyebrow">02 · Logo</div>
+    <div><h2>Lockups and variants</h2>
+    <p style="margin-top:16px">Use the full-colour logo wherever possible. The one-colour versions are for single-ink printing, embossing and busy photography.</p></div></div>
+  <div class="grid g2">
+    <div class="tile"><div class="stage on-blue" style="min-height:260px"><img src="logo/optara-lockup-tagline-dark.svg" style="height:92px" alt=""></div><div class="cap"><b>Primary · on dark</b><span>optara-lockup-tagline-dark</span></div></div>
+    <div class="tile"><div class="stage on-white" style="min-height:260px"><img src="logo/optara-lockup-tagline-light.svg" style="height:92px" alt=""></div><div class="cap"><b>Primary · on light</b><span>optara-lockup-tagline-light</span></div></div>
+  </div>
+  <div class="grid g4" style="margin-top:20px">
+    <div class="tile"><div class="stage on-black"><img src="logo/optara-stacked-dark.svg" style="height:150px" alt=""></div><div class="cap"><b>Stacked</b><span>optara-stacked-dark</span></div></div>
+    <div class="tile"><div class="stage on-purple"><img src="logo/optara-lockup-white.svg" style="height:52px" alt=""></div><div class="cap"><b>One colour · white</b><span>optara-lockup-white</span></div></div>
+    <div class="tile"><div class="stage on-white"><img src="logo/optara-lockup-black.svg" style="height:52px" alt=""></div><div class="cap"><b>One colour · night</b><span>optara-lockup-black</span></div></div>
+    <div class="tile"><div class="stage on-white"><img src="logo/optara-stacked-light.svg" style="height:150px" alt=""></div><div class="cap"><b>Stacked · light</b><span>optara-stacked-light</span></div></div>
+  </div>
+  <div class="grid g4" style="margin-top:20px">
+    <div class="tile"><div class="stage on-blue"><img src="logo/optara-mark.svg" style="width:140px" alt=""></div><div class="cap"><b>Mark</b><span>optara-mark</span></div></div>
+    <div class="tile"><div class="stage on-white"><img src="logo/optara-mark-on-light.svg" style="width:140px" alt=""></div><div class="cap"><b>Mark · light</b><span>optara-mark-on-light</span></div></div>
+    <div class="tile"><div class="stage" style="background:linear-gradient(135deg,var(--monad-berry),var(--monad-purple))"><img src="logo/optara-mark-white.svg" style="width:140px" alt=""></div><div class="cap"><b>Mark · white</b><span>optara-mark-white</span></div></div>
+    <div class="tile"><div class="stage" style="background:var(--mint)"><img src="logo/optara-mark-black.svg" style="width:140px" alt=""></div><div class="cap"><b>Mark · night</b><span>optara-mark-black</span></div></div>
+  </div>
+  <div class="grid g3" style="margin-top:20px">
+    <div class="tile"><div class="stage on-black" style="gap:28px;grid-auto-flow:column"><img src="logo/optara-app-icon.svg" style="width:150px" alt=""><img src="social/avatar.svg" style="width:110px;border-radius:50%" alt=""></div><div class="cap"><b>App icon & avatar</b><span>app-icon · avatar</span></div></div>
+    <div class="tile"><div class="stage on-white" style="gap:24px;grid-auto-flow:column;align-items:end">
+      <img src="favicon/favicon.svg" style="width:64px" alt=""><img src="favicon/favicon.svg" style="width:32px" alt=""><img src="favicon/favicon.svg" style="width:16px" alt=""></div><div class="cap"><b>Favicon · 64 / 32 / 16</b><span>favicon.svg</span></div></div>
+    <div class="tile rule"><div class="stage on-blue"><div class="clear"><img src="logo/optara-lockup-dark.svg" style="height:48px;display:block" alt=""></div></div><div class="cap"><b>Clear space</b><span>≥ the coin's radius on every side</span></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><div class="eyebrow">03 · Colour</div>
+    <div><h2>Built on Monad's palette, lit by the trade</h2>
+    <p style="margin-top:16px">Monad's published colours are the foundation, so Optara looks at home in the Monad ecosystem. Three Optara colours add meaning: mint for calls and the uncapped breakout, ember for the strike (a nod to Kuru's bold energy), lavender for highlights.</p></div></div>
+  <div class="grid g4">
+    <div class="chip"><div class="c" style="background:#200052"><span>Aa</span></div><div class="m"><b>Monad Blue</b><code>#200052</code><small>Primary ground</small> <span class="src">Monad</span></div></div>
+    <div class="chip"><div class="c" style="background:#836ef9"><span>Aa</span></div><div class="m"><b>Monad Purple</b><code>#836EF9</code><small>Brand colour · calls</small> <span class="src">Monad</span></div></div>
+    <div class="chip"><div class="c" style="background:#a0055d"><span>Aa</span></div><div class="m"><b>Monad Berry</b><code>#A0055D</code><small>Puts · depth</small> <span class="src">Monad</span></div></div>
+    <div class="chip"><div class="c" style="background:#fbfaf9;color:#200052"><span>Aa</span></div><div class="m"><b>Off-White</b><code>#FBFAF9</code><small>Type on dark · light grounds</small> <span class="src">Monad</span></div></div>
+    <div class="chip"><div class="c" style="background:#5cf2c4;color:#0d0024"><span>Aa</span></div><div class="m"><b>Breakout Mint</b><code>#5CF2C4</code><small>Calls · gains · the uncapped ray</small> <span class="src">Optara</span></div></div>
+    <div class="chip"><div class="c" style="background:#ff7a3d;color:#0d0024"><span>Aa</span></div><div class="m"><b>Strike Ember</b><code>#FF7A3D</code><small>The strike · actions · alerts</small> <span class="src">Kuru-inspired</span></div></div>
+    <div class="chip"><div class="c" style="background:#c3b6ff;color:#0d0024"><span>Aa</span></div><div class="m"><b>Lavender</b><code>#C3B6FF</code><small>Highlights · links on dark</small> <span class="src">Optara</span></div></div>
+    <div class="chip"><div class="c" style="background:#0d0024;outline:1px solid var(--line);outline-offset:-1px"><span>Aa</span></div><div class="m"><b>Night</b><code>#0D0024</code><small>Deepest background</small> <span class="src">Optara</span></div></div>
+  </div>
+  <div class="grid g3" style="margin-top:20px">
+    <div class="bar" style="background:linear-gradient(90deg,#c3b6ff,#836ef9 50%,#5cf2c4);color:#0d0024">Breakout · lavender → purple → mint</div>
+    <div class="bar" style="background:linear-gradient(90deg,#a0055d,#ff7a3d);">Strike · berry → ember</div>
+    <div class="bar" style="background:linear-gradient(135deg,#0d0024,#200052 55%,#3a1191);border:1px solid var(--line)">Night · night → Monad Blue</div>
+  </div>
+  <p style="margin-top:20px;font-size:14px">Proportion: about 70% night and Monad Blue, 20% purple and off-white, 10% mint, ember and berry. Ember is a spark, never a fill. Tokens: <code>tokens.css</code>, <code>tokens.json</code>.</p>
+</section>
+
+<section class="type">
+  <div class="head"><div class="eyebrow">04 · Type</div>
+    <div><h2>Space Grotesk speaks, Inter explains</h2>
+    <p style="margin-top:16px">Space Grotesk's technical, slightly quirky shapes carry the wordmark and headlines. Inter, Monad's own typeface, does everything else. Both are free and open (OFL) and ship in <code>fonts/</code>.</p></div></div>
+  <div class="grid g2">
+    <div class="tile"><div class="stage"><div class="eyebrow" style="margin-bottom:18px">Display · Space Grotesk Bold</div><div class="specimen">Aa optara</div><p style="margin-top:18px">Headlines, the wordmark, numbers that matter. Tracking −2% to −3%.</p></div></div>
+    <div class="tile"><div class="stage"><div class="eyebrow" style="margin-bottom:18px">Text · Inter</div><div class="specimen-i">Aa Portfolio margin</div><p style="margin-top:18px">Body, interface, data. Regular 400, Medium 500, Semibold 600.</p></div></div>
+  </div>
+  <div class="tile scale" style="margin-top:20px;padding:12px 28px">
+    <div><small>Display 72</small><span class="display" style="font-size:72px;line-height:1">Uncapped.</span></div>
+    <div><small>Heading 40</small><span class="display" style="font-size:40px">Write calls with less capital</span></div>
+    <div><small>Title 22</small><span class="display" style="font-size:22px">ETH 4,500 Call · 16 Oct</span></div>
+    <div><small>Body 16 · Inter</small><span>Long claims are ERC-20 tokens that trade on Kuru. Optara clears; venues trade.</span></div>
+    <div style="border:0"><small>Label 13</small><span class="eyebrow">Options on Monad</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="head"><div class="eyebrow">05 · Usage</div>
+    <div><h2>Do and don't</h2></div></div>
+  <div class="grid g4 rule">
+    <div class="tile no"><div class="stage on-blue"><img src="logo/optara-mark.svg" style="width:110px;transform:rotate(-30deg)" alt=""></div><div class="cap"><b>Don't rotate</b><span>The flat leg must stay level</span></div></div>
+    <div class="tile no"><div class="stage on-blue"><img src="logo/optara-mark.svg" style="width:110px;filter:hue-rotate(150deg)" alt=""></div><div class="cap"><b>Don't recolour</b><span>Never a red ray: red means loss</span></div></div>
+    <div class="tile no"><div class="stage on-blue"><img src="logo/optara-lockup-dark.svg" style="height:44px;transform:scaleX(1.4)" alt=""></div><div class="cap"><b>Don't stretch</b><span>Scale proportionally</span></div></div>
+    <div class="tile no"><div class="stage" style="background:#7a68e8"><img src="logo/optara-lockup-dark.svg" style="height:44px" alt=""></div><div class="cap"><b>Don't lose contrast</b><span>Use the white version on purple</span></div></div>
+  </div>
+  <p style="margin-top:20px;font-size:14px">Minimum size: 16 px for the mark, 96 px wide for the horizontal logo. Write the name lowercase in the logo and "Optara" in running text.</p>
+</section>
+
+<section>
+  <div class="head"><div class="eyebrow">06 · In the wild</div>
+    <div><h2>Applications</h2>
+    <p style="margin-top:16px">The backgrounds draw real Black-76 option values: a fan of call and put curves for different times to expiry, hardening into the payoff and meeting at an ember strike.</p></div></div>
+  <div class="tile x"><img class="banner" src="social/twitter-header-1500x500.jpg" alt="">
+    <div class="row"><img src="social/avatar-400.png" alt=""><div class="who"><b>Optara</b><span>@optara</span></div></div></div>
+  <div class="grid g2" style="margin-top:20px">
+    <div class="tile app"><img src="social/og-image-1200x630.jpg" alt=""><div class="cap"><b>Link preview</b><span>og-image-1200x630</span></div></div>
+    <div class="tile app"><img src="social/community-banner-960x540.jpg" alt=""><div class="cap"><b>Community banner</b><span>Discord · Telegram</span></div></div>
+  </div>
+  <div class="grid g3" style="margin-top:20px">
+    <div class="tile app" style="grid-column:span 2"><img src="backgrounds/hero-1920x1080.jpg" alt=""><div class="cap"><b>Website hero</b><span>hero-1920x1080 · 2560x1440</span></div></div>
+    <div class="tile app"><img src="backgrounds/hero-mobile-1080x1920.jpg" style="height:100%;object-fit:cover;max-height:430px" alt=""><div class="cap"><b>Mobile hero</b><span>1080x1920</span></div></div>
+  </div>
+</section>
+
+<footer><span>Optara · Options on Monad</span><span>Generated by brand/source · Monad colours from Monad's brand kit</span></footer>
+</main>
+</body>
+</html>

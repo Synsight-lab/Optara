@@ -1,21 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><g transform="scale(8)">
-    <defs>
-      <radialGradient id="t-bg" cx="0.5" cy="0.38" r="0.75">
-        <stop offset="0" stop-color="#1d1648"/><stop offset="0.6" stop-color="#0e0c1d"/><stop offset="1" stop-color="#08080f"/></radialGradient>
-      <clipPath id="t-clip"><rect width="64" height="64" rx="16"/></clipPath>
-    </defs>
-    <g clip-path="url(#t-clip)">
-      <rect width="64" height="64" fill="url(#t-bg)"/>
-      <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
-      <g transform="translate(5.12 5.12) scale(0.84)"><defs><mask id="t-m-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
-    <rect width="64" height="64" fill="#fff"/><path d="M8 40 L32 40 L55 17" fill="none" stroke="#000" stroke-width="11.399999999999999" stroke-linecap="round" stroke-linejoin="round"/></mask>
-    <linearGradient id="t-m-ring" x1="12" y1="52" x2="52" y2="12" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#a99dff"/></linearGradient>
-    <linearGradient id="t-m-ray" x1="8" y1="40" x2="55" y2="17" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f4f3ff"/><stop offset="0.45" stop-color="#f4f3ff"/><stop offset="1" stop-color="#00e5a0"/></linearGradient>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs><clipPath id="ai-clip"><rect width="1024" height="1024" rx="240.64"/></clipPath></defs>
+    <g clip-path="url(#ai-clip)"><defs><radialGradient id="ai-ng" cx="0.5" cy="0.4" r="0.75">
+    <stop offset="0" stop-color="#2d0a78"/><stop offset="0.55" stop-color="#200052"/><stop offset="1" stop-color="#0d0024"/></radialGradient></defs>
+  <rect width="1024" height="1024" fill="url(#ai-ng)"/>
+      <rect x="0.5" y="0.5" width="1023" height="1023" rx="240.64" fill="none" stroke="#fff" stroke-opacity="0.1"/>
+      <g transform="translate(133.12 133.12) scale(11.84)"><g transform="translate(0.5 -0.6)"><defs><mask id="ai-m-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M6 41 H29 L57 13" stroke="#000" stroke-width="11" fill="none" stroke-linejoin="round" stroke-linecap="round"/></mask>
+    <linearGradient id="ai-m-call" x1="12" y1="54" x2="50" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4a2bd0"/><stop offset="0.5" stop-color="#836ef9"/><stop offset="1" stop-color="#c3b6ff"/></linearGradient>
+    <linearGradient id="ai-m-put" x1="10" y1="56" x2="52" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a0055d"/><stop offset="1" stop-color="#6a2bd9"/></linearGradient>
+    <linearGradient id="ai-m-ray" x1="29" y1="41" x2="57" y2="13" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfaf9"/><stop offset="1" stop-color="#5cf2c4"/></linearGradient>
   </defs>
-  <g fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M50.07 26.13 A19 19 0 1 1 40.92 15.22" stroke="url(#t-m-ring)" mask="url(#t-m-cut)"/>
-    <path d="M8 40 L32 40 L55 17" stroke="url(#t-m-ray)"/>
-  </g></g>
-    </g></g></svg>
+  <g mask="url(#ai-m-cut)">
+    <circle cx="31" cy="34" r="21" fill="url(#ai-m-call)"/>
+    <path d="M11.201 41 H50.799 A21 21 0 0 1 11.201 41Z" fill="url(#ai-m-put)"/>
+  </g>
+  <path d="M6 41 H29 L57 13" stroke="url(#ai-m-ray)" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="29" cy="41" r="4.6" fill="#ff7a3d"/></g></g></g></svg>
