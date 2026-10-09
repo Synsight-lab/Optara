@@ -24,8 +24,8 @@ import {OptaraDirectAdapter, OptaraDirectMarket} from "../../src/venues/OptaraDi
 ///         funded test users. Writes `deployments/local.json` (`deployments/<NETWORK>.json` if `NETWORK` is set, as
 ///         the service test suites do so each gets its own manifest). `pnpm dev` (frontend) adds quotes and services.
 /// @dev `anvil` then `forge script script/local/LocalStack.s.sol --rpc-url http://127.0.0.1:8545 --broadcast`.
-///      Accounts come from anvil's default mnemonic: 0 deployer and treasury, 1 governance and every admin role,
-///      2 and 3 publishers (2 independent), 4 keeper, 5–9 users. Never use these keys anywhere else.
+///      Accounts come from anvil's default mnemonic: 0 deployer and treasury, 2 and 3 publishers, 4 keeper,
+///      5 Alice, 6 Bob (governance and every admin role for UI testing), 7–9 funded users. Never use these keys anywhere else.
 contract LocalStack is Manifest, ListingCalls, LocalMarketData {
     string internal constant MNEMONIC = "test test test test test test test test test test test junk";
     bytes32 internal constant ETH_USDC_RISK_SET = keccak256("ETH/USDC default");
@@ -99,7 +99,7 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         ProductPlan[] memory products = _products(m);
         for (uint256 i; i < products.length; ++i) {
             ListingParams memory p = _listing(products[i], i == 0);
-            _send(keys[1], _listingCalls(d, p)); // governance + admins (all account 1 locally)
+            _send(keys[6], _listingCalls(d, p)); // governance + admins (Bob locally, so the UI admin page can be tested)
             vm.broadcast(keys[0]);
             MockERC20(p.asset).mint(accts[0], p.insuranceSeed + p.keeperReserveMin);
             _send(keys[0], _seedCalls(d, p)); // the treasury (account 0 locally)
@@ -129,7 +129,7 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
     }
 
     function _localConfig(Mocks memory m) internal view returns (Config memory c) {
-        address gov = accts[1];
+        address gov = accts[6]; // Bob in the frontend's local test wallet list.
         c = Config({
             deployer: accts[0],
             governance: gov,
@@ -393,7 +393,7 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             data: abi.encodeCall(d.venues.setAdapterEnabled, (direct, true)),
             label: "enable Optara direct adapter"
         });
-        _send(keys[1], calls);
+        _send(keys[6], calls);
     }
 
     function _createSeriesBooks(
@@ -405,14 +405,14 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         uint256 strike
     ) internal returns (bytes32 id, address book, address directBook) {
         SeriesParams memory sp = _seriesParams(d, plan, expiry, optionType, strike);
-        vm.broadcast(keys[1]);
+        vm.broadcast(keys[6]);
         id = d.registry.createSeries(sp);
         (book, directBook) = _deployBooks(d, plan, d.registry.getSeries(id).wrapper, v.directAdapter);
         if (book != address(0)) {
-            vm.broadcast(keys[1]);
+            vm.broadcast(keys[6]);
             d.venues.registerMarket(v.kuru, book, id, "");
         }
-        vm.broadcast(keys[1]);
+        vm.broadcast(keys[6]);
         d.venues.registerMarket(v.direct, directBook, id, "");
     }
 
@@ -532,7 +532,7 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
         vm.serializeBytes32(k, "ethUsdcPythFeedId", PYTH_ETH_USD);
         vm.serializeBytes32(k, "ethUsdcSettlementConfigId", listed.cfgIds[0]);
         vm.serializeBytes32(k, "ethUsdcRiskSetId", ETH_USDC_RISK_SET);
-        vm.serializeAddress(k, "governance", accts[1]);
+        vm.serializeAddress(k, "governance", accts[6]);
         vm.serializeAddress(k, "publisherA", accts[2]);
         vm.serializeAddress(k, "publisherB", accts[3]);
         vm.serializeAddress(k, "keeper", accts[4]);

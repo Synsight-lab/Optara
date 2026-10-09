@@ -17,17 +17,18 @@ export function fmtFixed(x: bigint, decimals: number, dp = 2): string {
 }
 
 export const fmtWad = (x: bigint, dp = 2) => fmtFixed(x, 18, dp);
-/** Below 1: three significant digits (0.0243, 0.00125), never fewer than 2 decimals. */
+/** Below 1: four significant digits (0.02422, 0.001254), never fewer than 2 decimals. */
 function fmtSmall(x: number): string {
   if (x === 0) return "0.00";
-  const dp = Math.max(2, Math.min(18, 2 - Math.floor(Math.log10(Math.abs(x)))));
+  // 4 significant digits: MON at $0.024224 reads $0.02422, not $0.0242
+  const dp = Math.max(2, Math.min(18, 3 - Math.floor(Math.log10(Math.abs(x)))));
   return x.toFixed(dp).replace(/(\.\d{2,}?)0+$/, "$1");
 }
 
-/** An amount per option (premium, bid, ask, mark): 2 decimals from 1 up; small amounts keep 3 significant digits. */
+/** An amount per option (premium, bid, ask, mark): 2 decimals from 1 up; small amounts keep 4 significant digits. */
 export const fmtPrice = (x: bigint, dp = 2) => (x >= 10n ** 18n || x <= 0n ? fmtWad(x, dp) : fmtSmall(Number(x) / 1e18));
 
-/** A price level (spot, strike, settlement price): whole numbers stay whole, cents shown when present, small prices keep 3 significant digits. */
+/** A price level (spot, strike, settlement price): whole numbers stay whole, cents shown when present, small prices keep 4 significant digits. */
 export function fmtLevel(x: bigint): string {
   if (x > 0n && x < 10n ** 18n) return fmtSmall(Number(x) / 1e18);
   return x % 10n ** 16n === 0n && x % 10n ** 18n === 0n ? fmtWad(x, 0) : fmtWad(x, 2);

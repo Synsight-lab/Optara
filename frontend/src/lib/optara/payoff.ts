@@ -59,7 +59,7 @@ export function moveText(leg: Leg, move: number, dp = 1, third = false): string 
   return move * 100 < min ? `${word} under ${min.toFixed(dp)}%` : `${word} ${(move * 100).toFixed(dp)}%`;
 }
 
-/** A dollar amount: whole dollars from 100, cents below, 3 significant digits under $1; "−$12.50" for losses. */
+/** A dollar amount: whole dollars from 100, cents below, 4 significant digits under $1; "−$12.50" for losses. */
 export function usd(x: number, opts: { sign?: boolean } = {}): string {
   if (Math.abs(x) < 0.005 && Math.abs(x) * 1e6 < 1) x = 0; // float leftovers like −2e-14 read as $0.00
   const abs = Math.abs(x);

@@ -10,7 +10,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
 import { getSeriesMarket } from "../lib/optara/reads.ts";
-import { breakeven, legOf, moveNeeded, moveText, priceLevel } from "../lib/optara/payoff.ts";
+import { breakeven, chartRange, legOf, moveNeeded, moveText, priceLevel, profitAt } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { tradeMap } from "../lib/optara/activity.ts";
@@ -457,7 +457,7 @@ function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Serie
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted">{detail}</span>
         </span>
-        <Sparkline optionType={s.optionType} strike={leg.strike} spot={spotN} />
+        <Sparkline optionType={s.optionType} strike={leg.strike} size={leg.size} spot={spotN} premium={priceN} side={intent === "earn" ? "short" : "long"} />
         <span className="shrink-0 text-right">
           <span className="num font-display block text-[15px] font-semibold">{price !== undefined ? fmtPrice(price) : "—"}</span>
           <span className="block text-[11px] text-muted">
@@ -470,20 +470,39 @@ function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Serie
   );
 }
 
-function Sparkline({ optionType, strike, spot }: { optionType: number; strike: number; spot?: number }) {
-  const c = spot ?? strike;
-  const lo = c * 0.7;
-  const hi = c * 1.3;
-  const pts: string[] = [];
-  for (let i = 0; i <= 24; i++) {
-    const px = lo + ((hi - lo) * i) / 24;
-    const v = optionType === 0 ? Math.max(0, px - strike) : Math.max(0, strike - px);
-    pts.push(`${(i / 24) * 64},${22 - Math.min(1, v / (c * 0.3)) * 20}`);
+function Sparkline({
+  optionType,
+  strike,
+  size,
+  spot,
+  premium,
+  side,
+}: {
+  optionType: number;
+  strike: number;
+  size: number;
+  spot?: number;
+  premium?: number;
+  side: "long" | "short";
+}) {
+  const cost = premium ?? 0;
+  const leg = { optionType, strike, size };
+  const be = premium !== undefined ? breakeven(leg, cost) : undefined;
+  const [lo, hi] = chartRange([spot ?? strike, strike, be ?? strike]);
+  const samples: [number, number][] = [];
+  for (let i = 0; i <= 32; i++) {
+    const px = lo + ((hi - lo) * i) / 32;
+    samples.push([px, profitAt(leg, side, 1, cost, px)]);
   }
-  const up = optionType === 0;
-  const color = up ? "var(--good)" : "var(--bad)";
+  const min = Math.min(0, ...samples.map(([, v]) => v));
+  const max = Math.max(0, ...samples.map(([, v]) => v));
+  const span = max - min || 1;
+  const pts = samples.map(([px, v]) => `${((px - lo) / (hi - lo)) * 64},${22 - ((v - min) / span) * 20}`);
+  const color = side === "long" ? (optionType === 0 ? "var(--good)" : "var(--bad)") : "var(--accent)";
+  const zeroY = 22 - ((0 - min) / span) * 20;
   return (
     <svg width="64" height="24" viewBox="0 0 64 24" className="shrink-0 opacity-80" aria-hidden>
+      <line x1="0" x2="64" y1={zeroY} y2={zeroY} stroke="var(--muted)" strokeOpacity="0.35" strokeDasharray="2 3" />
       <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

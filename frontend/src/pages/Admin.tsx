@@ -2,25 +2,17 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
-import { isAddress, keccak256, stringToHex, toHex, zeroAddress, type Address, type Hex } from "viem";
+import { isAddress, stringToHex, zeroAddress, type Address, type Hex } from "viem";
 import { optionSeriesRegistryAbi, protocolControlAbi, venueRegistryAbi } from "@optara/sdk";
 import { CheckCircle2, CircleSlash, Landmark, ListChecks, LockKeyhole, Route, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { Card, EmptyState, Pill, Segmented, Skeleton, cx } from "../components/ui.tsx";
 import { TxButton } from "../components/TxButton.tsx";
-import { callStep } from "../lib/optara/actions.ts";
+import { callStep, registerExistingDirectMarketSteps } from "../lib/optara/actions.ts";
 import { ADDR, DIRECT_VENUE, KURU_VENUE, publicClient } from "../lib/optara/client.ts";
 import { fmtExpiryShort, fmtLevel } from "../lib/optara/format.ts";
 import { useSeriesList } from "../lib/optara/hooks.ts";
+import { ROLE_KEYS, TRUSTED_ROLES, hasAnyTrustedRole, hasRole, roleNames } from "../lib/optara/roles.ts";
 import type { Series } from "../lib/optara/types.ts";
-
-const ROLES = [
-  { key: zeroHash(), label: "Governance", help: "Can approve products, enable venues and grant roles." },
-  { key: keccak256(toHex("optara.role.GUARDIAN")), label: "Guardian", help: "Can pause or reduce risk quickly." },
-  { key: keccak256(toHex("optara.role.RISK_ADMIN")), label: "Risk admin", help: "Can make conservative risk changes." },
-  { key: keccak256(toHex("optara.role.SERIES_CREATOR")), label: "Series creator", help: "Can list approved option series." },
-  { key: keccak256(toHex("optara.role.ORACLE_ADMIN")), label: "Oracle admin", help: "Can approve settlement oracle configs." },
-  { key: keccak256(toHex("optara.role.VENUE_ADMIN")), label: "Venue admin", help: "Can register and activate venue markets." },
-] as const;
 
 type VenueKey = "direct" | "kuru";
 const VENUES: Record<VenueKey, { id: Hex; label: string; description: string }> = {
@@ -42,11 +34,11 @@ export function AdminPage() {
   const [productId, setProductId] = useState<Hex | undefined>();
   const product = products.find((p) => p.productId === productId) ?? products[0];
 
-  const { data: roleMap } = useQuery({
+  const { data: roleMap, isLoading: rolesLoading } = useQuery({
     queryKey: ["adminRoles", address],
     queryFn: async () => {
       const entries = await Promise.all(
-        ROLES.map(async (r) => [r.key, await publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [r.key, address!] })] as const),
+        TRUSTED_ROLES.map(async (r) => [r.key, await publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [r.key, address!] })] as const),
       );
       return new Map(entries);
     },
@@ -76,13 +68,26 @@ export function AdminPage() {
     enabled: !!product,
   });
 
-  const isVenueAdmin = !!roleMap?.get(keccak256(toHex("optara.role.VENUE_ADMIN"))) || !!roleMap?.get(zeroHash());
-  const isGovernance = !!roleMap?.get(zeroHash());
-  const canDisableVenue = isVenueAdmin || isGovernance || !!roleMap?.get(keccak256(toHex("optara.role.GUARDIAN")));
+  const isVenueAdmin = hasRole(roleMap, ROLE_KEYS.venueAdmin) || hasRole(roleMap, ROLE_KEYS.governance);
+  const isGovernance = hasRole(roleMap, ROLE_KEYS.governance);
+  const canDisableVenue = isVenueAdmin || isGovernance || hasRole(roleMap, ROLE_KEYS.guardian);
+  const myRoles = roleNames(roleMap);
   const marketAddress = isAddress(market) ? (market as Address) : undefined;
   const metadataHex = metadata.trim() ? stringToHex(metadata.trim()) : "0x";
 
   if (!isConnected) return <Card><EmptyState title="Connect an admin wallet" body="Admin tools are hidden until a wallet is connected. Test wallets with trusted roles work on the local fork." /></Card>;
+  if (rolesLoading) return <Card><Skeleton className="h-28 w-full" /></Card>;
+  if (!hasAnyTrustedRole(roleMap)) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<LockKeyhole className="h-5 w-5" />}
+          title="Admin tools are hidden"
+          body="This wallet does not hold a trusted Optara role. Connect Bob on the local fork, or connect a production role wallet on mainnet."
+        />
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -96,6 +101,9 @@ export function AdminPage() {
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
               Manage venue availability, route markets, and product safety switches from one place. Each action still goes through the contract role checks before it can execute.
             </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {myRoles.map((r) => <Pill key={r} tone="primary">{r}</Pill>)}
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
             <Mini label="Venue" value={isVenueAdmin ? "ready" : "locked"} good={isVenueAdmin} />
@@ -107,7 +115,7 @@ export function AdminPage() {
 
       <Card title="Your roles">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {ROLES.map((r) => {
+          {TRUSTED_ROLES.map((r) => {
             const has = roleMap?.get(r.key);
             return (
               <div key={r.label} className={cx("rounded-2xl border p-3.5", has ? "border-good/25 bg-good/8" : "border-line bg-surface-2/45")}>
@@ -192,23 +200,45 @@ export function AdminPage() {
 
         <Card title="Register a venue market">
           <div className="space-y-3">
-            <p className="text-sm leading-6 text-muted">Use this after the venue market exists. The registry verifies that the market base token is the option wrapper and the quote token is the settlement asset.</p>
+            <p className="text-sm leading-6 text-muted">
+              Attach an order book to a specific option series. Optara Direct can be created here. Kuru books must already exist because real Kuru deployment is owner-gated.
+            </p>
             <SeriesSelect series={series} selected={selected} onChange={setSeriesId} loading={isLoading} compact />
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold uppercase text-faint">Market address</span>
-              <input className="input" value={market} onChange={(e) => setMarket(e.target.value.trim())} placeholder="0x..." />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-bold uppercase text-faint">Metadata note</span>
-              <input className="input" value={metadata} onChange={(e) => setMetadata(e.target.value)} placeholder="optional: maker, source, deployment note" />
-            </label>
-            <TxButton
-              label={`Register on ${selectedVenue.label}`}
-              steps={selected && marketAddress ? [callStep("register-market", "Register market", { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [selectedVenue.id, marketAddress, selected.id, metadataHex] })] : undefined}
-              disabled={!isVenueAdmin || !selected || !marketAddress}
-              disabledReason={!isVenueAdmin ? "Needs VENUE_ADMIN." : !marketAddress ? "Enter a valid market address." : undefined}
-              successMessage="Venue market registered."
-            />
+            {venue === "direct" ? (
+              <div className="rounded-2xl border border-primary/20 bg-primary-soft/45 p-3">
+                <div className="font-bold">Create Optara Direct order book</div>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  This deploys a simple in-house book for the selected option token and registers it immediately.
+                </p>
+                <div className="mt-3">
+                  <TxButton
+                    label="Create and attach Optara Direct book"
+                    steps={selected ? registerExistingDirectMarketSteps(selected, address) : undefined}
+                    disabled={!isVenueAdmin || !selected || (venueMarket?.market !== zeroAddress && !!venueMarket?.market)}
+                    disabledReason={!isVenueAdmin ? "Needs VENUE_ADMIN." : venueMarket?.market !== zeroAddress && !!venueMarket?.market ? "This venue already has a market for the selected series." : undefined}
+                    successMessage="Optara Direct order book registered."
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase text-faint">Existing Kuru market address</span>
+                  <input className="input" value={market} onChange={(e) => setMarket(e.target.value.trim())} placeholder="0x..." />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase text-faint">Metadata note</span>
+                  <input className="input" value={metadata} onChange={(e) => setMetadata(e.target.value)} placeholder="optional: maker, source, deployment note" />
+                </label>
+                <TxButton
+                  label={`Register on ${selectedVenue.label}`}
+                  steps={selected && marketAddress ? [callStep("register-market", "Register market", { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [selectedVenue.id, marketAddress, selected.id, metadataHex] })] : undefined}
+                  disabled={!isVenueAdmin || !selected || !marketAddress || (venueMarket?.market !== zeroAddress && !!venueMarket?.market)}
+                  disabledReason={!isVenueAdmin ? "Needs VENUE_ADMIN." : !marketAddress ? "Enter a valid market address." : venueMarket?.market !== zeroAddress && !!venueMarket?.market ? "This venue already has a market for the selected series." : undefined}
+                  successMessage="Venue market registered."
+                />
+              </>
+            )}
           </div>
         </Card>
       </div>
@@ -261,16 +291,30 @@ export function AdminPage() {
 function SeriesSelect({ series, selected, onChange, loading, compact }: { series?: Series[]; selected?: Series; onChange: (id: Hex) => void; loading?: boolean; compact?: boolean }) {
   if (loading) return <Skeleton className="mt-3 h-11 w-full" />;
   return (
-    <label className={cx("block", compact ? "" : "mt-3")}>
-      <span className="mb-1 block text-xs font-bold uppercase text-faint">Series</span>
-      <select className="input min-h-[44px] cursor-pointer" value={selected?.id ?? ""} onChange={(e) => onChange(e.target.value as Hex)}>
-        {(series ?? []).map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.underlyingSymbol} {s.optionType === 0 ? "Call" : "Put"} ${fmtLevel(s.strikeWad)} · {fmtExpiryShort(s.expiry)}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className={cx(compact ? "" : "mt-3")}>
+      <label className="block">
+        <span className="mb-1 block text-xs font-bold uppercase text-faint">Option series</span>
+        <select className="input min-h-[44px] cursor-pointer" value={selected?.id ?? ""} onChange={(e) => onChange(e.target.value as Hex)}>
+          {(series ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.underlyingSymbol}/{s.assetSymbol} · {s.optionType === 0 ? "Call ↑" : "Put ↓"} · strike ${fmtLevel(s.strikeWad)} · {fmtExpiryShort(s.expiry)} · {short(s.wrapper)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected && (
+        <div className="mt-2 grid gap-2 rounded-2xl border border-line bg-surface-2/55 p-3 text-xs sm:grid-cols-2">
+          <div>
+            <span className="block font-bold text-ink">{selected.underlyingSymbol} {selected.optionType === 0 ? "Call" : "Put"}</span>
+            <span className="text-muted">Strike ${fmtLevel(selected.strikeWad)} · {fmtExpiryShort(selected.expiry)}</span>
+          </div>
+          <div className="sm:text-right">
+            <span className="block font-bold text-ink">Token {short(selected.wrapper)}</span>
+            <span className="text-muted">Series {short(selected.id)}</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -316,10 +360,6 @@ function Guide({ icon: Icon, title, text }: { icon: typeof Landmark; title: stri
   );
 }
 
-function short(a: Address) {
+function short(a: Hex) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
-}
-
-function zeroHash(): Hex {
-  return `0x${"0".repeat(64)}`;
 }

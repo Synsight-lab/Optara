@@ -46,8 +46,12 @@ export function ConnectButton() {
           )}
         </button>
       ) : (
-        <button className="btn-primary" onClick={() => setOpen((o) => !o)} disabled={isPending} aria-haspopup="menu" aria-expanded={open}>
-          {isPending ? "Connecting…" : "Connect wallet"}
+        <button className="btn-primary whitespace-nowrap" aria-label="Connect wallet" onClick={() => setOpen((o) => !o)} disabled={isPending} aria-haspopup="menu" aria-expanded={open}>
+          {isPending ? "Connecting…" : (
+            <>
+              Connect<span className="hidden lg:inline"> wallet</span>
+            </>
+          )}
         </button>
       )}
       {open && (

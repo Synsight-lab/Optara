@@ -11,13 +11,15 @@ import {
   optionSeriesRegistryAbi,
   settlementWindowAbi,
   subAccountsAbi,
+  venueRegistryAbi,
   venueRouterAbi,
   type OracleUpdate,
 } from "@optara/sdk";
-import { ADDR, KURU_VENUE, publicClient } from "./client.ts";
+import { ADDR, DIRECT_VENUE, KURU_VENUE, publicClient } from "./client.ts";
+import { optaraDirectMarketAbi, optaraDirectMarketBytecode } from "./directMarket.ts";
 import { ERROR_MESSAGES } from "./errors.ts";
 import { fetchOracleUpdate, oracleFee } from "./oracle.ts";
-import { send, type ContractCall, type Wallet } from "./tx.ts";
+import { deploy, send, type ContractCall, type Wallet } from "./tx.ts";
 import type { Series } from "./types.ts";
 
 export interface Step {
@@ -256,3 +258,76 @@ export interface SeriesParams {
 export const createSeriesSteps = (params: SeriesParams): Step[] => [
   callStep("list", "List the market", { address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "createSeries", args: [params] }, "Deploys the option token and opens the market."),
 ];
+
+export function createSeriesWithDirectMarketSteps(params: SeriesParams, owner?: Address): Step[] {
+  let seriesId: Hex | undefined;
+  let market: Address | undefined;
+  return [
+    {
+      key: "list",
+      label: "List the option series",
+      hint: "Deploys the option token with the selected strike and expiry.",
+      run: async (w, onSent) => {
+        const receipt = await send(w, { address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "createSeries", args: [params] }, onSent);
+        seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
+        return receipt;
+      },
+    },
+    {
+      key: "deploy-direct-book",
+      label: "Create Optara Direct book",
+      hint: "Deploys an in-house venue book for this option token.",
+      run: async (w, onSent) => {
+        if (!seriesId) seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
+        const terms = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "getSeries", args: [seriesId] });
+        const quoteDecimals = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "settlementAssetDecimals", args: [params.settlementAsset] });
+        const receipt = await deploy(w, directMarketDeployCall(terms.wrapper, params.settlementAsset, BigInt(quoteDecimals), owner ?? w.account.address), onSent);
+        market = receipt.contractAddress as Address;
+        return receipt;
+      },
+    },
+    {
+      key: "register-direct-book",
+      label: "Attach order book",
+      hint: "Registers the new book so Buy and Sell can route through Optara Direct.",
+      run: async (w, onSent) => {
+        if (!seriesId) seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
+        if (!market) throw new Error("The direct order book was not deployed.");
+        return send(w, { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [DIRECT_VENUE, market, seriesId, "0x"] }, onSent);
+      },
+    },
+  ];
+}
+
+export function registerExistingDirectMarketSteps(series: Series, owner?: Address): Step[] {
+  let market: Address | undefined;
+  return [
+    {
+      key: "deploy-direct-book",
+      label: "Create Optara Direct book",
+      hint: "Deploys an in-house venue book for this option token.",
+      run: async (w, onSent) => {
+        const receipt = await deploy(w, directMarketDeployCall(series.wrapper, series.settlementAsset, BigInt(series.assetDecimals), owner ?? w.account.address), onSent);
+        market = receipt.contractAddress as Address;
+        return receipt;
+      },
+    },
+    {
+      key: "register-direct-book",
+      label: "Attach order book",
+      hint: "Registers the new book so Buy and Sell can route through Optara Direct.",
+      run: (w, onSent) => {
+        if (!market) throw new Error("The direct order book was not deployed.");
+        return send(w, { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [DIRECT_VENUE, market, series.id, "0x"] }, onSent);
+      },
+    },
+  ];
+}
+
+function directMarketDeployCall(wrapper: Address, quote: Address, quoteDecimals: bigint, owner: Address) {
+  return {
+    abi: optaraDirectMarketAbi,
+    bytecode: optaraDirectMarketBytecode,
+    args: [wrapper, quote, 18n, quoteDecimals, 10_000n, 10n ** 16n, ADDR.directAdapter, owner],
+  } as const;
+}

@@ -21,6 +21,8 @@ describe("format", () => {
     expect(fmtPrice(10n ** 15n)).toBe("0.001");
     expect(fmtPrice(243n * 10n ** 14n)).toBe("0.0243");
     expect(fmtLevel(2430n * 10n ** 13n)).toBe("0.0243");
+    expect(fmtLevel(24_224n * 10n ** 12n)).toBe("0.02422"); // MON spot: 4 significant digits
+    expect(fmtPrice(2_336_054n * 10n ** 9n)).toBe("0.002336");
     expect(fmtLevel(4500n * E18)).toBe("4,500");
     expect(fmtLevel(248030n * 10n ** 16n)).toBe("2,480.30");
     expect(fmtPrice(0n)).toBe("0.00");

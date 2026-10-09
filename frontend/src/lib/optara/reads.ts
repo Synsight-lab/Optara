@@ -25,6 +25,7 @@ import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
 import { INDEXER_URL, IS_LOCAL } from "../../config/network.ts";
 import { ADDR, DEPLOYED_AT_BLOCK, DIRECT_VENUE, KURU_VENUE, publicClient as c } from "./client.ts";
+import { WAD } from "./format.ts";
 import { GROUP_STATES, HEALTH_STATES, SURFACE_STATUS, type GroupState, type Health, type Position, type Quote, type Series, type SurfaceStatus } from "./types.ts";
 
 const LOG_CHUNK = IS_LOCAL ? 50_000n : 100n; // Monad's public RPC: eth_getLogs over at most 100 blocks
@@ -123,6 +124,10 @@ export interface SeriesMarket {
   quote?: Quote;
   quotes?: Quote[];
   state: GroupState;
+  /** Current internal shorts and the additional quantity that can still be written before risk caps block it. */
+  openInterest?: bigint;
+  openInterestCap?: bigint;
+  writeCapacity?: bigint;
 }
 
 const kuruBookAbi = [
@@ -167,11 +172,12 @@ export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
 }
 
 export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
-  const [price, iv, quotes, state] = await Promise.all([
+  const [price, iv, quotes, state, capacity] = await Promise.all([
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.id] }).catch(() => undefined),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.id] }).catch(() => undefined),
     getQuotes(s.id),
     getGroupState(s.groupId),
+    getWriteCapacity(s),
   ]);
   const quote = [...quotes].sort((a, b) => {
     if (a.ask !== undefined && b.ask !== undefined && a.ask !== b.ask) return a.ask < b.ask ? -1 : 1;
@@ -180,7 +186,31 @@ export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
     if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
     return 0;
   })[0];
-  return { mark: price?.[0], iv: iv?.[0], quote, quotes, state };
+  return { mark: price?.[0], iv: iv?.[0], quote, quotes, state, ...capacity };
+}
+
+async function getWriteCapacity(s: Series): Promise<Pick<SeriesMarket, "openInterest" | "openInterestCap" | "writeCapacity">> {
+  try {
+    const [terms, totals, productShort, productCap] = await Promise.all([
+      c.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "getSeries", args: [s.id] }),
+      c.readContract({ address: ADDR.ledger, abi: subAccountsAbi, functionName: "totals", args: [s.id] }),
+      c.readContract({ address: ADDR.ledger, abi: subAccountsAbi, functionName: "productShortNotional", args: [s.productId] }),
+      c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "productShortCap", args: [s.productId] }),
+    ]);
+    const [params] = await c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "getRiskSet", args: [terms.riskParameterSetId] });
+    const openInterest = totals[1];
+    const seriesLeft = params.maxOpenInterestPerSeries > openInterest ? params.maxOpenInterestPerSeries - openInterest : 0n;
+    const productCapNotional = productCap * WAD;
+    const productLeftNotional = productCapNotional > productShort ? productCapNotional - productShort : 0n;
+    const productLeft = s.contractSizeWad > 0n ? productLeftNotional / s.contractSizeWad : 0n;
+    return {
+      openInterest,
+      openInterestCap: params.maxOpenInterestPerSeries,
+      writeCapacity: seriesLeft < productLeft ? seriesLeft : productLeft,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function getGroupState(groupId: Hex): Promise<GroupState> {

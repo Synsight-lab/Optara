@@ -167,7 +167,7 @@ const mintableAbi = [{ type: "function", name: "mint", stateMutability: "nonpaya
 function makerSizeForProduct(p: ReturnType<typeof stackProducts>[number], override?: bigint): bigint {
   if (override !== undefined) return override;
   const symbol = p.underlyingSymbol.toUpperCase();
-  if (symbol === "MON" || symbol === "WMON") return 1_000_000n * 10n ** 18n;
+  if (symbol === "MON" || symbol === "WMON") return 100_000n * 10n ** 18n;
   if (symbol === "BTC" || symbol === "WBTC") return 20n * 10n ** 18n;
   return 200n * 10n ** 18n;
 }
@@ -302,7 +302,7 @@ const kuruPricePrecision = (spot: number) => (spot < 10 ? 1_000_000n : 10_000n);
 /**
  * Lists every live series on REAL Kuru (a mainnet fork): impersonates Kuru's router owner to deploy one genuine
  * order book per option token (market deployment is owner-gated), then registers it with Optara's VenueRegistry
- * (account 1 holds VENUE_ADMIN locally).
+ * (Bob, account 6, holds VENUE_ADMIN locally so the frontend admin page can be tested with a UI wallet).
  */
 export async function listOnRealKuru(s: LocalStack, router: Address = KURU_MAINNET_ROUTER): Promise<RealKuruMarket[]> {
   const t = s.test;
@@ -324,7 +324,7 @@ export async function listOnRealKuru(s: LocalStack, router: Address = KURU_MAINN
         const hash = await t.writeContract({ account: owner, chain: t.chain, address: router, abi: kuruRouterAbi, functionName: "deployProxy", args });
         await t.waitForTransactionReceipt({ hash });
         if (!(await t.getCode({ address: market }))) throw new Error(`Kuru did not deploy a market for ${seriesId}`);
-        await send(s, stackAccount(1), { address: s.manifest.proxies.VenueRegistry.proxy as Address, abi: venueRegistryWriteAbi, functionName: "registerMarket", args: [kuruVenue, market, seriesId, "0x"] });
+        await send(s, stackAccount(6), { address: s.manifest.proxies.VenueRegistry.proxy as Address, abi: venueRegistryWriteAbi, functionName: "registerMarket", args: [kuruVenue, market, seriesId, "0x"] });
         out.push({ seriesId, market, pricePrecision, sizePrecision: KURU_SIZE_PRECISION });
       }
     }

@@ -338,6 +338,9 @@ function WriteTicket({ s }: { s: Series }) {
             ctx={ctx}
             bid={market?.quote?.bid}
             mark={market?.mark}
+            writeCapacity={market?.writeCapacity}
+            openInterest={market?.openInterest}
+            openInterestCap={market?.openInterestCap}
             market={market?.quote?.market}
             venueId={market?.quote?.venueId}
             venueName={market?.quote?.venueName}

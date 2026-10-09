@@ -2,7 +2,7 @@
  * Sending transactions: simulate first (a revert becomes a readable message before the wallet opens), then send
  * with the gas limit above the estimate (DD-36) and wait for the receipt.
  */
-import type { Abi, Account, ContractFunctionArgs, ContractFunctionName, Hex, TransactionReceipt, WalletClient } from "viem";
+import { encodeDeployData, type Abi, type Account, type ContractFunctionArgs, type ContractFunctionName, type Hex, type TransactionReceipt, type WalletClient } from "viem";
 import { withGasBuffer } from "@optara/sdk";
 import { CHAIN } from "../../config/network.ts";
 import { publicClient } from "./client.ts";
@@ -16,6 +16,12 @@ export interface ContractCall<abi extends Abi = Abi, fn extends ContractFunction
   functionName: fn;
   args: ContractFunctionArgs<abi, "nonpayable" | "payable", fn>;
   value?: bigint;
+}
+
+export interface DeployCall<abi extends Abi = Abi> {
+  abi: abi;
+  bytecode: Hex;
+  args: readonly unknown[];
 }
 
 export class TxError extends Error {
@@ -52,5 +58,23 @@ export async function send(wallet: Wallet, call: ContractCall, onSent?: (hash: H
     if (e instanceof TxError) throw e;
     const f = friendlyError(e);
     throw new TxError(f.message, f.name, f.rejected);
+  }
+}
+
+export async function deploy(wallet: Wallet, call: DeployCall, onSent?: (hash: Hex) => void): Promise<TransactionReceipt> {
+  try {
+    const data = encodeDeployData(call as any);
+    const gas = withGasBuffer(await publicClient.estimateGas({ account: wallet.account, data }));
+    const hash = await wallet.deployContract({ ...(call as any), account: wallet.account, chain: CHAIN, gas });
+    onSent?.(hash);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success" || !receipt.contractAddress) throw new TxError("The deployment failed on chain. Nothing changed; try again.");
+    return receipt;
+  } catch (e) {
+    if (e instanceof TxError) throw e;
+    const f = friendlyError(e);
+    // A constructor that reverts without a reason usually means bad code or a zero address in its arguments.
+    const msg = !f.rejected && !f.name ? "The contract couldn't be created: the chain rejected its code or settings. Nothing changed." : f.message;
+    throw new TxError(msg, f.name, f.rejected);
   }
 }

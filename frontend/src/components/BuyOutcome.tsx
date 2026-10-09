@@ -57,60 +57,49 @@ export function BuyOutcome({
   const { over, needsAck } = buyCheck(qty, total, series.assetDecimals, mark);
   const tone = over === undefined ? "" : over > OVERPAY_CONFIRM ? "border-bad/40 bg-bad/8" : over > OVERPAY_WARN ? "border-warn/40 bg-warn/8" : "border-line bg-surface-2/60";
 
+  const exposureText = `${covers.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${series.underlyingSymbol}`;
+  const exposureHelp = spot !== undefined ? `About ${usd(covers * spot)} of ${series.underlyingSymbol} exposure today. Payout only starts past strike.` : "Payout only starts past strike.";
+  const breakevenHelp = beMove === undefined ? undefined : beMove <= 0 ? "Already past breakeven at the current spot." : `${moveText(leg, beMove)} from today's spot.`;
+  const stepLabel = `${moveStepPct}% ${isCall ? "above" : "below"} breakeven`;
+
   return (
-    <div className="space-y-2.5">
-    <ul className="space-y-1.5 border-t border-line/60 pt-2.5 text-[13px]">
-      <li className="flex justify-between gap-3">
-        <span className="text-muted">
-          Payoff exposure
-        </span>
-        <span className="num shrink-0 text-right font-semibold">
-          {covers.toLocaleString("en-US", { maximumFractionDigits: 2 })} {series.underlyingSymbol}
-          {spot !== undefined && <span className="block text-[11px] font-medium text-muted">notional ≈ {usd(covers * spot)} today, paid only past strike</span>}
-        </span>
-      </li>
-      <li className="flex justify-between gap-3">
-        <span className="text-muted">You profit if {series.underlyingSymbol} ends {isCall ? "above" : "below"}</span>
-        <span className="num shrink-0 text-right font-semibold">
-          {be !== undefined ? priceLevel(be) : "—"}
-          {beMove !== undefined && (
-            <span className="block text-[11px] font-medium text-muted">
-              {beMove <= 0 ? "already there today" : `${moveText(leg, beMove)} from today`}
-            </span>
-          )}
-        </span>
-      </li>
-      <li className="flex justify-between gap-3">
-        <span className="text-muted">
-          If it settles {moveStepPct}% {isCall ? "above" : "below"} breakeven
-        </span>
-        <span className="num shrink-0 text-right font-semibold text-good">
-          {usd(stepProfit, { sign: true })}
-          <span className="block text-[11px] font-medium text-muted">profit after cost</span>
-        </span>
-      </li>
-      <li className="flex justify-between gap-3">
-        <span className="text-muted">Most you can lose</span>
-        <span className="num shrink-0 font-semibold">{usd(totalNum)}</span>
-      </li>
-    </ul>
+    <div className="space-y-3">
+      <div className="grid gap-2 border-t border-line/60 pt-3 sm:grid-cols-2">
+        <BuyMetric label="Payoff exposure" value={exposureText} help={exposureHelp} />
+        <BuyMetric
+          label={`Profit starts ${isCall ? "above" : "below"}`}
+          value={be !== undefined ? priceLevel(be) : "—"}
+          help={breakevenHelp}
+        />
+        <BuyMetric
+          label={`If settlement is ${stepLabel}`}
+          value={usd(stepProfit, { sign: true })}
+          help="Estimated profit after premium and fees."
+          tone="good"
+        />
+        <BuyMetric label="Maximum loss" value={usd(totalNum)} help="This is the total you sign for this buy." tone="bad" />
+      </div>
 
     {over !== undefined && (
-      <div className={`rounded-xl border px-3 py-2.5 text-[13px] ${tone}`}>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted">You pay per option, fees included</span>
-          <span className="num shrink-0 font-semibold">{usd(allIn)}</span>
+      <div className={`rounded-2xl border p-3 text-[13px] ${tone}`}>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <div className="text-[11px] font-bold uppercase text-faint">All-in price</div>
+            <div className="num mt-0.5 font-display text-lg font-bold text-ink">{usd(allIn)}</div>
+            <div className="text-[11px] text-muted">per option, fees included</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase text-faint">Optara mark</div>
+            <div className="num mt-0.5 font-display text-lg font-bold text-ink">{usd(Number(mark) / 1e18)}</div>
+            <div className="text-[11px] text-muted">model fair value</div>
+          </div>
         </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted">Optara fair value</span>
-          <span className="num shrink-0 font-semibold">{usd(Number(mark) / 1e18)}</span>
-        </div>
-        <p className={over > OVERPAY_CONFIRM ? "mt-1.5 font-semibold text-bad" : over > OVERPAY_WARN ? "mt-1.5 font-semibold text-warn" : "mt-1.5 text-muted"}>
+        <p className={over > OVERPAY_CONFIRM ? "mt-2 font-semibold text-bad" : over > OVERPAY_WARN ? "mt-2 font-semibold text-warn" : "mt-2 text-muted"}>
           {over <= 0
-            ? "You pay at or below fair value."
+            ? "This order is at or below Optara's current mark."
             : over > OVERPAY_WARN
-            ? `You pay ${(over * 100).toFixed(0)}% above fair value. This buy fills the current asks, and the all-in price is above Optara's mark. A smaller amount, or a different strike or expiry, may price better.`
-            : `${(over * 100).toFixed(1)}% above fair value: order-book spread plus fees.`}
+            ? `This order is ${(over * 100).toFixed(0)}% above Optara's mark because it fills the current asks plus fees. A smaller amount, or another strike or expiry, may price better.`
+            : `${(over * 100).toFixed(1)}% above Optara's mark from spread and fees.`}
         </p>
         {needsAck && onAck && (
           <label className="mt-2 flex cursor-pointer items-start gap-2 font-semibold">
@@ -120,6 +109,28 @@ export function BuyOutcome({
         )}
       </div>
     )}
+    </div>
+  );
+}
+
+function BuyMetric({
+  label,
+  value,
+  help,
+  tone,
+}: {
+  label: string;
+  value: string;
+  help?: string;
+  tone?: "good" | "bad";
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-line bg-surface px-3 py-2.5">
+      <div className="text-[11px] font-bold uppercase text-faint">{label}</div>
+      <div className={`num mt-1 break-words font-display text-lg font-bold ${tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : "text-ink"}`}>
+        {value}
+      </div>
+      {help && <div className="mt-1 text-[11px] leading-4 text-muted">{help}</div>}
     </div>
   );
 }

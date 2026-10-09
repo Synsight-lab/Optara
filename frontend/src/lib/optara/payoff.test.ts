@@ -48,6 +48,7 @@ describe("payoff", () => {
     expect(priceLevel(4620)).toBe("$4,620");
     expect(priceLevel(4.5)).toBe("$4.50");
     expect(priceLevel(0.0248)).toBe("$0.0248");
+    expect(priceLevel(0.024224)).toBe("$0.02422");
     expect(usd(0.0123)).toBe("$0.0123");
     expect(niceStep(4000)).toBe(200);
     expect(niceStep(0.0243)).toBeCloseTo(0.001);

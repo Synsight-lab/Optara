@@ -347,6 +347,9 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 ctx={ctx}
                 bid={market?.quote?.bid}
                 mark={market?.mark}
+                writeCapacity={market?.writeCapacity}
+                openInterest={market?.openInterest}
+                openInterestCap={market?.openInterestCap}
                 market={market?.quote?.market}
                 venueId={market?.quote?.venueId}
                 venueName={market?.quote?.venueName}
@@ -620,14 +623,23 @@ function BuyPanel({
       )}
 
       <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[13px] text-muted">You receive about</span>
-          <span className="num font-display text-2xl font-bold tracking-tight">
-            {estQty !== undefined ? fmtQty(estQty) : "—"}
-          </span>
-        </div>
-        <div className="mt-0.5 text-right text-xs text-muted">
-          {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option on ${venueName}` : "Nobody is selling this option right now"}
+        <div className="rounded-xl border border-line bg-surface px-3 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-[11px] font-bold uppercase text-faint">Estimated tokens</div>
+              <div className="mt-1 text-xs leading-5 text-muted">
+                Based on the selected venue ask, venue fee, and your premium amount.
+              </div>
+            </div>
+            <div className="min-w-0 text-left sm:text-right">
+              <div className="num break-words font-display text-2xl font-bold tracking-tight text-ink">
+                {estQty !== undefined ? fmtQty(estQty) : "—"}
+              </div>
+              <div className="mt-0.5 text-xs text-muted">
+                {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option on ${venueName}` : "Nobody is selling this option right now"}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="mt-2.5">
@@ -674,6 +686,9 @@ export function WritePanel({
   ctx,
   bid,
   mark,
+  writeCapacity,
+  openInterest,
+  openInterestCap,
   market,
   venueId,
   venueName,
@@ -683,6 +698,9 @@ export function WritePanel({
   ctx: ActionContext;
   bid?: bigint;
   mark?: bigint;
+  writeCapacity?: bigint;
+  openInterest?: bigint;
+  openInterestCap?: bigint;
   market?: Hex;
   venueId?: Hex;
   venueName?: string;
@@ -704,6 +722,7 @@ export function WritePanel({
   });
 
   const sellable = sellNow && !!market && bid !== undefined;
+  const capBlocked = qty !== undefined && writeCapacity !== undefined && qty > writeCapacity;
   const grossProceeds = qty && bid ? toNative((qty * bid) / WAD, s.assetDecimals) : undefined;
   const sellFee = useQuery({
     queryKey: ["sellFee", venueId, market, grossProceeds?.toString()],
@@ -750,6 +769,21 @@ export function WritePanel({
         presets={["0.1", "0.5", "1", "2"]}
         hint={`Steps of 0.01. One option covers ${leg.size} ${s.underlyingSymbol}.`}
       />
+
+      {writeCapacity !== undefined && (
+        <div className={cx("rounded-xl border px-3 py-2 text-[13px]", capBlocked ? "border-bad/30 bg-bad/8 text-bad" : "border-line bg-surface-2/60 text-muted")}>
+          {capBlocked ? (
+            <span>
+              This market has only <b>{fmtQty(writeCapacity)}</b> options of write room left. Lower the size or choose another market.
+            </span>
+          ) : (
+            <span>
+              Write room left: <b className="text-ink">{fmtQty(writeCapacity)}</b>
+              {openInterest !== undefined && openInterestCap !== undefined ? ` of ${fmtQty(openInterestCap)} total capacity.` : "."}
+            </span>
+          )}
+        </div>
+      )}
 
       <label
         className={cx(
@@ -849,8 +883,8 @@ export function WritePanel({
         label={sellable && net !== undefined ? `Write ${amount} and collect ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : `Write ${amount || "0"} option${amount === "1" ? "" : "s"}`}
         tone="accent"
         steps={ok ? steps : undefined}
-        disabled={!a.enabled || !steps || ok === false}
-        disabledReason={a.reason}
+        disabled={!a.enabled || !steps || ok === false || capBlocked}
+        disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : undefined)}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
         successMessage={sellable ? "Written and sold. Premium is in your wallet." : "Written. Tokens are in your wallet."}
       />
