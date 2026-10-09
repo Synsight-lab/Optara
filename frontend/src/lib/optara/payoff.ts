@@ -84,7 +84,7 @@ export function niceStep(price: number): number {
 export function extremes(leg: Leg, side: "long" | "short", qty: number, costPerOption: number) {
   const premium = costPerOption * qty;
   // A put's payout is largest when the price goes to zero.
-  const putMax = (leg.strike * leg.size - costPerOption) * qty;
+  const putMax = Math.max(0, leg.strike * leg.size - costPerOption) * qty;
   if (side === "long") return { maxGain: leg.optionType === 0 ? ("unlimited" as const) : putMax, maxLoss: premium };
   return { maxGain: premium, maxLoss: leg.optionType === 0 ? ("unlimited" as const) : putMax };
 }

@@ -353,7 +353,7 @@ function WrapperRow({ id, s, short, have, liquidator }: { id: bigint; s: Series;
       {have === 0n ? (
         <p className="mt-1 text-xs text-muted">
           You hold none.{" "}
-          <Link to={`/series/${s.id}?tab=trade`} className="font-semibold text-primary">
+          <Link to={`/app/series/${s.id}?tab=trade`} className="font-semibold text-primary">
             Buy some
           </Link>{" "}
           to use this route.

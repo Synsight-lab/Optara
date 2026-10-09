@@ -110,7 +110,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
           <EmptyState
             title="Unknown option series"
             action={
-              <Link to="/" className="btn-ghost">
+              <Link to="/app/markets" className="btn-ghost">
                 Back to markets
               </Link>
             }
@@ -163,7 +163,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between px-1">
         <Link
-          to="/"
+          to="/app/markets"
           className="flex items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink transition"
         >
           <ArrowLeft className="h-4 w-4" /> All markets
@@ -360,7 +360,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
               <div className="mt-5 border-t border-line pt-3.5">
                 <div className="mb-2 flex items-center justify-between text-[13px]">
                   <span className="font-semibold">Margin account #{selected?.toString()}</span>
-                  <Link to="/portfolio" className="font-semibold text-primary hover:underline">
+                  <Link to="/app/portfolio" className="font-semibold text-primary hover:underline">
                     Portfolio
                   </Link>
                 </div>
@@ -405,13 +405,13 @@ function SeriesQuickFacts({
     move === undefined
       ? "Waiting for live spot"
       : move <= 0
-      ? "Already past target"
-      : `${isCall ? "+" : "-"}${(move * 100).toFixed(1)}% to target`;
+      ? "Already in the money"
+      : `${isCall ? "Rise" : "Fall"} ${(move * 100).toFixed(1)}% to reach strike`;
   return (
     <section className="page-band">
       <div className="grid gap-3 md:grid-cols-4">
         <SimpleFact label="Direction" value={isCall ? "Up / Call" : "Down / Put"} />
-        <SimpleFact label="Target" value={`$${fmtWad(series.strikeWad, 0)}`} sub={target} />
+        <SimpleFact label="Strike" value={`$${fmtLevel(series.strikeWad)}`} sub={target} />
         <SimpleFact
           label="Buy price"
           value={ask !== undefined ? `${fmtPrice(ask)} ${series.assetSymbol}` : mark !== undefined ? `${fmtPrice(mark)} fair` : "No quote"}

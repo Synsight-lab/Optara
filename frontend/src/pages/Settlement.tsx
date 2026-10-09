@@ -405,11 +405,11 @@ function YourOptions({ mine, g }: { mine: { series: Series; balance: bigint }[];
                 </span>
               </span>
               {open && pays !== 0 ? (
-                <Link to={`/series/${s.id}?tab=redeem`} className="btn-primary shrink-0 !px-3 !py-1.5 text-xs">
+                <Link to={`/app/series/${s.id}?tab=redeem`} className="btn-primary shrink-0 !px-3 !py-1.5 text-xs">
                   Redeem
                 </Link>
               ) : (
-                <Link to={`/series/${s.id}?tab=redeem`} className="shrink-0 text-xs font-semibold text-primary">
+                <Link to={`/app/series/${s.id}?tab=redeem`} className="shrink-0 text-xs font-semibold text-primary">
                   View
                 </Link>
               )}

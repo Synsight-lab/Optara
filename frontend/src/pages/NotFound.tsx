@@ -16,13 +16,13 @@ export function NotFound() {
 
         <div className="pt-4 grid grid-cols-2 gap-2.5">
           <Link
-            to="/"
+            to="/app/markets"
             className="flex items-center justify-center gap-1.5 rounded-2xl border border-line bg-surface-2 p-3 text-xs font-bold text-ink hover:border-primary/40 hover:bg-surface-2/80 transition"
           >
             <Compass className="h-4 w-4 text-primary" /> Browse Markets
           </Link>
           <Link
-            to="/trade"
+            to="/app/trade"
             className="flex items-center justify-center gap-1.5 rounded-2xl bg-primary p-3 text-xs font-bold text-white shadow-md hover:brightness-110 transition"
           >
             <Zap className="h-4 w-4" /> Quick Trade
@@ -30,7 +30,7 @@ export function NotFound() {
         </div>
 
         <div className="pt-2">
-          <Link to="/portfolio" className="text-xs text-muted hover:text-primary transition font-semibold">
+          <Link to="/app/portfolio" className="text-xs text-muted hover:text-primary transition font-semibold">
             Go to My Portfolio →
           </Link>
         </div>

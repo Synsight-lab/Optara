@@ -107,6 +107,9 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   const total = premiumPerOption * qtySafe;
   const fromToday = spot ? ((price - spot) / spot) * 100 : undefined;
   const { maxGain, maxLoss } = extremes(leg, side, qtySafe, premiumPerOption);
+  const isLong = side === "long";
+  const costLabel = isLong ? "Premium paid" : "Premium collected";
+  const resultLabel = net >= 0 ? (isLong ? "Net profit" : "Writer profit") : (isLong ? "Net loss" : "Writer loss");
   const sentence =
     side === "long"
       ? payout === 0
@@ -137,9 +140,10 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   return (
     <div className="space-y-3">
       {/* Plain-language readout */}
-      <div className="grid grid-cols-[1fr_auto] items-end gap-x-3 gap-y-1 rounded-2xl border border-line bg-surface-2/70 px-4 py-3">
-        <div>
-          <div className="text-[13px] text-muted">If {underlyingSymbol} is at expiry</div>
+      <div className="rounded-2xl border border-line bg-surface-2/70 px-4 py-3">
+        <div className="grid grid-cols-[1fr_auto] items-end gap-x-3 gap-y-1">
+          <div>
+          <div className="text-[13px] text-muted">If {underlyingSymbol} settles at</div>
           <div className="num font-display text-xl font-bold tracking-tight sm:text-2xl">
             ${fmtLevelNum(price)}
             {fromToday !== undefined && (
@@ -148,12 +152,18 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
               </span>
             )}
           </div>
-        </div>
-        <div className="text-right">
-          <div className="text-[13px] text-muted">{net >= 0 ? "You make" : "You lose"}</div>
+          </div>
+          <div className="text-right">
+          <div className="text-[13px] text-muted">{resultLabel}</div>
           <div className={cx("num font-display text-xl font-bold tracking-tight sm:text-2xl", tone)}>{usd(Math.abs(net))}</div>
+          </div>
+          <p className="col-span-2 text-[13px] text-muted">{sentence}</p>
         </div>
-        <p className="col-span-2 text-[13px] text-muted">{sentence}</p>
+        <div className="mt-3 grid gap-2 text-center sm:grid-cols-3">
+          <MiniFact label="Option payout" value={usd(payout)} />
+          <MiniFact label={costLabel} value={usd(total)} />
+          <MiniFact label="After premium" value={`${net >= 0 ? "+" : "-"}${usd(Math.abs(net))}`} tone={tone} />
+        </div>
       </div>
 
       {/* Chart */}
@@ -272,13 +282,22 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
 
       {/* The three numbers that matter */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <Fact label="Breakeven" value={be !== undefined ? `$${fmtLevelNum(be)}` : "—"} dot="bg-warn" />
-        <Fact label="Most you can make" value={maxGain === "unlimited" ? "No limit" : usd(maxGain)} tone="text-good" />
-        <Fact label="Most you can lose" value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone="text-bad" />
+        <Fact label="Breakeven price" value={be !== undefined ? `$${fmtLevelNum(be)}` : "No breakeven"} dot="bg-warn" />
+        <Fact label={isLong ? "Best case" : "Most you can make"} value={maxGain === "unlimited" ? "No limit" : usd(maxGain)} tone="text-good" />
+        <Fact label={isLong ? "Max loss" : "Worst case"} value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone="text-bad" />
       </div>
       <p className="text-xs text-muted">
-        Drag across the chart, use the arrow keys, or tap a button to try a price. Amounts are in {assetSymbol}.
+        Breakeven includes the premium shown by the order form. Drag across the chart, use the arrow keys, or tap a button to try a settlement price. Amounts are in {assetSymbol}.
       </p>
+    </div>
+  );
+}
+
+function MiniFact({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-lg border border-line/70 bg-surface/60 px-2 py-2">
+      <div className="text-[11px] font-semibold text-muted">{label}</div>
+      <div className={cx("num mt-0.5 text-sm font-bold", tone)}>{value}</div>
     </div>
   );
 }

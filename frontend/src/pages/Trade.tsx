@@ -134,7 +134,7 @@ export function TradePage() {
             title="No active markets available"
             body="Check back soon when new option expiries are listed."
             action={
-              <Link to="/" className="btn-primary mt-3 text-xs">
+              <Link to="/app/markets" className="btn-primary mt-3 text-xs">
                 Back to Markets
               </Link>
             }
@@ -147,7 +147,7 @@ export function TradePage() {
   return (
     <div className="w-full space-y-4 py-1 sm:py-4">
       <div className="flex items-center justify-between px-1 text-[13px]">
-        <Link to="/" className="font-semibold text-muted hover:text-ink transition">
+        <Link to="/app/markets" className="font-semibold text-muted hover:text-ink transition">
           ← Markets
         </Link>
         <button onClick={openGuide} className="font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer">
@@ -304,7 +304,7 @@ export function TradePage() {
         {/* Advanced link */}
         <div className="text-center pt-2 border-t border-line">
           <Link
-            to={`/series/${selectedSeries.id}`}
+            to={`/app/series/${selectedSeries.id}`}
             className="text-xs text-primary font-semibold hover:underline inline-flex items-center gap-1"
           >
             See payoff chart, details and what backs this option <ArrowRight className="h-3 w-3" />

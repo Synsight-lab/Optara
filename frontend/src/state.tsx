@@ -103,9 +103,9 @@ export const useQuickGuide = () => useContext(GuideCtx);
 export function useTheme(): ["dark" | "light", () => void] {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
-      return (localStorage.getItem("optara.theme") as "dark" | "light") ?? "dark";
+      return (localStorage.getItem("optara.theme") as "dark" | "light") ?? "light";
     } catch {
-      return "dark";
+      return "light";
     }
   });
   useEffect(() => {
@@ -118,4 +118,3 @@ export function useTheme(): ["dark" | "light", () => void] {
   }, [theme]);
   return [theme, () => setTheme((t) => (t === "dark" ? "light" : "dark"))];
 }
-

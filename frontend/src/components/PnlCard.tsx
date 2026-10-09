@@ -41,7 +41,7 @@ export function PnlCard({ owner, accounts, series }: { owner: Address; accounts:
       ) : error ? (
         <p className="text-[13px] text-bad">Couldn't load your trade history: {(error as Error).message.split("\n")[0]}</p>
       ) : rows.length === 0 ? (
-        <EmptyState title="No trades yet" body="Once you buy, sell or write an option, its profit or loss shows here." action={<Link to="/trade" className="btn-ghost mt-2 text-xs">Make a trade</Link>} />
+        <EmptyState title="No trades yet" body="Once you buy, sell or write an option, its profit or loss shows here." action={<Link to="/app/trade" className="btn-ghost mt-2 text-xs">Make a trade</Link>} />
       ) : (
         <div className="space-y-3">
           {[...sums.entries()].map(([asset, t]) => (
@@ -191,7 +191,7 @@ function History({ r }: { r: SeriesPnl }) {
           {r.walletQty > 0 && unit > 0 && " Your remaining options can be redeemed on the option's Settle tab."}
         </p>
       )}
-      <Link to={`/series/${r.series.id}?tab=${r.status === "expired" ? "redeem" : "trade"}`} className="inline-block text-xs font-semibold text-primary">
+      <Link to={`/app/series/${r.series.id}?tab=${r.status === "expired" ? "redeem" : "trade"}`} className="inline-block text-xs font-semibold text-primary">
         Open this option →
       </Link>
     </div>

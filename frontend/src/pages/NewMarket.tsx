@@ -181,7 +181,7 @@ export function NewMarketPage() {
           <EmptyState
             title="Already listed"
             body={`${product.underlyingSymbol} $${fmtLevel(strikeWad!)} ${optionType === 0 ? "Call" : "Put"} · ${fmtExpiryShort(expiry!)} exists.`}
-            action={<button onClick={() => navigate(`/series/${existingId}`)} className="btn-primary mt-2 text-xs">Open market</button>}
+            action={<button onClick={() => navigate(`/app/series/${existingId}`)} className="btn-primary mt-2 text-xs">Open market</button>}
           />
         </Card>
       ) : !isConnected ? (
@@ -205,7 +205,7 @@ export function NewMarketPage() {
               onDone={async () => {
                 await qc.invalidateQueries({ queryKey: ["series"] });
                 const id = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params!] });
-                navigate(`/series/${id.toLowerCase()}`);
+                navigate(`/app/series/${id.toLowerCase()}`);
               }}
             />
           </div>
@@ -233,7 +233,7 @@ export function NewMarketPage() {
 
 function Back() {
   return (
-    <Link to="/" className="flex items-center gap-1 px-1 text-[13px] font-semibold text-muted hover:text-ink">
+    <Link to="/app/markets" className="flex items-center gap-1 px-1 text-[13px] font-semibold text-muted hover:text-ink">
       <ArrowLeft className="h-4 w-4" /> Markets
     </Link>
   );

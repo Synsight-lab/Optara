@@ -1,17 +1,16 @@
-/** `/`: find a contract — search, filter by expiry, sort, page through 15 at a time. */
+/** `/markets`: find a contract — search, filter by expiry, sort, page through 15 at a time. */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Hex } from "viem";
-import { ArrowRight, CheckCircle2, ChevronRight, Coins, Plus, Search, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronRight, Coins, Plus, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, EmptyState, Pill, Skeleton, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
-import { fmtDuration, fmtExpiryShort, fmtLevel, fmtPrice, fmtWad, seriesName } from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiryShort, fmtLevel, fmtPrice, seriesName } from "../lib/optara/format.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
 import { getSeriesMarket } from "../lib/optara/reads.ts";
 import { breakeven, legOf, moveNeeded, moveText, priceLevel } from "../lib/optara/payoff.ts";
-import { IS_LOCAL } from "../config/network.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { tradeMap } from "../lib/optara/activity.ts";
@@ -33,20 +32,21 @@ export function MarketsPage() {
   const product = products.find((p) => p.productId === productId) ?? products[0];
 
   const all = (series ?? []).filter((s) => s.productId === product?.productId);
+  const open = all.filter((s) => now === undefined || s.expiry > now);
+  const nextExpiry = open.reduce<bigint | undefined>((m, s) => (m === undefined || s.expiry < m ? s.expiry : m), undefined);
   const [intent, setIntent] = useState<Intent>("call");
   const [query, setQuery] = useState("");
 
   if (error) return <Card><EmptyState title="Couldn't load markets" body={(error as Error).message} /></Card>;
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-32 w-full rounded-3xl" /><Skeleton className="h-64 w-full rounded-3xl" /></div>;
-  if (!product) return <Card><EmptyState title="No markets listed yet" body="Be the first to list one." action={<Link to="/new" className="btn-primary mt-3 text-xs">New market</Link>} /></Card>;
+  if (!product) return <Card><EmptyState title="No markets listed yet" body="Be the first to list one." action={<Link to="/app/new" className="btn-primary mt-3 text-xs">New market</Link>} /></Card>;
 
   return (
     <div className="space-y-4">
-      <LandingHero products={products} series={series ?? []} now={now} />
-
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-3 lg:sticky lg:top-[84px]">
           <MarketHero product={product} />
+          <MarketStats assetCount={products.length} openCount={open.length} nextExpiry={nextExpiry} now={now} />
 
           {products.length > 1 && (
             <div className="card p-2">
@@ -89,68 +89,21 @@ export function MarketsPage() {
   );
 }
 
-function LandingHero({ products, series, now }: { products: Series[]; series: Series[]; now?: bigint }) {
-  const symbols = [...new Set(products.map((p) => p.underlyingSymbol))];
-  const live = series.filter((s) => now === undefined || s.expiry > now);
-  const next = live.reduce<bigint | undefined>((m, s) => (m === undefined || s.expiry < m ? s.expiry : m), undefined);
-  const list = symbols.length <= 1 ? symbols.join("") : `${symbols.slice(0, -1).join(", ")} and ${symbols.at(-1)}`;
+function MarketStats({ assetCount, openCount, nextExpiry, now }: { assetCount: number; openCount: number; nextExpiry?: bigint; now?: bigint }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface/80 p-4 shadow-ticket md:p-6">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
-        <div>
-          {IS_LOCAL && (
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
-              Local demo · test money only
-            </div>
-          )}
-          <h1 className="font-display max-w-2xl text-3xl font-bold leading-tight md:text-5xl">
-            Trade {list} with a fixed max loss
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted md:text-base">
-            Pick an asset, choose Up or Down, then set how much premium to spend. Buyers can only lose what they pay;
-            writers use margin and collect premium upfront.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link to="/trade" className="btn-primary">
-              Buy an option <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link to="/write" className="btn-ghost">
-              Earn premium
-            </Link>
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-          <PlainStep icon={<TrendingUp className="h-4 w-4" />} title="Buyers" text="Pay once. No liquidation." />
-          <PlainStep icon={<Coins className="h-4 w-4" />} title="Writers" text="Deposit collateral. Earn premium." />
-          <PlainStep icon={<ShieldCheck className="h-4 w-4" />} title="Settlement" text="Cash payout at expiry." />
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-          <Metric label="Assets" value={symbols.length.toString()} />
-          <Metric label="Open options" value={live.length.toString()} />
-          <Metric label="Next expiry" value={next !== undefined && now !== undefined ? fmtDuration(next - now) : "—"} />
-      </div>
-    </section>
-  );
-}
-
-function PlainStep({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
-  return (
-    <div className="info-row">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span>
-      <span>
-        <span className="block text-sm font-bold">{title}</span>
-        <span className="block text-xs leading-5 text-muted">{text}</span>
-      </span>
+    <div className="grid grid-cols-3 gap-2">
+      <MarketStat label="Assets" value={assetCount.toString()} />
+      <MarketStat label="Open" value={openCount.toString()} />
+      <MarketStat label="Next expiry" value={nextExpiry !== undefined && now !== undefined ? fmtDuration(nextExpiry - now) : "—"} />
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function MarketStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-surface-2 p-3">
-      <div className="text-[11px] font-semibold uppercase text-faint">{label}</div>
-      <div className="font-display mt-1 text-xl font-bold md:text-2xl">{value}</div>
+    <div className="rounded-xl border border-line bg-surface-2/70 p-2.5">
+      <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
+      <div className="num mt-1 truncate font-display text-base font-bold">{value}</div>
     </div>
   );
 }
@@ -180,7 +133,7 @@ function MarketHero({ product }: { product: Series }) {
           <div className="text-[11px] text-muted">Spot</div>
           <div className="num font-display whitespace-nowrap text-xl font-bold leading-none tracking-tight">{m ? `$${fmtLevel(m.spotWad)}` : <Skeleton className="h-7 w-20" />}</div>
         </div>
-        <Link to="/new" aria-label="List a new market" title="List a new market" className="btn-ghost !px-2.5 !py-2 shrink-0">
+        <Link to="/app/new" aria-label="List a new market" title="List a new market" className="btn-ghost !px-2.5 !py-2 shrink-0">
           <Plus className="h-4 w-4" />
         </Link>
       </div>
@@ -405,7 +358,7 @@ function MarketList({
           <EmptyState
             title={all.length === 0 ? "No markets here yet" : "No matches"}
             body={all.length === 0 ? "List the first contract." : "Try another name, strike, or status."}
-            action={<Link to="/new" className="btn-ghost mt-2 text-xs">New market</Link>}
+            action={<Link to="/app/new" className="btn-ghost mt-2 text-xs">New market</Link>}
           />
         ) : (
           <>
@@ -423,13 +376,13 @@ function MarketList({
                   <OptionRow
                     s={s} spot={spot} spotN={spotN} intent={intent} expired={expired}
                     held={walletIds.has(s.id.toLowerCase()) || positionIds.has(s.id.toLowerCase())}
-                    onOpen={() => navigate(expired ? `/series/${s.id}?tab=redeem` : intent === "earn" ? `/write/${s.id}` : `/series/${s.id}?tab=trade`)}
+                    onOpen={() => navigate(expired ? `/app/series/${s.id}?tab=redeem` : intent === "earn" ? `/app/write/${s.id}` : `/app/series/${s.id}?tab=trade`)}
                   />
                 </Fragment>
               ))}
             </ul>
             {sorted.length > shown.length && (
-              <div ref={sentinelRef}>
+              <div ref={sentinelRef} className="py-2">
                 {loadingMore ? (
                   <ul aria-label="Loading more markets" className="divide-y divide-line/60">
                     {[0, 1, 2].map((i) => (
@@ -443,9 +396,18 @@ function MarketList({
                     ))}
                   </ul>
                 ) : (
-                  <p className="py-2.5 text-center text-[11px] font-semibold text-faint">
-                    Scroll for more · {sorted.length - shown.length} left
-                  </p>
+                  <div className="flex flex-col items-center gap-2 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setVisible((v) => Math.min(v + PAGE_SIZE, sorted.length))}
+                      className="btn-ghost text-xs"
+                    >
+                      Load more markets
+                    </button>
+                    <p className="text-center text-[11px] font-semibold text-faint">
+                      {sorted.length - shown.length} left
+                    </p>
+                  </div>
                 )}
               </div>
             )}

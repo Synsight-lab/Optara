@@ -42,13 +42,13 @@
 }
 
 :root {
-  --bg: #08080f;
-  --surface: #101019;
-  --surface-2: #181826;
-  --line: rgb(255 255 255 / 0.08);
-  --ink: #f4f3ff;
-  --muted: #a09bb8;
-  --faint: #6e6a88;
+  --bg: #12111a;
+  --surface: #1b1a26;
+  --surface-2: #242334;
+  --line: rgb(255 255 255 / 0.12);
+  --ink: #f7f5ff;
+  --muted: #c0b9d6;
+  --faint: #8b84a4;
   --primary: #7c6cff;
   --primary-soft: rgb(124 108 255 / 0.13);
   --primary-ink: #ffffff;
@@ -81,6 +81,10 @@ html,
 body,
 #root {
   min-height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -132,6 +136,236 @@ body {
 :root[data-theme="light"] .btn-primary {
   background: linear-gradient(180deg, #6a4dff 0%, #4f35e8 100%);
   box-shadow: 0 8px 20px -10px rgb(79 53 232 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.landing-scrim {
+  background: linear-gradient(90deg, rgb(244 243 238 / 0.96) 0%, rgb(244 243 238 / 0.9) 38%, rgb(244 243 238 / 0.32) 78%, transparent 100%);
+}
+
+.theme-logo-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .landing-scrim {
+  background: linear-gradient(90deg, rgb(18 17 26 / 0.96) 0%, rgb(18 17 26 / 0.88) 42%, rgb(18 17 26 / 0.38) 78%, transparent 100%);
+}
+
+:root[data-theme="dark"] .theme-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .theme-logo-dark {
+  display: block;
+}
+
+.home-page {
+  background:
+    radial-gradient(800px 420px at 12% 10%, rgb(131 110 249 / 0.14), transparent 62%),
+    radial-gradient(760px 420px at 86% 4%, rgb(92 242 196 / 0.12), transparent 58%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.68), transparent 420px),
+    var(--bg);
+}
+
+:root[data-theme="dark"] .home-page {
+  background:
+    radial-gradient(800px 420px at 12% 10%, rgb(131 110 249 / 0.18), transparent 62%),
+    radial-gradient(760px 420px at 86% 4%, rgb(92 242 196 / 0.08), transparent 58%),
+    var(--bg);
+}
+
+.home-column {
+  width: min(1180px, calc(100vw - 32px));
+  margin-inline: auto;
+}
+
+.home-3d-scene {
+  perspective: 1200px;
+}
+
+.home-3d-stack {
+  position: relative;
+  min-height: 520px;
+  transform-style: preserve-3d;
+}
+
+.home-frame-card,
+.home-frame-base {
+  position: absolute;
+  inset-inline: 0;
+  margin-inline: auto;
+  width: min(100%, 380px);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, white 12%);
+  box-shadow: 0 28px 70px -40px rgb(32 0 82 / 0.42), 0 1px 0 rgb(255 255 255 / 0.55) inset;
+  backdrop-filter: blur(16px);
+}
+
+:root[data-theme="dark"] .home-frame-card,
+:root[data-theme="dark"] .home-frame-base {
+  background: color-mix(in srgb, var(--surface) 88%, black 12%);
+  box-shadow: 0 28px 70px -40px rgb(0 0 0 / 0.85), 0 1px 0 rgb(255 255 255 / 0.08) inset;
+}
+
+.home-frame-card {
+  min-height: 270px;
+  border-radius: 26px;
+  padding: 22px;
+}
+
+.home-frame-base {
+  top: 250px;
+  min-height: 190px;
+  border-radius: 24px;
+  padding: 22px;
+  transform: rotateX(58deg) rotateZ(-8deg) translateY(36px);
+}
+
+.home-frame-a {
+  top: 22px;
+  transform: rotateY(-13deg) rotateX(5deg) rotateZ(-3deg);
+  z-index: 3;
+}
+
+.home-float {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, white 18%);
+  box-shadow: 0 18px 46px -28px rgb(32 0 82 / 0.42);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  transform-style: preserve-3d;
+}
+
+:root[data-theme="dark"] .home-float {
+  background: color-mix(in srgb, var(--surface) 86%, black 14%);
+}
+
+.home-float-one {
+  top: 5px;
+  right: 18px;
+  transform: translateZ(60px) rotateZ(4deg);
+}
+
+.home-float-two {
+  top: 315px;
+  left: 4px;
+  transform: translateZ(42px) rotateZ(-5deg);
+}
+
+.home-float-three {
+  right: 22px;
+  bottom: 30px;
+  transform: translateZ(36px) rotateZ(5deg);
+}
+
+.home-frame-b {
+  top: 148px;
+  transform: translateX(34px) rotateY(14deg) rotateX(-2deg) rotateZ(4deg) scale(0.92);
+  z-index: 2;
+}
+
+.home-journey {
+  display: grid;
+  gap: 28px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 90%, white 10%), color-mix(in srgb, var(--surface-2) 78%, transparent)),
+    var(--surface);
+  box-shadow: 0 26px 70px -48px rgb(32 0 82 / 0.42), 0 1px 0 rgb(255 255 255 / 0.46) inset;
+  padding: 24px;
+}
+
+.home-role-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.home-journey-rail {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.home-journey-rail::before {
+  content: "";
+  position: absolute;
+  bottom: 28px;
+  left: 19px;
+  top: 28px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--primary), color-mix(in srgb, var(--accent) 70%, var(--primary)));
+  opacity: 0.36;
+}
+
+.home-journey-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+  padding: 14px;
+}
+
+.home-journey-index {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 12px 26px -18px var(--primary);
+}
+
+:root[data-theme="dark"] .home-journey {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 88%, black 12%), color-mix(in srgb, var(--surface-2) 82%, black 18%)),
+    var(--surface);
+  box-shadow: 0 26px 70px -48px rgb(0 0 0 / 0.85), 0 1px 0 rgb(255 255 255 / 0.08) inset;
+}
+
+@media (min-width: 900px) {
+  .home-journey {
+    grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1fr);
+    align-items: center;
+    padding: 34px;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-3d-stack {
+    min-height: 470px;
+  }
+
+  .home-frame-card {
+    min-height: 240px;
+    padding: 18px;
+  }
+
+  .home-frame-b {
+    transform: translateX(10px) rotateY(7deg) rotateX(-2deg) rotateZ(3deg) scale(0.9);
+  }
+
+  .home-frame-base {
+    top: 232px;
+    transform: rotateX(58deg) rotateZ(-5deg) translateY(28px) scale(0.95);
+  }
+
+  .home-float {
+    display: none;
+  }
 }
 
 :root[data-theme="light"] input[type="range"]::-webkit-slider-thumb {

@@ -28,7 +28,7 @@ export function Layout() {
   const { open: openGuide } = useQuickGuide();
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
-  const onTrade = location.pathname.startsWith("/trade") || location.pathname.startsWith("/series");
+  const onTrade = location.pathname.startsWith("/app/trade") || location.pathname.startsWith("/app/series");
 
   return (
     <div className="app-shell flex min-h-screen flex-col overflow-x-clip">
@@ -48,15 +48,15 @@ export function Layout() {
 
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
             <div className="hidden items-center gap-1 lg:flex">
-              <DesktopNav to="/" label="Markets" />
-              <DesktopNav to="/trade" label="Trade" />
-              <DesktopNav to="/write" label="Earn" />
-              <DesktopNav to="/portfolio" label="Portfolio" />
+              <DesktopNav to="/app/markets" label="Markets" />
+              <DesktopNav to="/app/trade" label="Trade" />
+              <DesktopNav to="/app/write" label="Earn" />
+              <DesktopNav to="/app/portfolio" label="Portfolio" />
             </div>
             <div className="hidden items-center gap-1 xl:flex">
-              <DesktopNav to="/settlement" label="Settle" />
-              <DesktopNav to="/liquidations" label="Liquidations" />
-              <DesktopNav to="/system" label="System" />
+              <DesktopNav to="/app/settlement" label="Settle" />
+              <DesktopNav to="/app/liquidations" label="Liquidations" />
+              <DesktopNav to="/app/system" label="System" />
             </div>
             <button
               onClick={openGuide}
@@ -86,15 +86,15 @@ export function Layout() {
       {/* Bottom tab bar — always visible, app-style */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 backdrop-blur-2xl safe-area-pb md:hidden" aria-label="App">
         <div className="app-column grid grid-cols-5 items-end px-1 pb-1 pt-1.5">
-          <MobileTab to="/" label="Markets" icon={Compass} />
-          <MobileTab to="/portfolio" label="Portfolio" icon={PieChart} />
-          <Link to="/trade" className="flex flex-col items-center gap-1 pb-0.5" aria-label="Trade">
+          <MobileTab to="/app/markets" label="Markets" icon={Compass} />
+          <MobileTab to="/app/portfolio" label="Portfolio" icon={PieChart} />
+          <Link to="/app/trade" className="flex flex-col items-center gap-1 pb-0.5" aria-label="Trade">
             <span className={cx("grid h-12 w-12 place-items-center rounded-[18px] shadow-lg active:scale-95 transition", onTrade ? "bg-good text-[#04281c]" : "bg-primary text-white")}>
               <Zap className="h-5 w-5" />
             </span>
             <span className={cx("text-[11px] font-semibold", onTrade ? "text-ink" : "text-muted")}>Trade</span>
           </Link>
-          <MobileTab to="/settlement" label="Settle" icon={Activity} />
+          <MobileTab to="/app/settlement" label="Settle" icon={Activity} />
           <button onClick={() => setMoreOpen(true)} className="flex flex-col items-center gap-1 py-1 text-muted cursor-pointer">
             <Menu className="h-5 w-5" />
             <span className="text-[11px] font-semibold">More</span>
@@ -111,16 +111,16 @@ export function Layout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <Link to="/write" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-accent/40 bg-accent/10 p-3.5 text-sm font-semibold text-accent">
+            <Link to="/app/write" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-accent/40 bg-accent/10 p-3.5 text-sm font-semibold text-accent">
               <Coins className="h-4 w-4" /> Earn: write options
             </Link>
-            <Link to="/new" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-primary/40 bg-primary-soft p-3.5 text-sm font-semibold text-primary">
+            <Link to="/app/new" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-primary/40 bg-primary-soft p-3.5 text-sm font-semibold text-primary">
               <Zap className="h-4 w-4" /> New market
             </Link>
-            <Link to="/liquidations" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
+            <Link to="/app/liquidations" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
               <ShieldAlert className="h-4 w-4 text-warn" /> Liquidation auctions
             </Link>
-            <Link to="/system" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
+            <Link to="/app/system" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
               <Server className="h-4 w-4 text-primary" /> System status
             </Link>
             <button onClick={() => { setMoreOpen(false); openGuide(); }} className="flex w-full items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-left text-sm font-semibold cursor-pointer">

@@ -39,7 +39,7 @@ export function AuctionNotice({ accountId, underlying, symbol, mine }: { account
           />
         </div>
         {mine && !canEnd && (
-          <Link to="/portfolio" onClick={() => document.getElementById("cash-card")?.scrollIntoView({ behavior: "smooth" })} className="text-[13px] font-semibold text-primary">
+          <Link to="/app/portfolio" onClick={() => document.getElementById("cash-card")?.scrollIntoView({ behavior: "smooth" })} className="text-[13px] font-semibold text-primary">
             Add cash ↓
           </Link>
         )}

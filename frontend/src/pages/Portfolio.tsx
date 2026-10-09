@@ -230,7 +230,7 @@ function Onboarding({ asset }: { asset: Series }) {
           ))}
         </ul>
 
-        <Link to="/" className="btn-ghost mt-6 w-full text-xs">
+        <Link to="/app/markets" className="btn-ghost mt-6 w-full text-xs">
           Browse markets
         </Link>
       </Card>
@@ -455,7 +455,7 @@ function AccountDashboard({ accountId, asset, owner }: { accountId: bigint; asse
             title="No open positions"
             body="Write options or move tokens in from any series page. Finished trades stay listed under Profit & loss above."
             action={
-              <Link to="/" className="btn-ghost mt-2 text-xs">
+              <Link to="/app/markets" className="btn-ghost mt-2 text-xs">
                 Browse markets
               </Link>
             }
@@ -483,7 +483,7 @@ function PositionRow({ s, balance }: { s: Series; balance: bigint }) {
   return (
     <li>
       <Link
-        to={`/series/${s.id}?tab=${m?.state === "REDEEMABLE" ? "redeem" : "manage"}`}
+        to={`/app/series/${s.id}?tab=${m?.state === "REDEEMABLE" ? "redeem" : "manage"}`}
         className="flex min-h-[68px] items-center gap-2.5 rounded-2xl px-2 py-2.5 transition hover:bg-primary-soft/50"
       >
         <span className="min-w-0 flex-1">
@@ -532,7 +532,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
           title="No option tokens in wallet"
           body="Options you buy land here until you sell or redeem them. Finished trades stay listed under Profit & loss above."
           action={
-            <Link to="/" className="btn-ghost mt-2 text-xs">
+            <Link to="/app/markets" className="btn-ghost mt-2 text-xs">
               Explore Markets
             </Link>
           }
@@ -546,7 +546,7 @@ function WalletTokens({ owner }: { owner: Hex }) {
             return (
               <Link
                 key={s.id}
-                to={`/series/${s.id}?tab=${isRedeemable ? "redeem" : "trade"}`}
+                to={`/app/series/${s.id}?tab=${isRedeemable ? "redeem" : "trade"}`}
                 className={cx(
                   "rounded-2xl border p-4 transition-all hover:shadow-lg active:scale-[0.98]",
                   isRedeemable
