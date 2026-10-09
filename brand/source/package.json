@@ -1,0 +1,15 @@
+{
+  "name": "optara-brand-source",
+  "private": true,
+  "type": "module",
+  "description": "Generates brand/ assets. Not part of the pnpm workspace.",
+  "scripts": {
+    "build": "node build.mjs",
+    "render": "node render.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/space-grotesk": "5.1.0",
+    "opentype.js": "1.3.4",
+    "playwright": "1.63.0"
+  }
+}

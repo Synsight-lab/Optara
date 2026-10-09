@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><g transform="scale(1)">
+    <defs>
+      <radialGradient id="t-bg" cx="0.5" cy="0.38" r="0.75">
+        <stop offset="0" stop-color="#1d1648"/><stop offset="0.6" stop-color="#0e0c1d"/><stop offset="1" stop-color="#08080f"/></radialGradient>
+      <clipPath id="t-clip"><rect width="64" height="64" rx="14.08"/></clipPath>
+    </defs>
+    <g clip-path="url(#t-clip)">
+      <rect width="64" height="64" fill="url(#t-bg)"/>
+      <rect x="0.5" y="0.5" width="63" height="63" rx="13.58" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+      <g transform="translate(5.12 5.12) scale(0.84)"><defs><mask id="t-m-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/><path d="M8 40 L32 40 L55 17" fill="none" stroke="#000" stroke-width="11.399999999999999" stroke-linecap="round" stroke-linejoin="round"/></mask>
+    <linearGradient id="t-m-ring" x1="12" y1="52" x2="52" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#a99dff"/></linearGradient>
+    <linearGradient id="t-m-ray" x1="8" y1="40" x2="55" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4f3ff"/><stop offset="0.45" stop-color="#f4f3ff"/><stop offset="1" stop-color="#00e5a0"/></linearGradient>
+  </defs>
+  <g fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50.07 26.13 A19 19 0 1 1 40.92 15.22" stroke="url(#t-m-ring)" mask="url(#t-m-cut)"/>
+    <path d="M8 40 L32 40 L55 17" stroke="url(#t-m-ray)"/>
+  </g></g>
+    </g></g></svg>

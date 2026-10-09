@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><mask id="ml-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/><path d="M8 40 L32 40 L55 17" fill="none" stroke="#000" stroke-width="11.399999999999999" stroke-linecap="round" stroke-linejoin="round"/></mask>
+    <linearGradient id="ml-ray" x1="8" y1="40" x2="55" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#08080f"/><stop offset="0.45" stop-color="#08080f"/><stop offset="1" stop-color="#00b37d"/></linearGradient>
+  </defs>
+  <g fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50.07 26.13 A19 19 0 1 1 40.92 15.22" stroke="#7c6cff" mask="url(#ml-cut)"/>
+    <path d="M8 40 L32 40 L55 17" stroke="url(#ml-ray)"/>
+  </g></svg>
