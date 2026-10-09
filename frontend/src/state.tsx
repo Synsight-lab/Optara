@@ -22,8 +22,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, refetch } = useAccounts(address);
   const key = address ? `optara.account.${address.toLowerCase()}` : undefined;
   const [chosen, setChosen] = useState<bigint | undefined>();
+  const [optimisticAccounts, setOptimisticAccounts] = useState<bigint[]>([]);
 
   useEffect(() => {
+    setOptimisticAccounts([]);
     if (!key) return setChosen(undefined);
     try {
       const v = localStorage.getItem(key);
@@ -33,10 +35,19 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     }
   }, [key]);
 
-  const accounts = data ?? [];
+  const accounts = useMemo(() => {
+    const base = data ?? [];
+    if (optimisticAccounts.length === 0) return base;
+    const merged = [...base];
+    for (const id of optimisticAccounts) {
+      if (!merged.includes(id)) merged.push(id);
+    }
+    return merged.sort((a, b) => Number(a - b));
+  }, [data, optimisticAccounts]);
   const selected = chosen !== undefined && accounts.includes(chosen) ? chosen : accounts[0];
   const select = useCallback(
     (id: bigint) => {
+      setOptimisticAccounts((xs) => (xs.includes(id) ? xs : [...xs, id]));
       setChosen(id);
       try {
         if (key) localStorage.setItem(key, id.toString());

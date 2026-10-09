@@ -1,6 +1,6 @@
-/** What a buy means at expiry, fees included: breakeven, payout per $100 past it, and the most you can lose. */
+/** What a buy means at expiry, fees included: breakeven, exposure past it, and the most you can lose. */
 import { fmtQty } from "../lib/optara/format.ts";
-import { breakeven, legOf, moveNeeded, moveText, niceStep, OVERPAY_CONFIRM, OVERPAY_WARN, overFairValue, priceLevel, usd } from "../lib/optara/payoff.ts";
+import { breakeven, legOf, moveNeeded, moveText, OVERPAY_CONFIRM, OVERPAY_WARN, overFairValue, priceLevel, usd } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 /**
@@ -48,7 +48,10 @@ export function BuyOutcome({
   const be = breakeven(leg, totalNum / qtyNum);
   const beMove = be !== undefined && spot !== undefined ? moveNeeded(leg, spot, be) : undefined;
   const isCall = series.optionType === 0;
-  const step = niceStep(spot ?? leg.strike);
+  const stepRef = be ?? spot ?? leg.strike;
+  const moveStepPct = stepRef < 1 ? 1 : 5;
+  const moveStep = stepRef * (moveStepPct / 100);
+  const stepProfit = qtyNum * leg.size * moveStep;
   const covers = qtyNum * leg.size;
   const allIn = totalNum / qtyNum;
   const { over, needsAck } = buyCheck(qty, total, series.assetDecimals, mark);
@@ -59,11 +62,11 @@ export function BuyOutcome({
     <ul className="space-y-1.5 border-t border-line/60 pt-2.5 text-[13px]">
       <li className="flex justify-between gap-3">
         <span className="text-muted">
-          {fmtQty(qty)} option{qty === 10n ** 18n ? "" : "s"} cover{qty === 10n ** 18n ? "s" : ""}
+          Payoff exposure
         </span>
         <span className="num shrink-0 text-right font-semibold">
           {covers.toLocaleString("en-US", { maximumFractionDigits: 2 })} {series.underlyingSymbol}
-          {spot !== undefined && <span className="block text-[11px] font-medium text-muted">≈ {usd(covers * spot)} of {series.underlyingSymbol} today</span>}
+          {spot !== undefined && <span className="block text-[11px] font-medium text-muted">notional ≈ {usd(covers * spot)} today, paid only past strike</span>}
         </span>
       </li>
       <li className="flex justify-between gap-3">
@@ -78,8 +81,13 @@ export function BuyOutcome({
         </span>
       </li>
       <li className="flex justify-between gap-3">
-        <span className="text-muted">Every {priceLevel(step)} {isCall ? "above" : "below"} that adds</span>
-        <span className="num shrink-0 font-semibold text-good">{usd(qtyNum * leg.size * step, { sign: true })}</span>
+        <span className="text-muted">
+          If it settles {moveStepPct}% {isCall ? "above" : "below"} breakeven
+        </span>
+        <span className="num shrink-0 text-right font-semibold text-good">
+          {usd(stepProfit, { sign: true })}
+          <span className="block text-[11px] font-medium text-muted">profit after cost</span>
+        </span>
       </li>
       <li className="flex justify-between gap-3">
         <span className="text-muted">Most you can lose</span>

@@ -45,6 +45,7 @@ describe("pnl", () => {
     expect(a.realized).toBeCloseTo(42.054058 - 51.4998, 2); // ≈ −9.45
     expect(a.costHeld).toBeCloseTo(103.0002, 2);
     expect(a.qtyHeld).toBeCloseTo(38346.2307, 3);
+    expect(a.unknownQty).toBe(0);
     const r = { paid: 154.5, received: 42.054058, value: 90.85, realized: a.realized };
     expect(pnlOf(r)).toBeCloseTo(-21.5959, 3);
     expect(unrealizedOf(r)).toBeCloseTo(90.85 - 103.0002, 2); // ≈ −12.15
@@ -52,7 +53,7 @@ describe("pnl", () => {
 
   it("selling everything leaves no cost and no unrealized part", () => {
     const a = averageCost([{ kind: "buy", qty: 10, cash: 50 }, { kind: "sell", qty: 10, cash: 65 }]);
-    expect(a).toEqual({ realized: 15, costHeld: 0, qtyHeld: 0 });
+    expect(a).toEqual({ realized: 15, costHeld: 0, qtyHeld: 0, unknownQty: 0 });
     expect(unrealizedOf({ paid: 50, received: 65, value: 0, realized: a.realized })).toBeCloseTo(0);
   });
 
@@ -60,5 +61,11 @@ describe("pnl", () => {
     const a = averageCost([{ kind: "mint", qty: 1, cash: 0.1 }, { kind: "sell", qty: 1, cash: 6.65 }]);
     expect(a.realized).toBeCloseTo(6.55);
     expect(a.costHeld).toBe(0);
+  });
+
+  it("marks sells beyond known cost basis instead of realizing the whole sale against one small lot", () => {
+    const a = averageCost([{ kind: "buy", qty: 1, cash: 2 }, { kind: "sell", qty: 10, cash: 50 }]);
+    expect(a.realized).toBeCloseTo(5 - 2);
+    expect(a.unknownQty).toBeCloseTo(9);
   });
 });

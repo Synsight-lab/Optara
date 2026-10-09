@@ -42,20 +42,20 @@
 }
 
 :root {
-  --bg: #12111a;
-  --surface: #1b1a26;
-  --surface-2: #242334;
-  --line: rgb(255 255 255 / 0.12);
-  --ink: #f7f5ff;
-  --muted: #c0b9d6;
-  --faint: #8b84a4;
-  --primary: #7c6cff;
-  --primary-soft: rgb(124 108 255 / 0.13);
+  --bg: #000000;
+  --surface: #07070b;
+  --surface-2: #101018;
+  --line: rgb(255 255 255 / 0.105);
+  --ink: #ffffff;
+  --muted: #c5bddf;
+  --faint: #847b9e;
+  --primary: #9b8dff;
+  --primary-soft: rgb(155 141 255 / 0.15);
   --primary-ink: #ffffff;
-  --accent: #ffb224;
-  --good: #00e5a0;
-  --warn: #ffb224;
-  --bad: #ff4d6d;
+  --accent: #ffc24a;
+  --good: #35f4be;
+  --warn: #ffc24a;
+  --bad: #ff5c7d;
   color-scheme: dark;
 }
 
@@ -89,8 +89,9 @@ html {
 
 body {
   background:
-    radial-gradient(1100px 520px at 50% -8%, rgb(124 108 255 / 0.14), transparent 62%),
-    radial-gradient(700px 420px at 92% 4%, rgb(0 229 160 / 0.05), transparent 60%),
+    radial-gradient(980px 460px at 50% -12%, rgb(155 141 255 / 0.16), transparent 62%),
+    radial-gradient(640px 380px at 96% 2%, rgb(53 244 190 / 0.055), transparent 60%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent 360px),
     var(--bg);
   background-attachment: fixed;
   color: var(--ink);
@@ -113,8 +114,39 @@ body {
 
 .app-shell {
   background:
-    radial-gradient(600px 320px at 50% -60px, rgb(124 108 255 / 0.12), transparent 65%),
+    radial-gradient(760px 360px at 50% -96px, rgb(155 141 255 / 0.18), transparent 68%),
+    radial-gradient(520px 320px at 100% 0%, rgb(53 244 190 / 0.045), transparent 64%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.022), transparent 300px),
     var(--bg);
+}
+
+:root[data-theme="dark"] .app-shell > header {
+  background:
+    linear-gradient(180deg, rgb(7 7 11 / 0.94), rgb(0 0 0 / 0.82));
+  box-shadow: 0 18px 46px -38px rgb(155 141 255 / 0.76), 0 1px 0 rgb(255 255 255 / 0.055) inset;
+}
+
+:root[data-theme="dark"] .ticket,
+:root[data-theme="dark"] .rounded-card,
+:root[data-theme="dark"] .shadow-ticket {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), var(--surface));
+  box-shadow: 0 26px 82px -52px rgb(0 0 0 / 1), 0 0 0 1px rgb(255 255 255 / 0.052), 0 1px 0 rgb(255 255 255 / 0.07) inset;
+}
+
+:root[data-theme="dark"] .btn-primary {
+  background: linear-gradient(180deg, #a89dff 0%, #7664ff 100%);
+  box-shadow: 0 18px 36px -21px rgb(155 141 255 / 0.95), 0 1px 0 rgb(255 255 255 / 0.36) inset;
+}
+
+:root[data-theme="dark"] .btn-ghost {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.06) inset;
+}
+
+:root[data-theme="dark"] nav.fixed {
+  background:
+    linear-gradient(180deg, rgb(7 7 11 / 0.9), rgb(0 0 0 / 0.98));
+  box-shadow: 0 -18px 42px -34px rgb(155 141 255 / 0.65), 0 1px 0 rgb(255 255 255 / 0.05) inset;
 }
 
 :root[data-theme="light"] .app-shell {

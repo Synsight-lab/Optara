@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { NavLink, Outlet, Link, useLocation } from "react-router";
+import { NavLink, Outlet, Link } from "react-router";
 import {
   Activity,
   Coins,
   Compass,
   HelpCircle,
+  LockKeyhole,
   Menu,
   Moon,
   PieChart,
@@ -13,6 +14,7 @@ import {
   Sun,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { fmtLevel, fmtWad } from "../lib/optara/format.ts";
 import { useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
@@ -27,40 +29,31 @@ export function Layout() {
   const [theme, toggleTheme] = useTheme();
   const { open: openGuide } = useQuickGuide();
   const [moreOpen, setMoreOpen] = useState(false);
-  const location = useLocation();
-  const onTrade = location.pathname.startsWith("/app/trade") || location.pathname.startsWith("/app/series");
 
   return (
     <div className="app-shell flex min-h-screen flex-col overflow-x-clip">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-xl">
         <div className="app-column flex h-[64px] items-center gap-3">
           <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="Optara home">
-            <span className="font-display grid h-9 w-9 place-items-center rounded-xl bg-primary text-[18px] font-bold text-white shadow-lg">
-              O
-            </span>
-            <span className="leading-none">
-              <span className="font-display block text-[16px] font-bold tracking-tight">
-                Optara
-              </span>
-              <span className="block text-[11px] font-medium text-muted">Options</span>
-            </span>
+            <img src="/brand/logo/optara-lockup-light.svg" alt="Optara" className="theme-logo-light h-9 w-auto" />
+            <img src="/brand/logo/optara-lockup-dark.svg" alt="Optara" className="theme-logo-dark h-9 w-auto" />
           </Link>
 
-          <div className="ml-auto flex min-w-0 items-center gap-1.5">
-            <div className="hidden items-center gap-1 lg:flex">
-              <DesktopNav to="/app/markets" label="Markets" />
-              <DesktopNav to="/app/trade" label="Trade" />
-              <DesktopNav to="/app/write" label="Earn" />
-              <DesktopNav to="/app/portfolio" label="Portfolio" />
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <div className="hidden items-center rounded-2xl border border-line bg-surface/70 p-1 shadow-sm lg:flex">
+              <DesktopNav to="/app/markets" label="Markets" icon={Compass} />
+              <DesktopNav to="/app/write" label="Earn" icon={Coins} />
+              <DesktopNav to="/app/portfolio" label="Portfolio" icon={PieChart} />
             </div>
-            <div className="hidden items-center gap-1 xl:flex">
-              <DesktopNav to="/app/settlement" label="Settle" />
-              <DesktopNav to="/app/liquidations" label="Liquidations" />
-              <DesktopNav to="/app/system" label="System" />
+            <div className="hidden items-center rounded-2xl border border-line bg-surface/70 p-1 shadow-sm xl:flex">
+              <DesktopNav to="/app/settlement" label="Settle" icon={Activity} />
+              <DesktopNav to="/app/liquidations" label="Risk" icon={ShieldAlert} />
+              <DesktopNav to="/app/admin" label="Admin" icon={LockKeyhole} />
+              <DesktopNav to="/app/system" label="System" icon={Server} />
             </div>
             <button
               onClick={openGuide}
-              className="hidden rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink md:inline-flex md:items-center md:gap-1.5"
+              className="hidden rounded-xl border border-line bg-surface/70 px-3 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink md:inline-flex md:items-center md:gap-1.5"
             >
               <HelpCircle className="h-4 w-4" /> Guide
             </button>
@@ -68,7 +61,7 @@ export function Layout() {
               <SpotPill />
             </div>
             <button
-              className="rounded-lg border border-line p-2 text-muted transition hover:text-ink cursor-pointer"
+              className="cursor-pointer rounded-xl border border-line bg-surface/70 p-2 text-muted transition hover:bg-surface-2 hover:text-ink"
               onClick={toggleTheme}
               aria-label="Toggle theme"
             >
@@ -84,16 +77,11 @@ export function Layout() {
       </main>
 
       {/* Bottom tab bar — always visible, app-style */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/95 backdrop-blur-2xl safe-area-pb md:hidden" aria-label="App">
-        <div className="app-column grid grid-cols-5 items-end px-1 pb-1 pt-1.5">
+      <nav className="fixed inset-x-0 bottom-0 z-40 bg-transparent px-3 pb-3 safe-area-pb md:hidden" aria-label="App">
+        <div className="mx-auto grid max-w-[520px] grid-cols-5 items-end rounded-3xl border border-line bg-surface/92 px-1 pb-1 pt-1.5 shadow-2xl backdrop-blur-2xl">
           <MobileTab to="/app/markets" label="Markets" icon={Compass} />
+          <MobileTab to="/app/write" label="Earn" icon={Coins} />
           <MobileTab to="/app/portfolio" label="Portfolio" icon={PieChart} />
-          <Link to="/app/trade" className="flex flex-col items-center gap-1 pb-0.5" aria-label="Trade">
-            <span className={cx("grid h-12 w-12 place-items-center rounded-[18px] shadow-lg active:scale-95 transition", onTrade ? "bg-good text-[#04281c]" : "bg-primary text-white")}>
-              <Zap className="h-5 w-5" />
-            </span>
-            <span className={cx("text-[11px] font-semibold", onTrade ? "text-ink" : "text-muted")}>Trade</span>
-          </Link>
           <MobileTab to="/app/settlement" label="Settle" icon={Activity} />
           <button onClick={() => setMoreOpen(true)} className="flex flex-col items-center gap-1 py-1 text-muted cursor-pointer">
             <Menu className="h-5 w-5" />
@@ -120,6 +108,9 @@ export function Layout() {
             <Link to="/app/liquidations" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
               <ShieldAlert className="h-4 w-4 text-warn" /> Liquidation auctions
             </Link>
+            <Link to="/app/admin" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
+              <LockKeyhole className="h-4 w-4 text-primary" /> Admin controls
+            </Link>
             <Link to="/app/system" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
               <Server className="h-4 w-4 text-primary" /> System status
             </Link>
@@ -136,15 +127,19 @@ export function Layout() {
   );
 }
 
-function DesktopNav({ to, label }: { to: string; label: string }) {
+function DesktopNav({ to, label, icon: Icon }: { to: string; label: string; icon: LucideIcon }) {
   return (
     <NavLink
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        cx("rounded-lg px-3 py-2 text-[13px] font-semibold transition", isActive ? "bg-primary-soft text-primary" : "text-muted hover:bg-surface-2 hover:text-ink")
+        cx(
+          "inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-semibold transition",
+          isActive ? "bg-primary text-white shadow-sm" : "text-muted hover:bg-surface-2 hover:text-ink",
+        )
       }
     >
+      <Icon className="h-3.5 w-3.5" />
       {label}
     </NavLink>
   );
@@ -152,10 +147,10 @@ function DesktopNav({ to, label }: { to: string; label: string }) {
 
 function MobileTab({ to, label, icon: Icon }: { to: string; label: string; icon: typeof Compass }) {
   return (
-    <NavLink to={to} end={to === "/"} className={({ isActive }) => cx("flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-1 transition", isActive ? "text-ink" : "text-muted")}>
+    <NavLink to={to} end={to === "/"} className={({ isActive }) => cx("flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-2xl py-1 transition", isActive ? "text-ink" : "text-muted")}>
       {({ isActive }) => (
         <>
-          <span className={cx("rounded-xl px-2 py-1", isActive && "bg-primary-soft")}><Icon className={cx("h-[22px] w-[22px]", isActive ? "text-primary" : "")} /></span>
+          <span className={cx("rounded-xl px-2 py-1", isActive && "bg-primary text-white shadow-sm")}><Icon className="h-[22px] w-[22px]" /></span>
           <span className="text-[11px] font-semibold">{label}</span>
         </>
       )}

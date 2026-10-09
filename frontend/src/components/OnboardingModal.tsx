@@ -1,26 +1,16 @@
-import { useState } from "react";
-import { ArrowRight, BookOpen, CheckCircle2, ChevronRight, HelpCircle, ShieldCheck, Sparkles, TrendingDown, TrendingUp, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, HelpCircle, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
 import { useQuickGuide } from "../state.tsx";
 import { cx } from "./ui.tsx";
 
 export function OnboardingModal() {
   const { isOpen, close } = useQuickGuide();
-  const [activeTab, setActiveTab] = useState<"basics" | "calls-puts" | "buyer-safety" | "simulator">("basics");
-  const [simPrice, setSimPrice] = useState(3400);
 
   if (!isOpen) return null;
-
-  // Simulator math for a $3,000 Call bought for $60
-  const strike = 3000;
-  const premium = 60;
-  const grossPayout = Math.max(0, simPrice - strike);
-  const netProfit = grossPayout - premium;
-  const roi = ((netProfit / premium) * 100).toFixed(0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
       <div
-        className="ticket relative max-h-[88vh] w-full max-w-2xl overflow-y-auto p-5 sm:p-7"
+        className="ticket relative max-h-[88vh] w-full max-w-3xl overflow-y-auto p-5 sm:p-7"
         role="dialog"
         aria-modal="true"
         aria-labelledby="guide-title"
@@ -33,191 +23,84 @@ export function OnboardingModal() {
           <X className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="font-display grid h-10 w-10 place-items-center rounded-2xl bg-primary text-lg font-bold text-white">
             O
           </div>
-          <div>
-            <h2 id="guide-title" className="font-display text-xl font-bold tracking-tight">
-              Options in 60 seconds
+          <div className="min-w-0 flex-1">
+            <h2 id="guide-title" className="font-display text-2xl font-bold tracking-tight">
+              Simple Optara guide
             </h2>
-            <p className="text-[13px] text-muted">Pick direction, pay once, settle in cash</p>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
+              Optara has two main actions: <b className="text-ink">buy</b> an option with fixed risk, or <b className="text-ink">write</b> an option to earn premium with margin risk.
+            </p>
           </div>
         </div>
 
-        <div className="mt-5 flex gap-1.5 overflow-x-auto rounded-xl border border-line bg-surface-2/70 p-1 scrollbar-none">
-          {[
-            { id: "basics", label: "The Basics" },
-            { id: "calls-puts", label: "Calls vs Puts" },
-            { id: "buyer-safety", label: "Risk & Safety" },
-            { id: "simulator", label: "Interactive Calculator" },
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as any)}
-              className={cx(
-                "whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-semibold transition",
-                activeTab === t.id
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-muted hover:bg-surface-2 hover:text-ink"
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <section className="rounded-3xl border border-good/30 bg-good/8 p-4">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-good/12 text-good">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-bold">Buy options</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">
+                  Use this when you want exposure without liquidation risk.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              <GuidePoint icon={TrendingUp} title="Call means up" text="You profit if the asset finishes above the target price." tone="good" />
+              <GuidePoint icon={TrendingDown} title="Put means down" text="You profit if the asset finishes below the target price." tone="bad" />
+              <GuidePoint icon={Wallet} title="You pay once" text="Your maximum loss is the premium shown before you sign." tone="primary" />
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-warn/35 bg-warn/8 p-4">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-warn/12 text-warn">
+                <ShieldAlert className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-bold">Write options</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">
+                  Use this when you want to earn premium and can manage collateral.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              <GuidePoint icon={Wallet} title="Deposit cash first" text="This cash backs what your account may owe at expiry." tone="warn" />
+              <GuidePoint icon={CheckCircle2} title="Stay healthy" text="If margin gets too low, add cash or close risk before liquidation." tone="warn" />
+              <GuidePoint icon={HelpCircle} title="Risk can be larger than premium" text="Writing is not the same as buying. You collect premium but take payout risk." tone="bad" />
+            </div>
+          </section>
         </div>
 
-        {/* Tab Contents */}
-        <div className="mt-5 min-h-[260px]">
-          {activeTab === "basics" && (
-            <div className="space-y-4">
-              <p className="text-sm leading-relaxed text-muted">
-                An <b className="text-ink">option</b> gives you the right to earn money if a cryptocurrency (like ETH or MON) reaches a target price by a specific expiry date.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-line bg-surface-2/60 p-4">
-                  <div className="flex items-center gap-2 text-primary font-semibold text-sm">
-                    <TrendingUp className="h-4 w-4" /> 1. Pick Your View
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    Think the price will go up? Buy a <b className="text-ink">Call</b>. Think it will drop? Buy a <b className="text-ink">Put</b>.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-line bg-surface-2/60 p-4">
-                  <div className="flex items-center gap-2 text-good font-semibold text-sm">
-                    <ShieldCheck className="h-4 w-4" /> 2. Pay Once, Zero Surprise
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    Pay a small price upfront. If you are wrong, you can <b className="text-ink">never lose more</b> than what you spent.
-                  </p>
-                </div>
+        <div className="mt-4 rounded-3xl border border-line bg-surface-2/55 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+            <h3 className="font-display text-base font-bold">What happens after you trade?</h3>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              ["1", "Before expiry", "You can keep, sell, or manage the position."],
+              ["2", "At expiry", "The official price decides the payout."],
+              ["3", "After settlement", "Profitable option tokens can be redeemed for stablecoin."],
+            ].map(([n, title, text]) => (
+              <div key={n} className="rounded-2xl border border-line bg-surface/80 p-3">
+                <div className="grid h-7 w-7 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary">{n}</div>
+                <div className="mt-2 text-sm font-bold">{title}</div>
+                <p className="mt-1 text-xs leading-5 text-muted">{text}</p>
               </div>
-              <div className="rounded-2xl border border-line bg-surface-2/60 p-4">
-                <div className="flex items-center gap-2 text-accent font-semibold text-sm">
-                  <CheckCircle2 className="h-4 w-4" /> 3. Automatic Cash Settlement
-                </div>
-                <p className="mt-1 text-xs text-muted">
-                  You never handle the coin itself. At expiry the payout is worked out from the official price, and you redeem your option tokens for it in USDC.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "calls-puts" && (
-            <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-good/30 bg-good/5 p-4.5">
-                  <div className="flex items-center justify-between">
-                    <span className="pill bg-good/20 text-good font-bold">CALL OPTION</span>
-                    <TrendingUp className="h-5 w-5 text-good" />
-                  </div>
-                  <h3 className="mt-2 text-base font-bold text-ink">Bet on Price Rising</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">
-                    You predict ETH will rise above the strike (e.g. $3,000). The higher ETH climbs, the bigger your payout!
-                  </p>
-                  <div className="mt-3 rounded-xl bg-surface/80 p-2.5 text-xs">
-                    <span className="text-muted">Example:</span> $3,000 call, ETH ends at $3,500 → each option pays <b className="text-good font-semibold">$500</b>. Your profit is that minus what you paid.
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-bad/30 bg-bad/5 p-4.5">
-                  <div className="flex items-center justify-between">
-                    <span className="pill bg-bad/20 text-bad font-bold">PUT OPTION</span>
-                    <TrendingDown className="h-5 w-5 text-bad" />
-                  </div>
-                  <h3 className="mt-2 text-base font-bold text-ink">Bet on Price Falling</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">
-                    You predict ETH will fall below the strike (e.g. $2,800). Great for profiting from market dumps or hedging your crypto bag!
-                  </p>
-                  <div className="mt-3 rounded-xl bg-surface/80 p-2.5 text-xs">
-                    <span className="text-muted">Example:</span> $2,800 put, ETH drops to $2,300 → each option pays <b className="text-good font-semibold">$500</b>. Your profit is that minus what you paid.
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "buyer-safety" && (
-            <div className="space-y-3.5">
-              <div className="rounded-2xl border border-good/30 bg-good/10 p-4">
-                <div className="flex items-center gap-2 font-bold text-good text-sm">
-                  <ShieldCheck className="h-5 w-5" /> 100% Limited Risk for Buyers
-                </div>
-                <p className="mt-1 text-xs text-muted leading-relaxed">
-                  Unlike futures or perpetual leverage where market spikes can liquidate you, <b className="text-ink">buying an option has ZERO liquidation risk</b>. You can never owe extra money.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-line bg-surface-2 p-4">
-                <div className="font-semibold text-ink text-sm">What about Writing (Selling) Options?</div>
-                <p className="mt-1 text-xs text-muted leading-relaxed">
-                  Option writers act as liquidity providers who collect upfront premiums from buyers. Because writers owe the payout at expiry, they must deposit stablecoin collateral and maintain a healthy margin.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-primary/20 bg-primary-soft/50 p-3.5 text-xs text-muted">
-                💡 <b className="text-ink">New to options?</b> Start by <b className="text-ink">buying</b> a Call or Put. It requires no margin setup and your tokens land directly in your wallet!
-              </div>
-            </div>
-          )}
-
-          {activeTab === "simulator" && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-line bg-surface-2 p-4">
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span>Scenario: <b className="text-ink">ETH $3,000 Call</b></span>
-                  <span>Cost: <b className="text-ink">${premium}</b></span>
-                </div>
-
-                <div className="mt-4">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span>If ETH settles at:</span>
-                    <span className="num text-primary text-sm">${simPrice.toLocaleString()}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="2700"
-                    max="4000"
-                    step="25"
-                    value={simPrice}
-                    onChange={(e) => setSimPrice(Number(e.target.value))}
-                    className="mt-2 w-full accent-[var(--primary)] cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted mt-1">
-                    <span>$2,700 (Drop)</span>
-                    <span>$3,000 (Strike)</span>
-                    <span>$4,000 (Moon)</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
-                  <div>
-                    <div className="text-[10px] text-muted">Gross Payout</div>
-                    <div className="num mt-0.5 text-sm font-semibold">${grossPayout}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-muted">Net Profit / Loss</div>
-                    <div className={cx("num mt-0.5 text-sm font-bold", netProfit >= 0 ? "text-good" : "text-bad")}>
-                      {netProfit >= 0 ? `+$${netProfit}` : `-$${Math.abs(netProfit)}`}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-muted">Return (ROI)</div>
-                    <div className={cx("num mt-0.5 text-sm font-bold", netProfit >= 0 ? "text-good" : "text-bad")}>
-                      {netProfit >= 0 ? `+${roi}%` : `${roi}%`}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
-        {/* Footer Actions */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <div className="text-xs text-muted flex items-center gap-1.5">
             <HelpCircle className="h-4 w-4 text-primary" />
-            No margin needed to buy. You only risk what you pay.
+            New users should usually start by buying, because the maximum loss is shown upfront.
           </div>
           <div className="flex gap-2">
             <button
@@ -231,6 +114,38 @@ export function OnboardingModal() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function GuidePoint({
+  icon: Icon,
+  title,
+  text,
+  tone,
+}: {
+  icon: typeof TrendingUp;
+  title: string;
+  text: string;
+  tone: "primary" | "good" | "warn" | "bad";
+}) {
+  return (
+    <div className="flex gap-2.5 rounded-2xl border border-line bg-surface/75 p-3">
+      <span
+        className={cx(
+          "mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl",
+          tone === "good" && "bg-good/12 text-good",
+          tone === "warn" && "bg-warn/12 text-warn",
+          tone === "bad" && "bg-bad/12 text-bad",
+          tone === "primary" && "bg-primary-soft text-primary",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-muted">{text}</span>
+      </span>
     </div>
   );
 }

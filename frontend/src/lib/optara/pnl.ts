@@ -68,10 +68,11 @@ export type Fill =
  * Average cost of the wallet tokens: buys and writes add quantity and cost; each sale or redemption realizes its
  * proceeds against the average cost of the tokens it removes. Returns the realized P&L and the cost still held.
  */
-export function averageCost(fills: Fill[]): { realized: number; costHeld: number; qtyHeld: number } {
+export function averageCost(fills: Fill[]): { realized: number; costHeld: number; qtyHeld: number; unknownQty: number } {
   let qty = 0;
   let cost = 0;
   let realized = 0;
+  let unknownQty = 0;
   for (const f of fills) {
     if (f.kind === "buy" || f.kind === "mint") {
       qty += f.qty;
@@ -79,13 +80,15 @@ export function averageCost(fills: Fill[]): { realized: number; costHeld: number
       continue;
     }
     const closed = Math.min(f.qty, qty);
+    const knownCash = f.qty > 0 ? (f.cash * closed) / f.qty : 0;
     const costOut = qty > 0 ? (cost * closed) / qty : 0;
-    realized += f.cash - costOut;
+    realized += knownCash - costOut;
+    unknownQty += Math.max(0, f.qty - closed);
     cost -= costOut;
     qty -= closed;
     if (qty <= 1e-12) (qty = 0), (cost = 0);
   }
-  return { realized, costHeld: cost, qtyHeld: qty };
+  return { realized, costHeld: cost, qtyHeld: qty, unknownQty };
 }
 
 /** P&L as a share of what was paid; undefined when nothing was paid or the option was written (the risk is collateral, not the fee). */

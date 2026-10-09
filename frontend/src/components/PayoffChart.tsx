@@ -141,6 +141,15 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
     <div className="space-y-3">
       {/* Plain-language readout */}
       <div className="rounded-2xl border border-line bg-surface-2/70 px-4 py-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-display text-base font-bold">Expiry simulator</div>
+            <div className="text-xs text-muted">Pick a settlement price and see the outcome.</div>
+          </div>
+          <span className={cx("rounded-full px-2.5 py-1 text-xs font-bold", side === "long" ? "bg-primary-soft text-primary" : "bg-accent/10 text-accent")}>
+            {side === "long" ? "Buyer view" : "Writer view"}
+          </span>
+        </div>
         <div className="grid grid-cols-[1fr_auto] items-end gap-x-3 gap-y-1">
           <div>
           <div className="text-[13px] text-muted">If {underlyingSymbol} settles at</div>
@@ -286,8 +295,8 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
         <Fact label={isLong ? "Best case" : "Most you can make"} value={maxGain === "unlimited" ? "No limit" : usd(maxGain)} tone="text-good" />
         <Fact label={isLong ? "Max loss" : "Worst case"} value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone="text-bad" />
       </div>
-      <p className="text-xs text-muted">
-        Breakeven includes the premium shown by the order form. Drag across the chart, use the arrow keys, or tap a button to try a settlement price. Amounts are in {assetSymbol}.
+      <p className="rounded-xl bg-surface-2/60 px-3 py-2 text-xs leading-5 text-muted">
+        Breakeven includes the premium from the action panel. Drag the chart, use arrow keys, or tap a scenario button. All amounts are in {assetSymbol}.
       </p>
     </div>
   );

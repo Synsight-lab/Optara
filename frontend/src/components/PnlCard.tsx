@@ -10,9 +10,9 @@ import { pnlOf, totals, unrealizedOf, type HistoryEntry, type SeriesPnl } from "
 import { legOf, payoutPerOption, priceLevel } from "../lib/optara/payoff.ts";
 import { getTradePnl } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
-import { Card, EmptyState, Pill, Segmented, Skeleton, Term, cx } from "./ui.tsx";
+import { Card, EmptyState, Pill, Skeleton, Term, cx } from "./ui.tsx";
 
-type Filter = "all" | "open" | "done";
+type Filter = "all" | "open" | "expired" | "closed";
 
 const qtyText = (x: number) => x.toLocaleString("en-US", { maximumFractionDigits: 4 });
 const pctText = (p: number | undefined) => (p === undefined ? "" : `${p >= 0 ? "+" : "−"}${Math.abs(p * 100).toFixed(1)}%`);
@@ -31,58 +31,41 @@ export function PnlCard({ owner, accounts, series }: { owner: Address; accounts:
     const order = { open: 0, expired: 1, closed: 2 } as const;
     return all.sort((a, b) => order[a.status] - order[b.status] || Math.abs(pnlOf(b)) - Math.abs(pnlOf(a)));
   }, [data]);
-  const shown = rows.filter((r) => filter === "all" || (filter === "open" ? r.status === "open" : r.status !== "open"));
+  const counts = useMemo(() => ({
+    all: rows.length,
+    open: rows.filter((r) => r.status === "open").length,
+    expired: rows.filter((r) => r.status === "expired").length,
+    closed: rows.filter((r) => r.status === "closed").length,
+  }), [rows]);
+  const shown = rows.filter((r) => filter === "all" || r.status === filter);
   const sums = totals(rows);
 
   return (
-    <Card title="Profit & loss" action={rows.length > 0 ? <Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: "all", label: "All" }, { value: "open", label: "Open" }, { value: "done", label: "Expired & closed" }]} /> : undefined}>
+    <Card title="Profit & loss" action={rows.length > 0 ? <PnlFilters value={filter} onChange={setFilter} counts={counts} /> : undefined}>
       {isLoading ? (
         <Skeleton className="h-40 w-full" />
       ) : error ? (
         <p className="text-[13px] text-bad">Couldn't load your trade history: {(error as Error).message.split("\n")[0]}</p>
       ) : rows.length === 0 ? (
-        <EmptyState title="No trades yet" body="Once you buy, sell or write an option, its profit or loss shows here." action={<Link to="/app/trade" className="btn-ghost mt-2 text-xs">Make a trade</Link>} />
+        <EmptyState title="No trades yet" body="Once you buy, sell or write an option, its profit or loss shows here." action={<Link to="/app/markets" className="btn-ghost mt-2 text-xs">Browse markets</Link>} />
       ) : (
         <div className="space-y-3">
           {[...sums.entries()].map(([asset, t]) => (
-            <div key={asset} className={cx("rounded-2xl border p-4", t.pnl >= 0 ? "border-good/30 bg-good/8" : "border-bad/30 bg-bad/8")}>
-              <div className="flex flex-wrap items-end justify-between gap-3">
+            <div key={asset} className={cx("overflow-hidden rounded-2xl border p-3.5", t.pnl >= 0 ? "border-good/30 bg-good/8" : "border-bad/30 bg-bad/8")}>
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                 <div>
                   <div className="text-[13px] text-muted">Overall {sums.size > 1 ? `(${asset})` : ""}</div>
-                  <div className={cx("num font-display flex items-center gap-1.5 text-3xl font-bold tracking-tight", t.pnl >= 0 ? "text-good" : "text-bad")}>
+                  <div className={cx("num font-display flex items-center gap-1.5 text-2xl font-bold tracking-tight", t.pnl >= 0 ? "text-good" : "text-bad")}>
                     {t.pnl >= 0 ? <TrendingUp className="h-6 w-6" /> : <TrendingDown className="h-6 w-6" />}
                     {usd(t.pnl, { sign: true })}
                     <span className="text-base font-semibold">{pctText(t.pct)}</span>
                   </div>
-                  <div className="mt-0.5 text-[13px] font-semibold">{t.pnl >= 0 ? "You're in profit" : "You're at a loss"} across all your trades</div>
+                  <div className="mt-0.5 text-[13px] font-semibold">{t.pnl >= 0 ? "Net profit" : "Net loss"} across these rows</div>
                 </div>
-                <dl className="grid grid-cols-2 gap-x-5 gap-y-1.5 text-right text-[13px]">
-                  <div>
-                    <dt className="text-[11px] text-muted">
-                      <Term tip="Locked in: what your sales, redemptions and settlements made or lost against what those options cost you on average.">Realized</Term>
-                    </dt>
-                    <dd className={cx("num font-semibold", t.realized >= 0 ? "text-good" : "text-bad")}>{usd(t.realized, { sign: true })}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] text-muted">
-                      <Term tip="On what you still hold: its value now minus what it cost you. Changes with the market until you sell or it settles.">Unrealized</Term>
-                    </dt>
-                    <dd className={cx("num font-semibold", t.unrealized >= 0 ? "text-good" : "text-bad")}>{usd(t.unrealized, { sign: true })}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] text-muted">Cost of what you hold</dt>
-                    <dd className="num font-semibold">{usd(t.costHeld)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] text-muted">
-                      <Term tip="What you still hold, at Optara's fair value, or at the settlement payout once the price is fixed. Written options count as what you owe.">Value now</Term>
-                    </dt>
-                    <dd className="num font-semibold">{usd(t.value)}</dd>
-                  </div>
-                </dl>
+                <CashFlowChart paid={t.paid} received={t.received} value={t.value} realized={t.realized} unrealized={t.unrealized} />
               </div>
               <p className="mt-2 text-xs text-muted">
-                {t.winners} in profit · {t.losers} at a loss · total = realized + unrealized
+                Formula: cash received + value still held − cash paid. {t.winners} winner{t.winners === 1 ? "" : "s"} · {t.losers} loser{t.losers === 1 ? "" : "s"}
                 {t.pct !== undefined ? ` · % of ${usd(t.paid)} paid in all` : ""}.
               </p>
             </div>
@@ -92,17 +75,83 @@ export function PnlCard({ owner, accounts, series }: { owner: Address; accounts:
             {shown.map((r) => (
               <PnlRow key={r.series.id} r={r} />
             ))}
-            {shown.length === 0 && <li className="py-4 text-center text-[13px] text-muted">Nothing here.</li>}
+            {shown.length === 0 && <li className="py-5 text-center text-[13px] text-muted">No {filter === "all" ? "positions" : filter} rows here.</li>}
           </ul>
 
           <p className="text-xs leading-relaxed text-muted">
             Built from your on-chain history: buys and sells (fees included), writing fees, redemptions and settlement. Each sale
             is measured against the average cost of the options it closed. What you still hold is valued at Optara's fair
             value before expiry (selling on the order book may get a little less), and at its payout after expiry.
+            Rows marked ≈ include transferred tokens or partial history where the exact cost basis is not fully known.
           </p>
         </div>
       )}
     </Card>
+  );
+}
+
+function PnlFilters({ value, onChange, counts }: { value: Filter; onChange: (v: Filter) => void; counts: Record<Filter, number> }) {
+  const items: { value: Filter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "open", label: "Open" },
+    { value: "expired", label: "Expired" },
+    { value: "closed", label: "Closed" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-1 rounded-2xl border border-line bg-surface-2 p-1">
+      {items.map((x) => {
+        const disabled = x.value !== "all" && counts[x.value] === 0;
+        return (
+          <button
+            key={x.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(x.value)}
+            className={cx(
+              "rounded-xl px-2.5 py-1.5 text-xs font-bold transition",
+              value === x.value ? "bg-primary text-white shadow-sm" : "text-muted hover:bg-surface hover:text-ink",
+              disabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted",
+            )}
+          >
+            {x.label} <span className="num opacity-80">{counts[x.value]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CashFlowChart({ paid, received, value, realized, unrealized }: { paid: number; received: number; value: number; realized: number; unrealized: number }) {
+  const max = Math.max(1, paid, received, Math.abs(value));
+  const bars = [
+    { label: "Paid", value: paid, color: "bg-bad", text: usd(paid) },
+    { label: "Received", value: received, color: "bg-good", text: usd(received) },
+    { label: "Still held", value: Math.abs(value), color: value >= 0 ? "bg-primary" : "bg-warn", text: usd(value) },
+  ];
+  return (
+    <div className="rounded-2xl border border-line/70 bg-surface/70 p-3">
+      <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <span className="text-muted">Locked in</span>
+          <span className={cx("num ml-1 font-bold", realized >= 0 ? "text-good" : "text-bad")}>{usd(realized, { sign: true })}</span>
+        </div>
+        <div className="text-right">
+          <span className="text-muted">Open</span>
+          <span className={cx("num ml-1 font-bold", unrealized >= 0 ? "text-good" : "text-bad")}>{usd(unrealized, { sign: true })}</span>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        {bars.map((p) => (
+          <div key={p.label} className="grid grid-cols-[68px_1fr_auto] items-center gap-2 text-xs">
+            <span className="font-semibold text-muted">{p.label}</span>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+              <div className={cx("h-full rounded-full", p.color)} style={{ width: `${Math.max(4, (p.value / max) * 100)}%` }} />
+            </div>
+            <span className="num font-bold">{p.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

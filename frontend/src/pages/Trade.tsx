@@ -15,7 +15,7 @@ import { AmountInput, Card, Details, EmptyState, Row, Skeleton, Term, cx } from 
 import { TokenIcon } from "../components/Icons.tsx";
 import { BuyOutcome, buyCheck } from "../components/BuyOutcome.tsx";
 import { LimitsPanel } from "../components/LimitsPanel.tsx";
-import { lessSlip, useSlippage, withSlip } from "../lib/optara/limits.ts";
+import { lessSlip, useSlippage, venueMinQty, withSlip } from "../lib/optara/limits.ts";
 import { TxButton } from "../components/TxButton.tsx";
 import { buySteps } from "../lib/optara/actions.ts";
 import { availability, type ActionContext } from "../lib/optara/availability.ts";
@@ -435,7 +435,7 @@ function TradeForm({
       ? buySteps(
           series,
           premiumIn,
-          lessSlip(estQty, slip),
+          venueMinQty(estQty, slip),
           withSlip(fees.data.optara, slip),
           withSlip(fees.data.kuru, slip),
           address
@@ -516,8 +516,8 @@ export function buyLimits(s: Series, premiumIn: bigint | undefined, estQty: bigi
   const n = (x: bigint) => `${fmtNative(x, s.assetDecimals)} ${s.assetSymbol}`;
   return [
     { label: "Premium budget", value: n(premiumIn), tip: "The most premium you spend. Anything not used is refunded." },
-    { label: "Fewest options accepted", value: fmtQty(lessSlip(estQty, slip)), tip: "If the order book would give you fewer options than this, the buy is cancelled." },
+    { label: "Fewest options accepted", value: fmtQty(venueMinQty(estQty, slip)), tip: "If the venue would give you fewer options than this, the buy is cancelled. Rounded to the venue's 0.01 option fill increment." },
     { label: "Max Optara fee", value: n(withSlip(fees.optara, slip)), tip: "The buyer fee can't exceed this." },
-    { label: "Max order-book fee", value: n(withSlip(fees.kuru, slip)), tip: "Kuru's fee can't exceed this." },
+    { label: "Max venue fee", value: n(withSlip(fees.kuru, slip)), tip: "The selected venue's fee can't exceed this." },
   ];
 }

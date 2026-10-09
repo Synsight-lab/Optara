@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { ArrowLeft, Compass, HelpCircle, Home, PieChart, Zap } from "lucide-react";
+import { Compass, PlusCircle } from "lucide-react";
 import { Card } from "../components/ui.tsx";
 
 export function NotFound() {
@@ -22,10 +22,10 @@ export function NotFound() {
             <Compass className="h-4 w-4 text-primary" /> Browse Markets
           </Link>
           <Link
-            to="/app/trade"
+            to="/app/new"
             className="flex items-center justify-center gap-1.5 rounded-2xl bg-primary p-3 text-xs font-bold text-white shadow-md hover:brightness-110 transition"
           >
-            <Zap className="h-4 w-4" /> Quick Trade
+            <PlusCircle className="h-4 w-4" /> New Market
           </Link>
         </div>
 

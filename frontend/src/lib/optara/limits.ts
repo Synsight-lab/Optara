@@ -28,6 +28,12 @@ function read(): number {
 export const withSlip = (x: bigint, bps: number) => (x * BigInt(10_000 + bps)) / 10_000n + 1n;
 /** A lower limit: the amount minus slippage (minimum quantity, minimum proceeds). */
 export const lessSlip = (x: bigint, bps: number) => (x * BigInt(10_000 - bps)) / 10_000n;
+/** Venue books currently fill in 0.01 option increments. Sign the min quantity at that precision so rounding does not
+ * turn a valid fill into a false "price moved" rejection. */
+export const venueMinQty = (x: bigint, bps: number) => {
+  const step = 10n ** 16n;
+  return (lessSlip(x, bps) / step) * step;
+};
 
 /** The shared slippage setting; every form updates when it changes anywhere. */
 export function useSlippage(): [number, (bps: number) => void] {

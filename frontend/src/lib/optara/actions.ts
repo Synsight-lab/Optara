@@ -36,7 +36,7 @@ export interface OracleDeps {
 }
 const defaultOracle: OracleDeps = { fetchOracleUpdate, oracleFee };
 
-const callStep = (key: string, label: string, call: ContractCall, hint?: string): Step => ({ key, label, hint, run: (w, onSent) => send(w, call, onSent) });
+export const callStep = (key: string, label: string, call: ContractCall, hint?: string): Step => ({ key, label, hint, run: (w, onSent) => send(w, call, onSent) });
 
 /** FE-002: the update is fetched when the step runs; `send` simulates the exact call with it before sending. */
 export function riskStep(
@@ -109,25 +109,31 @@ export const wrapSteps = (accountId: bigint, s: Series, qty: bigint, recipient: 
 
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
 
-export const sellSteps = (s: Series, qty: bigint, minProceeds: bigint, maxVenueFee: bigint, recipient: Address): Step[] => [
+export const sellVenueSteps = (s: Series, venueId: Hex, venueName: string, qty: bigint, minProceeds: bigint, maxVenueFee: bigint, recipient: Address): Step[] => [
   approveStep(s.wrapper, ADDR.router, qty, "option tokens"),
-  callStep("sell", "Sell on Kuru", {
+  callStep("sell", `Sell on ${venueName}`, {
     address: ADDR.router,
     abi: venueRouterAbi,
     functionName: "sellThroughVenue",
-    args: [{ venueId: KURU_VENUE, seriesId: s.id, qty, minProceeds, maxVenueFeeNative: maxVenueFee, recipient, deadline: deadline() }, "0x"],
+    args: [{ venueId, seriesId: s.id, qty, minProceeds, maxVenueFeeNative: maxVenueFee, recipient, deadline: deadline() }, "0x"],
   }),
 ];
 
-export const buySteps = (s: Series, premiumIn: bigint, minQty: bigint, maxBuyerFee: bigint, maxVenueFee: bigint, recipient: Address): Step[] => [
+export const sellSteps = (s: Series, qty: bigint, minProceeds: bigint, maxVenueFee: bigint, recipient: Address): Step[] =>
+  sellVenueSteps(s, KURU_VENUE, "Kuru", qty, minProceeds, maxVenueFee, recipient);
+
+export const buyVenueSteps = (s: Series, venueId: Hex, venueName: string, premiumIn: bigint, minQty: bigint, maxBuyerFee: bigint, maxVenueFee: bigint, recipient: Address): Step[] => [
   approveStep(s.settlementAsset, ADDR.router, premiumIn + maxBuyerFee, s.assetSymbol),
-  callStep("buy", "Buy on Kuru", {
+  callStep("buy", `Buy on ${venueName}`, {
     address: ADDR.router,
     abi: venueRouterAbi,
     functionName: "buyThroughVenue",
-    args: [{ venueId: KURU_VENUE, seriesId: s.id, premiumIn, minQty, maxBuyerFeeNative: maxBuyerFee, maxVenueFeeNative: maxVenueFee, recipient, deadline: deadline() }, "0x"],
+    args: [{ venueId, seriesId: s.id, premiumIn, minQty, maxBuyerFeeNative: maxBuyerFee, maxVenueFeeNative: maxVenueFee, recipient, deadline: deadline() }, "0x"],
   }),
 ];
+
+export const buySteps = (s: Series, premiumIn: bigint, minQty: bigint, maxBuyerFee: bigint, maxVenueFee: bigint, recipient: Address): Step[] =>
+  buyVenueSteps(s, KURU_VENUE, "Kuru", premiumIn, minQty, maxBuyerFee, maxVenueFee, recipient);
 
 // ------------------------------------------------------------------ positions (F4, F5, F11)
 

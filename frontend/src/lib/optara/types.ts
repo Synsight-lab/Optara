@@ -47,6 +47,8 @@ export interface Quote {
   bid?: bigint;
   ask?: bigint;
   market: Address;
+  venueId?: Hex;
+  venueName?: string;
 }
 
 /** Surface status (VolSurfaceOracle.SurfaceStatus). */

@@ -333,7 +333,16 @@ function WriteTicket({ s }: { s: Series }) {
             <h2 className="label">3 · Write and collect</h2>
             <Link to={`/app/series/${s.id}`} className="text-xs font-semibold text-primary">Option details</Link>
           </div>
-          <WritePanel s={s} ctx={ctx} bid={market?.quote?.bid} mark={market?.mark} market={market?.quote?.market} onQty={onQty} />
+          <WritePanel
+            s={s}
+            ctx={ctx}
+            bid={market?.quote?.bid}
+            mark={market?.mark}
+            market={market?.quote?.market}
+            venueId={market?.quote?.venueId}
+            venueName={market?.quote?.venueName}
+            onQty={onQty}
+          />
         </section>
       </section>
     </>

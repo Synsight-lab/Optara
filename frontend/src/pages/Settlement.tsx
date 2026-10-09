@@ -6,7 +6,7 @@ import { useConnection } from "wagmi";
 import type { Hex } from "viem";
 import { buildSettlementProof, settlementOracleAbi } from "@optara/sdk";
 import { CheckCircle2, Clock, Wallet } from "lucide-react";
-import { Card, Details, EmptyState, Skeleton, Term, cx } from "../components/ui.tsx";
+import { Card, EmptyState, Pill, Skeleton, Term, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { finalizeSteps, ratioSteps, settleBatchSteps } from "../lib/optara/actions.ts";
@@ -70,11 +70,20 @@ export function SettlementPage() {
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="px-1">
-        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">Settlement</h1>
-        <p className="mt-0.5 text-[13px] text-muted">
-          After expiry, each group of options is settled in four steps. Then holders redeem their options for cash.
-        </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">Settlement</h1>
+            <p className="mt-0.5 text-[13px] text-muted">
+              Expired options move from price finalization to cash payouts here.
+            </p>
+          </div>
+          <Pill tone={readyForYou.length > 0 ? "good" : inProgress.length > 0 ? "primary" : "neutral"} dot={readyForYou.length > 0}>
+            {readyForYou.length > 0 ? `${readyForYou.length} ready for you` : inProgress.length > 0 ? `${inProgress.length} active` : "No action"}
+          </Pill>
+        </div>
       </div>
+
+      <SettlementSummary expired={expired.length} active={inProgress.length} ready={readyForYou.length} paid={finished.length} />
 
       {(readyForYou.length > 0 || waitingForYou.length > 0) && (
         <div className={cx("flex items-start gap-3 rounded-2xl border px-4 py-3 text-[13px]", readyForYou.length ? "border-good/40 bg-good/10" : "border-line bg-surface-2/60")}>
@@ -97,26 +106,7 @@ export function SettlementPage() {
 
       <Upcoming groups={groups} now={now} />
 
-      <Details summary="How settlement works">
-        <ol className="grid gap-2 py-1 text-[13px] sm:grid-cols-4">
-          {[
-            ["Expiry", "Trading in the expiry stops."],
-            ["Price fixed", "The official price at expiry is recorded on-chain. Nobody can choose it."],
-            ["Accounts settled", "Writers pay what they owe from their accounts."],
-            ["Payouts open", "Holders redeem options for cash. Out-of-the-money options pay nothing."],
-          ].map(([t, d], i) => (
-            <li key={t} className="rounded-xl border border-line bg-surface/60 p-3">
-              <span className="block font-semibold">
-                {i + 1}. {t}
-              </span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-muted">{d}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="pb-1 text-xs text-muted">
-          Bots normally run steps 2 to 4 within minutes. Anyone can press the buttons instead and earns a small reward for it.
-        </p>
-      </Details>
+      <SettlementGuide />
 
       {expired.length === 0 ? (
         <Card>
@@ -148,6 +138,58 @@ export function SettlementPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function SettlementSummary({ expired, active, ready, paid }: { expired: number; active: number; ready: number; paid: number }) {
+  const items = [
+    { label: "Expired", value: expired, sub: "groups", tone: "neutral" as const },
+    { label: "Settling", value: active, sub: "in progress", tone: active > 0 ? ("primary" as const) : ("neutral" as const) },
+    { label: "Ready", value: ready, sub: "for you", tone: ready > 0 ? ("good" as const) : ("neutral" as const) },
+    { label: "Paid", value: paid, sub: "complete", tone: paid > 0 ? ("good" as const) : ("neutral" as const) },
+  ];
+  return (
+    <div className="grid gap-2 sm:grid-cols-4">
+      {items.map((x) => (
+        <div key={x.label} className="rounded-2xl border border-line bg-gradient-to-br from-surface to-surface-2/55 p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-bold uppercase text-faint">{x.label}</div>
+            <span className={cx("h-2 w-2 rounded-full", x.tone === "good" ? "bg-good" : x.tone === "primary" ? "bg-primary" : "bg-faint/40")} />
+          </div>
+          <div className={cx("num mt-1 font-display text-2xl font-bold", x.tone === "good" ? "text-good" : x.tone === "primary" ? "text-primary" : "")}>{x.value}</div>
+          <div className="text-[11px] text-muted">{x.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SettlementGuide() {
+  const steps = [
+    ["1", "Price", "expiry price fixed"],
+    ["2", "Settle", "accounts netted"],
+    ["3", "Ratio", "payout rate opens"],
+    ["4", "Redeem", "holders claim cash"],
+  ];
+  return (
+    <div className="rounded-3xl border border-line bg-gradient-to-br from-surface to-surface-2/50 p-3.5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="font-display text-sm font-bold">Settlement path</div>
+          <p className="text-xs text-muted">Bots normally move expired markets through this path. You can help when an action is available.</p>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5 md:min-w-[520px]">
+          {steps.map(([n, t, d], i) => (
+            <div key={n} className="relative rounded-2xl border border-line bg-surface/80 px-2 py-2.5 text-center">
+              {i > 0 && <span className="absolute -left-1.5 top-1/2 hidden h-px w-3 bg-line md:block" />}
+              <div className="mx-auto grid h-6 w-6 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary">{n}</div>
+              <div className="mt-1 text-xs font-bold">{t}</div>
+              <div className="hidden truncate text-[11px] text-muted sm:block">{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -309,8 +351,8 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
   }
 
   return (
-    <article className="card overflow-hidden">
-      <header className="flex flex-wrap items-start justify-between gap-2 p-4 pb-3 sm:p-5 sm:pb-3">
+    <article className="card overflow-hidden bg-gradient-to-br from-surface to-surface-2/45">
+      <header className="flex flex-wrap items-start justify-between gap-2 p-4 pb-2">
         <div className="flex items-center gap-2.5">
           <TokenIcon symbol={s0.underlyingSymbol} className="h-8 w-8" />
           <div>
@@ -323,12 +365,12 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
         <StatePill state={g.state} />
       </header>
 
-      <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
+      <div className="space-y-2.5 px-4 pb-4">
         <SettlementTimeline state={g.state} />
 
         <div
           className={cx(
-            "rounded-2xl border p-3.5 text-[13px] leading-relaxed",
+            "rounded-2xl border p-3 text-[13px] leading-relaxed shadow-sm",
             status.tone === "bad" && "border-bad/30 bg-bad/8 text-bad",
             status.tone === "act" && "border-primary/30 bg-primary-soft/60",
             status.tone === "wait" && "border-line bg-surface-2/60 text-muted",
@@ -336,13 +378,13 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
           )}
         >
           <p>{status.text}</p>
-          {status.action && <div className="mt-3">{status.action}</div>}
+          {status.action && <div className="mt-2.5">{status.action}</div>}
         </div>
 
         {mine.length > 0 && <YourOptions mine={mine} g={g} />}
 
         {a.finalized ? (
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <Fact label="Settlement price" value={`$${fmtLevel(a.priceWad)}`} />
             <Fact
               label={<Term tip="Accounts that still have to be settled before payouts open.">Accounts left</Term>}

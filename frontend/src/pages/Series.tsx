@@ -8,9 +8,9 @@ import { settlementWindowAbi } from "@optara/sdk";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowDownRight,
+  ArrowUpRight,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock,
   Coins,
   ExternalLink,
@@ -34,19 +34,19 @@ import { AmountInput, Card, CopyButton, Details, EmptyState, Pill, Row, Segmente
 import { TokenIcon } from "../components/Icons.tsx";
 import { BackingCard } from "../components/BackingCard.tsx";
 import { LimitsPanel } from "../components/LimitsPanel.tsx";
-import { lessSlip, useSlippage, withSlip } from "../lib/optara/limits.ts";
+import { lessSlip, useSlippage, venueMinQty, withSlip } from "../lib/optara/limits.ts";
 import { buyLimits } from "./Trade.tsx";
 import { BuyOutcome, SellValueNotice, buyCheck } from "../components/BuyOutcome.tsx";
 import { PayoffChart } from "../components/PayoffChart.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { availability, type ActionContext, type ActionKey } from "../lib/optara/availability.ts";
 import {
-  buySteps,
+  buyVenueSteps,
   closeShortSteps,
   mintSteps,
   redeemSteps,
   claimSteps,
-  sellSteps,
+  sellVenueSteps,
   setupAccountSteps,
   unwrapSteps,
   wrapSteps,
@@ -64,9 +64,9 @@ import {
   useTokenBalance,
   useWalletWrappers,
 } from "../lib/optara/hooks.ts";
-import { kuruSellFee, kuruTakerFee, previewBuyerFee, previewMint, previewRedeem } from "../lib/optara/reads.ts";
+import { previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee } from "../lib/optara/reads.ts";
 import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
-import type { Series } from "../lib/optara/types.ts";
+import type { Quote, Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
 
@@ -141,7 +141,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const tabs: { value: Tab; label: string; icon: any; actions: ActionKey[] }[] = [
     { value: "trade", label: "Trade", icon: TrendingUp, actions: ["buy", "sell"] },
     { value: "write", label: "Earn", icon: Coins, actions: ["write"] },
-    { value: "manage", label: "Manage", icon: Shield, actions: ["unwrap", "close", "wrap"] },
+    { value: "manage", label: "Position", icon: Shield, actions: ["unwrap", "close", "wrap"] },
     { value: "redeem", label: "Settle", icon: CheckCircle2, actions: ["redeem", "claim"] },
   ];
 
@@ -220,9 +220,9 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 sub={series.assetSymbol}
               />
               <Stat
-                label={<Term tip="Expected movement priced in. Higher means pricier options.">Volatility</Term>}
+                label={<Term tip="Annual implied volatility from the surface used to price this option. Higher IV usually means a more expensive option.">Annual volatility</Term>}
                 value={market?.iv !== undefined ? fmtIv(market.iv) : "—"}
-                sub="Annualized"
+                sub="Implied IV"
               />
             </div>
             <div className="mt-2 flex items-center justify-between rounded-xl bg-surface-2/60 px-3 py-1.5 text-xs">
@@ -287,7 +287,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
             ) : (
               <Skeleton className="h-60 w-full" />
             )}
-            <p className="mt-2 text-xs text-muted">The amount comes from the order form below. Change it there to update the chart.</p>
+            <p className="mt-2 text-xs text-muted">Use this simulator to test settlement prices. The amount follows the order form in the action panel.</p>
           </Card>
 
           <div id="backing">
@@ -334,6 +334,8 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 bid={market?.quote?.bid}
                 mark={market?.mark}
                 market={market?.quote?.market}
+                venueId={market?.quote?.venueId}
+                venueName={market?.quote?.venueName}
                 walletQty={walletQty}
                 initialSide={tradeSide}
                 onQty={setQtyForChart}
@@ -346,6 +348,8 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 bid={market?.quote?.bid}
                 mark={market?.mark}
                 market={market?.quote?.market}
+                venueId={market?.quote?.venueId}
+                venueName={market?.quote?.venueName}
                 onQty={setQtyForChart}
               />
             )}
@@ -410,7 +414,15 @@ function SeriesQuickFacts({
   return (
     <section className="page-band">
       <div className="grid gap-3 md:grid-cols-4">
-        <SimpleFact label="Direction" value={isCall ? "Up / Call" : "Down / Put"} />
+        <SimpleFact
+          label="Direction"
+          value={
+            <span className={cx("inline-flex items-center gap-1.5", isCall ? "text-good" : "text-bad")}>
+              {isCall ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              {isCall ? "Up / Call" : "Down / Put"}
+            </span>
+          }
+        />
         <SimpleFact label="Strike" value={`$${fmtLevel(series.strikeWad)}`} sub={target} />
         <SimpleFact
           label="Buy price"
@@ -422,7 +434,7 @@ function SeriesQuickFacts({
   );
 }
 
-function SimpleFact({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function SimpleFact({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
     <div className="rounded-lg border border-line bg-surface-2/60 p-3">
       <div className="text-[11px] font-bold uppercase text-faint">{label}</div>
@@ -440,6 +452,8 @@ function TradePanel({
   bid,
   mark,
   market,
+  venueId,
+  venueName,
   walletQty,
   initialSide,
   onQty,
@@ -450,6 +464,8 @@ function TradePanel({
   bid?: bigint;
   mark?: bigint;
   market?: Hex;
+  venueId?: Hex;
+  venueName?: string;
   walletQty: bigint;
   initialSide: "buy" | "sell";
   onQty: (q: number, cost?: number) => void;
@@ -470,7 +486,7 @@ function TradePanel({
       {side === "buy" ? (
         <BuyPanel s={s} ctx={ctx} ask={ask} market={market} onQty={onQty} />
       ) : (
-        <SellPanel s={s} ctx={ctx} bid={bid} mark={mark} market={market} walletQty={walletQty} onQty={onQty} />
+        <SellPanel s={s} ctx={ctx} bid={bid} mark={mark} market={market} venueId={venueId} venueName={venueName} walletQty={walletQty} onQty={onQty} />
       )}
     </div>
   );
@@ -480,8 +496,6 @@ function TradePanel({
 function BuyPanel({
   s,
   ctx,
-  ask,
-  market,
   onQty,
 }: {
   s: Series;
@@ -499,14 +513,27 @@ function BuyPanel({
   const { data: sm } = useSeriesMarket(s);
   const { data: balance } = useTokenBalance(s.settlementAsset, address);
   const a = availability("buy", ctx);
+  const buyVenues = useMemo(() => (sm?.quotes ?? []).filter((q) => q.ask !== undefined), [sm?.quotes]);
+  const [venueKey, setVenueKey] = useState<string>("");
+  const selectedQuote = useMemo<Quote | undefined>(() => {
+    if (buyVenues.length === 0) return undefined;
+    return buyVenues.find((q) => `${q.venueId}:${q.market}` === venueKey) ?? buyVenues[0];
+  }, [buyVenues, venueKey]);
+  useEffect(() => {
+    if (buyVenues.length === 0) return;
+    const hasSelected = buyVenues.some((q) => `${q.venueId}:${q.market}` === venueKey);
+    if (!hasSelected) setVenueKey(`${buyVenues[0]!.venueId}:${buyVenues[0]!.market}`);
+  }, [buyVenues, venueKey]);
+  const ask = selectedQuote?.ask;
+  const venueName = selectedQuote?.venueName ?? "venue";
 
   const fees = useQuery({
-    queryKey: ["buyFees", s.id, premiumIn?.toString(), market],
+    queryKey: ["buyFees", s.id, premiumIn?.toString(), selectedQuote?.venueId, selectedQuote?.market],
     queryFn: async () => ({
       optara: await previewBuyerFee(premiumIn!),
-      kuru: await kuruTakerFee(market!, premiumIn!),
+      kuru: await venueBuyFee(selectedQuote!, premiumIn!),
     }),
-    enabled: !!premiumIn && !!market,
+    enabled: !!premiumIn && !!selectedQuote,
   });
 
   const estQty =
@@ -527,11 +554,13 @@ function BuyPanel({
   const tooMuch = total !== undefined && balance !== undefined && total > balance;
 
   const steps =
-    address && premiumIn && fees.data && estQty
-      ? buySteps(
+    address && premiumIn && fees.data && estQty && selectedQuote?.venueId
+      ? buyVenueSteps(
           s,
+          selectedQuote.venueId,
+          venueName,
           premiumIn,
-          lessSlip(estQty, slip),
+          venueMinQty(estQty, slip),
           withSlip(fees.data.optara, slip),
           withSlip(fees.data.kuru, slip),
           address
@@ -559,6 +588,37 @@ function BuyPanel({
         invalid={tooMuch ? `Wallet holds ${fmtNative(balance!, s.assetDecimals)} ${s.assetSymbol}.` : undefined}
       />
 
+      {buyVenues.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-xs font-bold uppercase text-faint">Trading venue</div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {buyVenues.map((q) => {
+              const key = `${q.venueId}:${q.market}`;
+              const active = key === `${selectedQuote?.venueId}:${selectedQuote?.market}`;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setVenueKey(key)}
+                  className={cx(
+                    "rounded-2xl border p-3 text-left transition",
+                    active ? "border-primary/60 bg-primary-soft text-ink" : "border-line bg-surface-2/60 text-muted hover:text-ink"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold">{q.venueName}</span>
+                    {active && <Pill tone="primary">Selected</Pill>}
+                  </div>
+                  <div className="mt-1 text-xs">
+                    Ask {q.ask !== undefined ? `${fmtPrice(q.ask)} ${s.assetSymbol}` : "—"} · fee {q.venueName === "Kuru" ? "venue fee" : "none"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[13px] text-muted">You receive about</span>
@@ -567,7 +627,7 @@ function BuyPanel({
           </span>
         </div>
         <div className="mt-0.5 text-right text-xs text-muted">
-          {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option before fees` : "Nobody is selling this option right now"}
+          {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option on ${venueName}` : "Nobody is selling this option right now"}
         </div>
 
         <div className="mt-2.5">
@@ -581,7 +641,7 @@ function BuyPanel({
               value={premiumIn !== undefined ? `${fmtNative(premiumIn, s.assetDecimals)} ${s.assetSymbol}` : "—"}
             />
             <Row
-              label={<Term tip="Charged by the Kuru order book. It comes out of the premium, so you get slightly fewer options.">Order book fee (in premium)</Term>}
+              label={<Term tip="Charged by the selected venue. It comes out of the premium, so you may get slightly fewer options.">Venue fee (in premium)</Term>}
               value={fees.data ? `≈ ${fmtNative(fees.data.kuru, s.assetDecimals)}` : "—"}
             />
             <Row
@@ -596,7 +656,7 @@ function BuyPanel({
 
       <TxButton
         label={estQty && total !== undefined ? `Buy ${fmtQty(estQty)} for ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "Buy"}
-        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included) for about ${fmtQty(estQty)} ${seriesName(s)} options${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
+        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included) for about ${fmtQty(estQty)} ${seriesName(s)} options on ${venueName}${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
         steps={steps}
         disabled={!a.enabled || !steps || tooMuch || (check.needsAck && !ack)}
         disabledReason={a.reason ?? (check.needsAck && !ack ? "Confirm the price above first." : undefined)}
@@ -615,6 +675,8 @@ export function WritePanel({
   bid,
   mark,
   market,
+  venueId,
+  venueName,
   onQty,
 }: {
   s: Series;
@@ -622,6 +684,8 @@ export function WritePanel({
   bid?: bigint;
   mark?: bigint;
   market?: Hex;
+  venueId?: Hex;
+  venueName?: string;
   onQty: (q: number, cost?: number) => void;
 }) {
   const { address } = useConnection();
@@ -642,9 +706,9 @@ export function WritePanel({
   const sellable = sellNow && !!market && bid !== undefined;
   const grossProceeds = qty && bid ? toNative((qty * bid) / WAD, s.assetDecimals) : undefined;
   const sellFee = useQuery({
-    queryKey: ["sellFee", market, grossProceeds?.toString()],
-    queryFn: () => kuruSellFee(market!, grossProceeds!),
-    enabled: sellable && !!grossProceeds,
+    queryKey: ["sellFee", venueId, market, grossProceeds?.toString()],
+    queryFn: () => venueSellFee({ market: market!, venueId, venueName }, grossProceeds!),
+    enabled: sellable && !!grossProceeds && !!market,
   });
   const net = grossProceeds !== undefined && sellFee.data !== undefined ? grossProceeds - sellFee.data : undefined;
   const [fee, equityAfter, imAfter, ok] = preview.data ?? [];
@@ -667,7 +731,7 @@ export function WritePanel({
     address && selected !== undefined && qty && fee !== undefined
       ? [
           ...mintSteps(selected, s, qty, withSlip(fee, slip), address),
-          ...(sellable && net !== undefined ? sellSteps(s, qty, lessSlip(net, slip), withSlip(sellFee.data!, slip), address) : []),
+          ...(sellable && net !== undefined && venueId ? sellVenueSteps(s, venueId, venueName ?? "venue", qty, lessSlip(net, slip), withSlip(sellFee.data!, slip), address) : []),
         ]
       : undefined;
 
@@ -704,7 +768,7 @@ export function WritePanel({
           <span className="block font-semibold">Sell instantly for cash</span>
           <span className="block text-muted">
             {market && bid !== undefined
-              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option. The cash goes to your wallet.`
+              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option on ${venueName ?? "the venue"}. The cash goes to your wallet.`
               : "Nobody is bidding right now. The new option tokens go to your wallet; you can sell them later."}
           </span>
         </span>
@@ -747,7 +811,7 @@ export function WritePanel({
           />
           {sellable && (
             <Row
-              label={<Term tip="Charged by the Kuru order book on the sale. Already taken out of the cash above.">Order book fee</Term>}
+              label={<Term tip="Charged by the selected venue on the sale. Already taken out of the cash above.">Venue fee</Term>}
               value={sellFee.data !== undefined ? `${fmtNative(sellFee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"}
             />
           )}
@@ -774,7 +838,7 @@ export function WritePanel({
           ...(sellable && net !== undefined && sellFee.data !== undefined
             ? [
                 { label: "Least cash accepted", value: `${fmtNative(lessSlip(net, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "If the sale would pay less than this, it is cancelled and you keep the options." },
-                { label: "Max order-book fee", value: `${fmtNative(withSlip(sellFee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "Kuru's fee can't exceed this." },
+                { label: "Max venue fee", value: `${fmtNative(withSlip(sellFee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "The selected venue's fee can't exceed this." },
               ]
             : []),
         ]}
@@ -851,6 +915,8 @@ function SellPanel({
   bid,
   mark,
   market,
+  venueId,
+  venueName,
   walletQty,
   onQty,
 }: {
@@ -859,6 +925,8 @@ function SellPanel({
   bid?: bigint;
   mark?: bigint;
   market?: Hex;
+  venueId?: Hex;
+  venueName?: string;
   walletQty: bigint;
   onQty: (q: number, cost?: number) => void;
 }) {
@@ -871,8 +939,8 @@ function SellPanel({
 
   const gross = qty && bid ? toNative((qty * bid) / WAD, s.assetDecimals) : undefined;
   const fee = useQuery({
-    queryKey: ["sellFee", market, gross?.toString()],
-    queryFn: () => kuruSellFee(market!, gross!),
+    queryKey: ["sellFee", venueId, market, gross?.toString()],
+    queryFn: () => venueSellFee({ market: market!, venueId, venueName }, gross!),
     enabled: !!market && !!gross,
   });
   const net = gross !== undefined && fee.data !== undefined ? gross - fee.data : undefined;
@@ -880,8 +948,8 @@ function SellPanel({
 
   const tooMuch = qty !== undefined && qty > walletQty;
   const steps =
-    address && qty && net !== undefined && fee.data !== undefined
-      ? sellSteps(s, qty, lessSlip(net, slip), withSlip(fee.data, slip), address)
+    address && qty && net !== undefined && fee.data !== undefined && venueId
+      ? sellVenueSteps(s, venueId, venueName ?? "venue", qty, lessSlip(net, slip), withSlip(fee.data, slip), address)
       : undefined;
 
   return (
@@ -897,8 +965,8 @@ function SellPanel({
       />
 
       <div className="rounded-2xl border border-line bg-surface-2 p-4 space-y-1">
-        <Row label="Best bid per option" value={bid !== undefined ? `${fmtPrice(bid)} ${s.assetSymbol}` : "Nobody is bidding right now"} />
-        <Row label={<Term tip="Charged by the Kuru order book on the sale.">Order book fee</Term>} value={fee.data !== undefined ? `−${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
+        <Row label="Best bid per option" value={bid !== undefined ? `${fmtPrice(bid)} ${s.assetSymbol}${venueName ? ` on ${venueName}` : ""}` : "Nobody is bidding right now"} />
+        <Row label={<Term tip="Charged by the selected venue on the sale.">Venue fee</Term>} value={fee.data !== undefined ? `−${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
         <Row strong label="Cash to your wallet" value={net !== undefined ? `+${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : "—"} tone="good" />
         <SellValueNotice qty={qty} proceeds={net} decimals={s.assetDecimals} mark={mark} />
       </div>
@@ -908,7 +976,7 @@ function SellPanel({
           net !== undefined && fee.data !== undefined
             ? [
                 { label: "Least cash accepted", value: `${fmtNative(lessSlip(net, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "If the sale would pay less than this, it is cancelled and you keep the options." },
-                { label: "Max order-book fee", value: `${fmtNative(withSlip(fee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "Kuru's fee can't exceed this." },
+                { label: "Max venue fee", value: `${fmtNative(withSlip(fee.data, slip), s.assetDecimals)} ${s.assetSymbol}`, tip: "The selected venue's fee can't exceed this." },
               ]
             : []
         }
@@ -954,83 +1022,141 @@ function ManagePanel({
   const cq = parseQty(closeAmt);
   const wq = parseQty(wrapAmt);
   const maxClose = position < 0n ? (-position < walletQty ? -position : walletQty) : 0n;
+  const accountLong = position > 0n ? position : 0n;
+  const accountShort = position < 0n ? -position : 0n;
+
+  if (ctx.connected && !ctx.hasAccount) {
+    return (
+      <div className="space-y-3.5">
+        <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
+          <div className="font-display text-lg font-bold">Position tools need a margin account</div>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Create an account to hold margin positions, offset written options, and move option tokens between account and wallet.
+          </p>
+        </div>
+        <AccountSetup s={s} />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <Section
-        title="Close written position"
-        text="Use wallet tokens to cancel what you wrote and free margin."
-        blocked={!c.enabled ? c.reason : undefined}
+    <div className="space-y-3.5">
+      <div className="rounded-2xl border border-line bg-surface-2/60 p-3.5">
+        <div className="mb-3 flex items-start gap-2">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div>
+            <div className="font-display text-lg font-bold">Manage this position</div>
+            <p className="mt-0.5 text-xs leading-5 text-muted">
+              Move option tokens between your wallet and margin account, or use wallet tokens to close written options.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 sm:[grid-template-columns:repeat(3,minmax(0,1fr))]">
+          <PositionBalance label="Wallet tokens" value={fmtQty(walletQty)} hint="Can sell or redeem" />
+          <PositionBalance label="Account long" value={fmtQty(accountLong)} hint="Can move to wallet" tone={accountLong > 0n ? "good" : undefined} />
+          <PositionBalance label="Written" value={fmtQty(accountShort)} hint="Short exposure" tone={accountShort > 0n ? "warn" : undefined} />
+        </div>
+      </div>
+
+      <ManageAction
+        icon={RotateCcw}
+        title="Close written options"
+        text="Best when you wrote this option and want to reduce risk. You need matching option tokens in your wallet."
+        available={maxClose > 0n}
+        blocked={!c.enabled ? c.reason : maxClose === 0n ? "No closable written position. You need written options and matching wallet tokens." : undefined}
       >
-        <AmountInput label="Amount" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(maxClose)} />
+        <AmountInput label="Options to close" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(maxClose)} />
         <TxButton
-          label="Close position"
+          label="Close written options"
           steps={selected !== undefined && cq ? closeShortSteps(selected, s, cq) : undefined}
           disabled={!c.enabled || !cq || cq > maxClose}
-          disabledReason={c.reason}
+          disabledReason={c.reason ?? (cq && cq > maxClose ? `You can close up to ${fmtQty(maxClose)}.` : undefined)}
           successMessage="Closed. Margin freed."
         />
-      </Section>
+      </ManageAction>
 
-      <Section
-        title="Move tokens into account"
-        text="Move tokens into your account to offset shorts and reduce margin."
-        blocked={!u.enabled ? u.reason : undefined}
+      <ManageAction
+        icon={ArrowRight}
+        title="Move wallet tokens into margin account"
+        text="Use this to offset written options or hold the long inside your margin account."
+        available={walletQty > 0n}
+        blocked={!u.enabled ? u.reason : walletQty === 0n ? "No wallet tokens to move in." : undefined}
       >
-        <AmountInput label="Amount" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(walletQty)} />
+        <AmountInput label="Options to move in" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(walletQty)} />
         <TxButton
-          label="Move in"
+          label="Move into account"
           steps={selected !== undefined && uq ? unwrapSteps(selected, s, uq) : undefined}
           disabled={!u.enabled || !uq || uq > walletQty}
-          disabledReason={u.reason}
+          disabledReason={u.reason ?? (uq && uq > walletQty ? `Wallet has ${fmtQty(walletQty)}.` : undefined)}
           successMessage="Moved into your account."
         />
-      </Section>
+      </ManageAction>
 
-      <Section
-        title="Move tokens to wallet"
-        text="Turn account longs into wallet tokens you can sell."
-        blocked={!w.enabled ? w.reason : undefined}
+      <ManageAction
+        icon={Wallet}
+        title="Move account longs to wallet"
+        text="Use this when you want wallet tokens you can sell on a venue or redeem after settlement."
+        available={accountLong > 0n}
+        blocked={!w.enabled ? w.reason : accountLong === 0n ? "No account longs to move out." : undefined}
       >
-        <AmountInput label="Amount" value={wrapAmt} onChange={setWrapAmt} unit="options" max={position > 0n ? fmtQty(position) : "0"} />
+        <AmountInput label="Options to move out" value={wrapAmt} onChange={setWrapAmt} unit="options" max={fmtQty(accountLong)} />
         <TxButton
-          label="Move out"
+          label="Move to wallet"
           steps={selected !== undefined && wq && address ? wrapSteps(selected, s, wq, address) : undefined}
-          disabled={!w.enabled || !wq}
-          disabledReason={w.reason}
+          disabled={!w.enabled || !wq || wq > accountLong}
+          disabledReason={w.reason ?? (wq && wq > accountLong ? `Account has ${fmtQty(accountLong)} long options.` : undefined)}
           successMessage="Sent to your wallet."
         />
-      </Section>
+      </ManageAction>
     </div>
   );
 }
 
-function Section({
+function PositionBalance({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "good" | "warn" }) {
+  return (
+    <div className={cx("min-w-0 rounded-xl border bg-surface p-3", tone === "good" ? "border-good/25" : tone === "warn" ? "border-accent/30" : "border-line")}>
+      <div className="text-[11px] font-bold uppercase text-faint">{label}</div>
+      <div
+        className={cx(
+          "num font-display mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(1rem,3.8vw,1.25rem)] font-bold",
+          tone === "good" ? "text-good" : tone === "warn" ? "text-accent" : "text-ink",
+        )}
+        title={value}
+      >
+        {value}
+      </div>
+      <div className="mt-0.5 text-[11px] text-muted">{hint}</div>
+    </div>
+  );
+}
+
+function ManageAction({
+  icon: Icon,
   title,
   text,
   children,
   blocked,
+  available,
 }: {
+  icon: typeof Shield;
   title: string;
   text: string;
   children: React.ReactNode;
   blocked?: string;
+  available: boolean;
 }) {
-  const [open, setOpen] = useState(!blocked);
   return (
-    <div className="rounded-2xl border border-line bg-surface-2/40 overflow-hidden">
-      <button
-        className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition hover:bg-surface-2/70"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <div>
-          <span className="block text-xs font-bold text-ink">{title}</span>
-          <span className="block text-[11px] text-muted">{blocked ?? text}</span>
+    <div className={cx("rounded-2xl border p-3.5", available ? "border-line bg-surface/70" : "border-line bg-surface-2/35")}>
+      <div className="mb-3 flex items-start gap-3">
+        <div className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-xl", available ? "bg-primary-soft text-primary" : "bg-surface-2 text-faint")}>
+          <Icon className="h-4 w-4" />
         </div>
-        <span className="text-muted">{open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
-      </button>
-      {open && <div className="space-y-3 border-t border-line p-3.5 bg-surface/40">{children}</div>}
+        <div>
+          <div className="font-bold">{title}</div>
+          <p className="mt-0.5 text-xs leading-5 text-muted">{blocked ?? text}</p>
+        </div>
+      </div>
+      <div className={cx("space-y-3", !available && "opacity-75")}>{children}</div>
     </div>
   );
 }
@@ -1130,6 +1256,8 @@ export function StatePill({ state }: { state: string }) {
 
 function Terms({ s, market }: { s: Series; market?: Hex }) {
   const [open, setOpen] = useState(false);
+  const isCall = s.optionType === 0;
+  const leg = legOf(s);
   return (
     <Card
       title={
@@ -1138,41 +1266,84 @@ function Terms({ s, market }: { s: Series; market?: Hex }) {
           onClick={() => setOpen((o) => !o)}
           className="flex w-full items-center justify-between text-left"
         >
-          <span className="text-xs sm:text-sm font-bold text-ink">Details and addresses</span>
+          <span className="text-xs sm:text-sm font-bold text-ink">Market details</span>
           <span className="text-xs text-primary font-semibold">
-            {open ? "Hide ▲" : "Show ▼"}
+            {open ? "Hide" : "Show"}
           </span>
         </button>
       }
     >
       {open ? (
-        <div className="flex flex-col gap-1 text-xs pt-2">
-          <Row label="Type" value={`European ${optionTypeName(s.optionType).toLowerCase()}`} />
-          <Row label="Strike" value={`$${fmtLevel(s.strikeWad)}`} />
-          <Row label="Contract size" value={`1 option = ${legOf(s).size} ${s.underlyingSymbol}`} />
-          <Row label="Settles in" value={s.assetSymbol} />
-          <Row label="Expiry" value={fmtExpiry(s.expiry)} />
-          <Row label="Settlement price" value="Official feed price at the expiry time" />
-          <Row label="Payout per option" value={s.optionType === 0 ? "Settlement price − strike, if above" : "Strike − settlement price, if below"} />
-          <Row
-            label="Option token"
-            value={
-              <span>
-                {shortAddr(s.wrapper)} <CopyButton text={s.wrapper} label="token address" />
+        <div className="space-y-3 pt-2">
+          <div className="rounded-2xl border border-line bg-surface-2/60 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className={cx("grid h-8 w-8 place-items-center rounded-xl", isCall ? "bg-good/10 text-good" : "bg-bad/10 text-bad")}>
+                {isCall ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
               </span>
-            }
-          />
-          <Row
-            label="Order book"
-            value={market ? <span>{shortAddr(market)} <CopyButton text={market} label="market address" /></span> : "Not listed"}
-          />
+              <div>
+                <div className="font-display text-base font-bold">{s.underlyingSymbol} {optionTypeName(s.optionType)}</div>
+                <div className="text-xs text-muted">{isCall ? "Pays when settlement is above strike" : "Pays when settlement is below strike"}</div>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <TermTile label="Strike" value={`$${fmtLevel(s.strikeWad)}`} />
+              <TermTile label="Expires" value={fmtExpiry(s.expiry)} />
+              <TermTile label="Contract size" value={`1 option = ${leg.size} ${s.underlyingSymbol}`} />
+              <TermTile label="Cash asset" value={s.assetSymbol} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-line bg-surface-2/60 p-3">
+            <div className="text-[11px] font-bold uppercase text-faint">Expiry payout</div>
+            <div className="mt-1 text-sm font-semibold text-ink">
+              {isCall ? "If settlement price is above strike:" : "If settlement price is below strike:"}
+            </div>
+            <div className="mt-2 rounded-xl bg-surface px-3 py-2 text-xs text-muted">
+              {isCall ? "payout = settlement price - strike" : "payout = strike - settlement price"}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              The settlement price comes from the official feed at expiry. The option is European, so the protocol settles it at expiry rather than exercising early.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-line bg-surface-2/60 p-3">
+            <div className="text-[11px] font-bold uppercase text-faint">Contracts</div>
+            <div className="mt-2 space-y-2">
+              <AddressLine label="Option token" value={s.wrapper} copyLabel="token address" />
+              <AddressLine label="Order book" value={market} copyLabel="market address" empty="Not listed yet" />
+            </div>
+          </div>
         </div>
       ) : (
         <p className="text-xs text-muted">
-          Cash-settled in {s.assetSymbol} at expiry. Terms can't change.
+          Cash-settled in {s.assetSymbol}. The strike, expiry and payout formula cannot change.
         </p>
       )}
     </Card>
+  );
+}
+
+function TermTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-line/70 bg-surface px-3 py-2">
+      <div className="text-[11px] font-bold uppercase text-faint">{label}</div>
+      <div className="mt-0.5 text-sm font-bold text-ink">{value}</div>
+    </div>
+  );
+}
+
+function AddressLine({ label, value, copyLabel, empty }: { label: string; value?: string; copyLabel: string; empty?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-line/70 bg-surface px-3 py-2 text-xs">
+      <span className="font-semibold text-muted">{label}</span>
+      {value ? (
+        <span className="flex items-center gap-1.5 font-bold text-ink">
+          {shortAddr(value)} <CopyButton text={value} label={copyLabel} />
+        </span>
+      ) : (
+        <span className="font-semibold text-faint">{empty ?? "Unavailable"}</span>
+      )}
+    </div>
   );
 }
 

@@ -24,7 +24,7 @@ import {
 import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
 import { INDEXER_URL, IS_LOCAL } from "../../config/network.ts";
-import { ADDR, DEPLOYED_AT_BLOCK, KURU_VENUE, publicClient as c } from "./client.ts";
+import { ADDR, DEPLOYED_AT_BLOCK, DIRECT_VENUE, KURU_VENUE, publicClient as c } from "./client.ts";
 import { GROUP_STATES, HEALTH_STATES, SURFACE_STATUS, type GroupState, type Health, type Position, type Quote, type Series, type SurfaceStatus } from "./types.ts";
 
 const LOG_CHUNK = IS_LOCAL ? 50_000n : 100n; // Monad's public RPC: eth_getLogs over at most 100 blocks
@@ -121,6 +121,7 @@ export interface SeriesMarket {
   mark?: bigint;
   iv?: bigint;
   quote?: Quote;
+  quotes?: Quote[];
   state: GroupState;
 }
 
@@ -128,13 +129,14 @@ const kuruBookAbi = [
   { type: "function", name: "bestBidAsk", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }, { type: "uint256" }] },
 ] as const;
 
-/** The Kuru book's best bid and ask (prices per contract, WAD), or undefined without a tradable market. */
-export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
+async function getVenueQuote(venueId: Hex, venueName: string, seriesId: Hex): Promise<Quote | undefined> {
   try {
-    const [, market] = await c.readContract({ address: ADDR.venues, abi: venueRegistryAbi, functionName: "tradableMarket", args: [KURU_VENUE, seriesId] });
+    const [, market] = await c.readContract({ address: ADDR.venues, abi: venueRegistryAbi, functionName: "tradableMarket", args: [venueId, seriesId] });
     const [bid, ask] = await c.readContract({ address: market, abi: kuruBookAbi, functionName: "bestBidAsk" });
     return {
       market,
+      venueId,
+      venueName,
       bid: bid === 0n || bid === maxUint256 ? undefined : bid,
       ask: ask === 0n || ask === maxUint256 ? undefined : ask,
     };
@@ -143,14 +145,42 @@ export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
   }
 }
 
+/** Registered venue quotes. Kuru and Optara Direct expose the same `bestBidAsk` view in the local stack. */
+export async function getQuotes(seriesId: Hex): Promise<Quote[]> {
+  const quotes = await Promise.all([
+    getVenueQuote(DIRECT_VENUE, "Optara", seriesId),
+    getVenueQuote(KURU_VENUE, "Kuru", seriesId),
+  ]);
+  return quotes.filter((q): q is Quote => !!q);
+}
+
+/** Best currently usable quote, preserving old callers. Prefer the lowest ask, then highest bid. */
+export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
+  const quotes = await getQuotes(seriesId);
+  return [...quotes].sort((a, b) => {
+    if (a.ask !== undefined && b.ask !== undefined && a.ask !== b.ask) return a.ask < b.ask ? -1 : 1;
+    if (a.ask !== undefined) return -1;
+    if (b.ask !== undefined) return 1;
+    if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
+    return 0;
+  })[0];
+}
+
 export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
-  const [price, iv, quote, state] = await Promise.all([
+  const [price, iv, quotes, state] = await Promise.all([
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.id] }).catch(() => undefined),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.id] }).catch(() => undefined),
-    getQuote(s.id),
+    getQuotes(s.id),
     getGroupState(s.groupId),
   ]);
-  return { mark: price?.[0], iv: iv?.[0], quote, state };
+  const quote = [...quotes].sort((a, b) => {
+    if (a.ask !== undefined && b.ask !== undefined && a.ask !== b.ask) return a.ask < b.ask ? -1 : 1;
+    if (a.ask !== undefined) return -1;
+    if (b.ask !== undefined) return 1;
+    if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
+    return 0;
+  })[0];
+  return { mark: price?.[0], iv: iv?.[0], quote, quotes, state };
 }
 
 export async function getGroupState(groupId: Hex): Promise<GroupState> {
@@ -226,6 +256,10 @@ export const kuruTakerFee = (market: Address, premiumIn: bigint) =>
   c.readContract({ address: ADDR.kuruAdapter, abi: KURU_ADAPTER_QUOTE_ABI, functionName: "quoteBuy", args: [market, premiumIn] });
 export const kuruSellFee = (market: Address, proceeds: bigint) =>
   c.readContract({ address: ADDR.kuruAdapter, abi: KURU_ADAPTER_QUOTE_ABI, functionName: "quoteSell", args: [market, proceeds] });
+export const venueBuyFee = (quote: Quote, premiumIn: bigint) =>
+  quote.venueId === KURU_VENUE ? kuruTakerFee(quote.market, premiumIn) : Promise.resolve(0n);
+export const venueSellFee = (quote: Quote, proceeds: bigint) =>
+  quote.venueId === KURU_VENUE ? kuruSellFee(quote.market, proceeds) : Promise.resolve(0n);
 const KURU_ADAPTER_QUOTE_ABI = [
   { type: "function", name: "quoteBuy", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "quoteSell", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
@@ -605,6 +639,7 @@ export async function getTradePnl(owner: Address, accountIds: bigint[], all: Ser
       // Tokens in the wallet that were never bought here (received by transfer) have no cost on record.
       if (w > 0 && r.paid === 0 && r.received === 0) r.approximate = true;
       const avg = averageCost(r.fills.sort((x, y) => before(x.order, y.order)).map((x) => x.f));
+      if (avg.unknownQty > 1e-9) r.approximate = true;
       return {
         series: s,
         paid: r.paid,
