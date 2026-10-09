@@ -33,6 +33,7 @@ import {
 import { AmountInput, Card, CopyButton, Details, EmptyState, Pill, Row, Segmented, Skeleton, Stat, Term, cx, useTicker } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { BackingCard } from "../components/BackingCard.tsx";
+import { OwnerBookPanel } from "../components/OwnerBookPanel.tsx";
 import { LimitsPanel } from "../components/LimitsPanel.tsx";
 import { lessSlip, useSlippage, venueMinQty, withSlip } from "../lib/optara/limits.ts";
 import { buyLimits } from "./Trade.tsx";
@@ -290,6 +291,8 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
             <p className="mt-2 text-xs text-muted">Use this simulator to test settlement prices. The amount follows the order form in the action panel.</p>
           </Card>
 
+          <OwnerBookPanel series={series} />
+
           <div id="backing">
             <BackingCard series={series} spot={spotNum} />
           </div>
@@ -332,6 +335,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 ctx={ctx}
                 ask={market?.quote?.ask}
                 bid={market?.quote?.bid}
+                bidQty={market?.quote?.bidQty}
                 mark={market?.mark}
                 market={market?.quote?.market}
                 venueId={market?.quote?.venueId}
@@ -453,6 +457,7 @@ function TradePanel({
   ctx,
   ask,
   bid,
+  bidQty,
   mark,
   market,
   venueId,
@@ -465,6 +470,7 @@ function TradePanel({
   ctx: ActionContext;
   ask?: bigint;
   bid?: bigint;
+  bidQty?: bigint;
   mark?: bigint;
   market?: Hex;
   venueId?: Hex;
@@ -489,7 +495,7 @@ function TradePanel({
       {side === "buy" ? (
         <BuyPanel s={s} ctx={ctx} ask={ask} market={market} onQty={onQty} />
       ) : (
-        <SellPanel s={s} ctx={ctx} bid={bid} mark={mark} market={market} venueId={venueId} venueName={venueName} walletQty={walletQty} onQty={onQty} />
+        <SellPanel s={s} ctx={ctx} bid={bid} bidQty={bidQty} mark={mark} market={market} venueId={venueId} venueName={venueName} walletQty={walletQty} onQty={onQty} />
       )}
     </div>
   );
@@ -539,21 +545,28 @@ function BuyPanel({
     enabled: !!premiumIn && !!selectedQuote,
   });
 
-  const estQty =
+  const rawQty =
     premiumIn && ask && fees.data
       ? (toWadFromNative(premiumIn - fees.data.kuru, s.assetDecimals) * WAD) / ask
       : undefined;
+  // A venue that reports depth (Optara Direct) fills at most what it offers; the rest of the budget is refunded.
+  const avail = selectedQuote?.askQty;
+  const depthLimited = rawQty !== undefined && avail !== undefined && rawQty > avail;
+  const estQty = depthLimited ? avail : rawQty;
+  const spend = depthLimited && ask ? toNative((avail! * ask) / WAD, s.assetDecimals) + 1n : undefined; // premium the fill uses
 
-  const total = premiumIn !== undefined && fees.data ? premiumIn + fees.data.optara : undefined;
+  const total = premiumIn !== undefined && fees.data ? premiumIn + fees.data.optara : undefined; // what you put up
+  // what the buy really costs: a depth-limited fill spends less and pays the fee on that only
+  const cost = spend !== undefined && premiumIn && fees.data ? spend + (fees.data.optara * spend) / premiumIn : total;
   // Far above fair value, the buyer must confirm first (re-asked whenever the option or amount changes).
-  const check = buyCheck(estQty, total, s.assetDecimals, sm?.mark);
+  const check = buyCheck(estQty, cost, s.assetDecimals, sm?.mark);
   const [ack, setAck] = useState(false);
   useEffect(() => setAck(false), [s.id, amount]);
   useEffect(() => {
     if (!estQty) return onQty(1);
     const q = Number(estQty) / 1e18;
-    onQty(q, total !== undefined ? Number(total) / 10 ** s.assetDecimals / q : undefined);
-  }, [estQty, total, s.assetDecimals, onQty]);
+    onQty(q, cost !== undefined ? Number(cost) / 10 ** s.assetDecimals / q : undefined);
+  }, [estQty, cost, s.assetDecimals, onQty]);
   const tooMuch = total !== undefined && balance !== undefined && total > balance;
 
   const steps =
@@ -642,12 +655,29 @@ function BuyPanel({
           </div>
         </div>
 
+        {avail !== undefined && avail === 0n && (
+          <p className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] text-warn">Nothing is for sale on {venueName} right now.</p>
+        )}
+        {depthLimited && avail! > 0n && spend !== undefined && (
+          <div className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">
+            <p className="font-semibold text-warn">
+              Only {fmtQty(avail!)} option{avail === WAD ? " is" : "s are"} for sale at this price on {venueName}.
+            </p>
+            <p className="mt-0.5 text-muted">
+              Your buy fills {fmtQty(avail!)} for about {fmtNative(spend, s.assetDecimals)} {s.assetSymbol}; the rest of your budget comes straight back.
+            </p>
+            <button type="button" onClick={() => setAmount(fmtNative(spend, s.assetDecimals, 6).replace(/,/g, ""))} className="mt-1.5 text-xs font-semibold text-primary underline cursor-pointer">
+              Spend just {fmtNative(spend, s.assetDecimals, 6)} {s.assetSymbol}
+            </button>
+          </div>
+        )}
+
         <div className="mt-2.5">
-          <BuyOutcome series={s} qty={estQty} total={total} spot={spot} mark={sm?.mark} ack={ack} onAck={setAck} />
+          <BuyOutcome series={s} qty={estQty} total={cost} spot={spot} mark={sm?.mark} ack={ack} onAck={setAck} />
         </div>
 
         <div className="mt-2.5">
-          <Details summary={<span>Total cost <b className="num">{total !== undefined ? `${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "—"}</b></span>}>
+          <Details summary={<span>Total cost <b className="num">{cost !== undefined ? `${fmtNative(cost, s.assetDecimals)} ${s.assetSymbol}` : "—"}</b></span>}>
             <Row
               label="Premium"
               value={premiumIn !== undefined ? `${fmtNative(premiumIn, s.assetDecimals)} ${s.assetSymbol}` : "—"}
@@ -667,8 +697,8 @@ function BuyPanel({
       <LimitsPanel limits={buyLimits(s, premiumIn, estQty, fees.data, slip)} />
 
       <TxButton
-        label={estQty && total !== undefined ? `Buy ${fmtQty(estQty)} for ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol}` : "Buy"}
-        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included) for about ${fmtQty(estQty)} ${seriesName(s)} options on ${venueName}${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
+        label={estQty && cost !== undefined ? `Buy ${fmtQty(estQty)} for ${fmtNative(cost, s.assetDecimals)} ${s.assetSymbol}` : "Buy"}
+        summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included${depthLimited ? "; the unused part is refunded" : ""}) for about ${fmtQty(estQty)} ${seriesName(s)} options on ${venueName}${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
         steps={steps}
         disabled={!a.enabled || !steps || tooMuch || (check.needsAck && !ack)}
         disabledReason={a.reason ?? (check.needsAck && !ack ? "Confirm the price above first." : undefined)}
@@ -947,6 +977,7 @@ function SellPanel({
   s,
   ctx,
   bid,
+  bidQty,
   mark,
   market,
   venueId,
@@ -957,6 +988,8 @@ function SellPanel({
   s: Series;
   ctx: ActionContext;
   bid?: bigint;
+  /** Options the bid will buy (venues that report depth); a bigger sale sells this much and returns the rest. */
+  bidQty?: bigint;
   mark?: bigint;
   market?: Hex;
   venueId?: Hex;
@@ -971,7 +1004,9 @@ function SellPanel({
   useEffect(() => onQty(qty ? Number(qty) / 1e18 : 1), [qty, onQty]);
   const a = availability("sell", ctx);
 
-  const gross = qty && bid ? toNative((qty * bid) / WAD, s.assetDecimals) : undefined;
+  const sold = qty !== undefined && bidQty !== undefined && qty > bidQty ? bidQty : qty;
+  const depthLimited = qty !== undefined && sold !== qty;
+  const gross = sold && bid ? toNative((sold * bid) / WAD, s.assetDecimals) : undefined;
   const fee = useQuery({
     queryKey: ["sellFee", venueId, market, gross?.toString()],
     queryFn: () => venueSellFee({ market: market!, venueId, venueName }, gross!),
@@ -1002,7 +1037,12 @@ function SellPanel({
         <Row label="Best bid per option" value={bid !== undefined ? `${fmtPrice(bid)} ${s.assetSymbol}${venueName ? ` on ${venueName}` : ""}` : "Nobody is bidding right now"} />
         <Row label={<Term tip="Charged by the selected venue on the sale.">Venue fee</Term>} value={fee.data !== undefined ? `−${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
         <Row strong label="Cash to your wallet" value={net !== undefined ? `+${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : "—"} tone="good" />
-        <SellValueNotice qty={qty} proceeds={net} decimals={s.assetDecimals} mark={mark} />
+        <SellValueNotice qty={sold} proceeds={net} decimals={s.assetDecimals} mark={mark} />
+        {depthLimited && (
+          <p className="pt-1 text-[13px] font-semibold text-warn">
+            {sold === 0n ? `Nobody is bidding on ${venueName ?? "this venue"} right now.` : `The bid takes only ${fmtQty(sold!)} option${sold === WAD ? "" : "s"}: that many sell, the rest stay in your wallet.`}
+          </p>
+        )}
       </div>
 
       <LimitsPanel
@@ -1018,7 +1058,7 @@ function SellPanel({
 
       <TxButton
         label="Sell Options Now"
-        summary={qty && net !== undefined ? `Sell ${fmtQty(qty)} ${seriesName(s)} options for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : undefined}
+        summary={sold && net !== undefined ? `Sell ${fmtQty(sold)} ${seriesName(s)} options for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : undefined}
         steps={steps}
         disabled={!steps || tooMuch}
         disabledReason={a.reason}

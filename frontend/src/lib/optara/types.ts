@@ -49,6 +49,9 @@ export interface Quote {
   market: Address;
   venueId?: Hex;
   venueName?: string;
+  /** Options for sale at the ask / wanted at the bid (WAD), when the venue reports depth (Optara Direct does). */
+  askQty?: bigint;
+  bidQty?: bigint;
 }
 
 /** Surface status (VolSurfaceOracle.SurfaceStatus). */

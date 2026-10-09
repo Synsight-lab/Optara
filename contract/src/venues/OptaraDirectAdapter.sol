@@ -11,6 +11,11 @@ import {ZeroAddress, FeeTooHigh} from "../libraries/Errors.sol";
 /// @notice Simple protocol-owned spot book for option wrappers. It is intentionally isolated from clearing: fills
 ///         move ERC-20 wrapper/quote balances only, and never affect margin until the user unwraps or closes.
 contract OptaraDirectMarket {
+    using SafeERC20 for IERC20;
+
+    /// @notice The owner took inventory (options) or bid funding (quote) back out of the book.
+    event Withdrawn(address indexed token, uint256 amount, address indexed to);
+
     IERC20 public immutable base;
     IERC20 public immutable quote;
     address public immutable adapter;
@@ -44,7 +49,10 @@ contract OptaraDirectMarket {
         address adapter_,
         address owner_
     ) {
-        if (address(base_) == address(0) || address(quote_) == address(0) || adapter_ == address(0) || owner_ == address(0)) {
+        if (
+            address(base_) == address(0) || address(quote_) == address(0) || adapter_ == address(0)
+                || owner_ == address(0)
+        ) {
             revert ZeroAddress();
         }
         (base, quote, adapter, owner) = (base_, quote_, adapter_, owner_);
@@ -63,6 +71,15 @@ contract OptaraDirectMarket {
 
     function setBid(uint256 price, uint256 size) external onlyOwner {
         (bidPrice, bidSize) = (price, size);
+    }
+
+    /// @notice Lets the owner take back what the book holds: unsold options (base) or unused bid funding (quote).
+    ///         Without it, anything put into the book could only leave through trades. Withdrawing inventory doesn't
+    ///         lower the ask size by itself; a buy above what the book holds reverts, so lower the ask too.
+    function withdraw(IERC20 token, uint256 amount, address to) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        token.safeTransfer(to, amount);
+        emit Withdrawn(address(token), amount, to);
     }
 
     function buy(uint256 premiumIn, address recipient) external onlyAdapter returns (uint256 premiumSpent) {

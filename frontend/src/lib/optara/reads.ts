@@ -134,16 +134,43 @@ const kuruBookAbi = [
   { type: "function", name: "bestBidAsk", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }, { type: "uint256" }] },
 ] as const;
 
+const WAD_ = 10n ** 18n;
+const directDepthAbi = [
+  { type: "function", name: "askSize", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "bidSize", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "sizePrecision", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "base", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
+
 async function getVenueQuote(venueId: Hex, venueName: string, seriesId: Hex): Promise<Quote | undefined> {
   try {
     const [, market] = await c.readContract({ address: ADDR.venues, abi: venueRegistryAbi, functionName: "tradableMarket", args: [venueId, seriesId] });
     const [bid, ask] = await c.readContract({ address: market, abi: kuruBookAbi, functionName: "bestBidAsk" });
+    // Optara Direct books quote one level with a size, and sell only what they hold: report the depth so forms never
+    // promise more than can fill.
+    let askQty: bigint | undefined;
+    let bidQty: bigint | undefined;
+    if (venueId === DIRECT_VENUE) {
+      const read = (functionName: string) => c.readContract({ address: market, abi: directDepthAbi, functionName } as never) as Promise<bigint>;
+      const [askSize, bidSize, sizePrecision, base] = await Promise.all([
+        read("askSize"),
+        read("bidSize"),
+        read("sizePrecision"),
+        c.readContract({ address: market, abi: directDepthAbi, functionName: "base" }),
+      ]);
+      const held = await c.readContract({ address: base as Address, abi: erc20Abi, functionName: "balanceOf", args: [market] });
+      const asked = (askSize * WAD_) / sizePrecision;
+      askQty = asked < held ? asked : held;
+      bidQty = (bidSize * WAD_) / sizePrecision;
+    }
     return {
       market,
       venueId,
       venueName,
       bid: bid === 0n || bid === maxUint256 ? undefined : bid,
       ask: ask === 0n || ask === maxUint256 ? undefined : ask,
+      askQty,
+      bidQty,
     };
   } catch {
     return undefined;

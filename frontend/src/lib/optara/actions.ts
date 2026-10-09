@@ -7,6 +7,7 @@ import { erc20Abi, maxUint256, parseEventLogs, type Address, type Hex, type Tran
 import {
   buildSettlementProof,
   liquidationModuleAbi,
+  liveSpotOracleAbi,
   optionClearingAbi,
   optionSeriesRegistryAbi,
   settlementWindowAbi,
@@ -281,7 +282,7 @@ export function createSeriesWithDirectMarketSteps(params: SeriesParams, owner?: 
         if (!seriesId) seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
         const terms = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "getSeries", args: [seriesId] });
         const quoteDecimals = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "settlementAssetDecimals", args: [params.settlementAsset] });
-        const receipt = await deploy(w, directMarketDeployCall(terms.wrapper, params.settlementAsset, BigInt(quoteDecimals), owner ?? w.account.address), onSent);
+        const receipt = await deploy(w, directMarketDeployCall(terms.wrapper, params.settlementAsset, BigInt(quoteDecimals), owner ?? w.account.address, await directPricePrecision(params.volSurfaceProductId)), onSent);
         market = receipt.contractAddress as Address;
         return receipt;
       },
@@ -307,7 +308,7 @@ export function registerExistingDirectMarketSteps(series: Series, owner?: Addres
       label: "Create Optara Direct book",
       hint: "Deploys an in-house venue book for this option token.",
       run: async (w, onSent) => {
-        const receipt = await deploy(w, directMarketDeployCall(series.wrapper, series.settlementAsset, BigInt(series.assetDecimals), owner ?? w.account.address), onSent);
+        const receipt = await deploy(w, directMarketDeployCall(series.wrapper, series.settlementAsset, BigInt(series.assetDecimals), owner ?? w.account.address, await directPricePrecision(series.productId)), onSent);
         market = receipt.contractAddress as Address;
         return receipt;
       },
@@ -324,10 +325,23 @@ export function registerExistingDirectMarketSteps(series: Series, owner?: Addres
   ];
 }
 
-function directMarketDeployCall(wrapper: Address, quote: Address, quoteDecimals: bigint, owner: Address) {
+function directMarketDeployCall(wrapper: Address, quote: Address, quoteDecimals: bigint, owner: Address, pricePrecision: bigint) {
   return {
     abi: optaraDirectMarketAbi,
     bytecode: optaraDirectMarketBytecode,
-    args: [wrapper, quote, 18n, quoteDecimals, 10_000n, 10n ** 16n, ADDR.directAdapter, owner],
+    args: [wrapper, quote, 18n, quoteDecimals, pricePrecision, 10n ** 16n, ADDR.directAdapter, owner],
   } as const;
+}
+
+/**
+ * Price steps for a new Direct book: 1e4 (= $0.0001) is fine for ETH or BTC options, but a MON option worth ~$0.002
+ * would move in 5% jumps; under a $10 underlying, use 1e6 (= $0.000001).
+ */
+async function directPricePrecision(productId: Hex): Promise<bigint> {
+  try {
+    const [spot] = (await publicClient.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] })) as unknown as [bigint];
+    return spot < 10n * 10n ** 18n ? 1_000_000n : 10_000n;
+  } catch {
+    return 10_000n;
+  }
 }

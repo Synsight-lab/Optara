@@ -1,6 +1,6 @@
 /** FRONTEND.md §11 "Units": formatting, parsing, health classification. */
 import { describe, expect, it } from "vitest";
-import { fmtDuration, fmtFixed, fmtIv, fmtLevel, fmtPrice, fmtQty, fmtWad, parseFixed, parseQty, seriesName } from "./format.ts";
+import { fmtDuration, fmtFixed, fmtIv, fmtLevel, fmtNative, fmtPrice, fmtQty, fmtWad, parseFixed, parseQty, seriesName } from "./format.ts";
 import { classifyHealth, healthBar } from "./health.ts";
 import type { Health } from "./types.ts";
 
@@ -22,6 +22,8 @@ describe("format", () => {
     expect(fmtPrice(243n * 10n ** 14n)).toBe("0.0243");
     expect(fmtLevel(2430n * 10n ** 13n)).toBe("0.0243");
     expect(fmtLevel(24_224n * 10n ** 12n)).toBe("0.02422"); // MON spot: 4 significant digits
+    expect(fmtNative(100n, 6)).toBe("0.0001"); // $0.0001 of USDC, not "0.00"
+    expect(fmtNative(1_234_567n, 6)).toBe("1.23");
     expect(fmtPrice(2_336_054n * 10n ** 9n)).toBe("0.002336");
     expect(fmtLevel(4500n * E18)).toBe("4,500");
     expect(fmtLevel(248030n * 10n ** 16n)).toBe("2,480.30");

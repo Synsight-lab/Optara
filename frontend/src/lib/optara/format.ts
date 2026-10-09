@@ -40,7 +40,15 @@ export function fmtLevelNum(x: number): string {
   const whole = Math.abs(x - Math.round(x)) < 0.005;
   return x.toLocaleString("en-US", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
 }
-export const fmtNative = (x: bigint, decimals: number, dp = 2) => fmtFixed(x, decimals, dp);
+/**
+ * A cash amount in the token's own decimals. Amounts too small to show at `dp` decimals (e.g. $0.0001 of USDC for a
+ * cheap MON option) keep 4 significant digits instead of reading "0.00".
+ */
+export const fmtNative = (x: bigint, decimals: number, dp = 2) => {
+  const abs = x < 0n ? -x : x;
+  if (abs !== 0n && decimals > dp && abs < 10n ** BigInt(decimals - dp)) return `${x < 0n ? "−" : ""}${fmtSmall(Number(abs) / 10 ** decimals)}`;
+  return fmtFixed(x, decimals, dp);
+};
 export const fmtUsd = (x: bigint, decimals = 6, dp = 2) => `$${fmtFixed(x, decimals, dp)}`;
 /** IV (WAD) as a percentage: 0.6e18 → "60.0%". */
 export const fmtIv = (sigmaWad: bigint, dp = 1) => `${fmtFixed(sigmaWad * 100n, 18, dp)}%`;
