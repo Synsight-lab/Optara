@@ -223,7 +223,7 @@ contract LocalStack is Manifest, ListingCalls, LocalMarketData {
             usdcUsd,
             monUsdc,
             1.1e18,
-            10_000_000e18,
+            50_000_000e18,
             900,
             _strikeGrid(monUsdc)
         );

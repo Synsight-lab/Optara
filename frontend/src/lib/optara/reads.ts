@@ -133,7 +133,11 @@ export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
   try {
     const [, market] = await c.readContract({ address: ADDR.venues, abi: venueRegistryAbi, functionName: "tradableMarket", args: [KURU_VENUE, seriesId] });
     const [bid, ask] = await c.readContract({ address: market, abi: kuruBookAbi, functionName: "bestBidAsk" });
-    return { market, bid: bid === 0n ? undefined : bid, ask: ask === maxUint256 ? undefined : ask };
+    return {
+      market,
+      bid: bid === 0n || bid === maxUint256 ? undefined : bid,
+      ask: ask === 0n || ask === maxUint256 ? undefined : ask,
+    };
   } catch {
     return undefined;
   }

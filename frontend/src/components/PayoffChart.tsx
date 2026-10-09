@@ -35,6 +35,8 @@ function axisMoney(v: number): string {
 }
 
 export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, side, assetSymbol, underlyingSymbol }: PayoffProps) {
+  const premiumPerOption = Number.isFinite(premium) && premium > 0 ? premium : 0;
+  const qtySafe = Number.isFinite(qty) && qty > 0 ? qty : 0;
   const svg = useRef<SVGSVGElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(640);
@@ -50,7 +52,7 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   const PAD = { l: narrow ? 50 : 60, r: 10, t: 32, b: 28 };
   const uid = useId().replace(/:/g, "");
   const leg: Leg = useMemo(() => ({ optionType, strike, size }), [optionType, strike, size]);
-  const be = breakevenOf(leg, premium);
+  const be = breakevenOf(leg, premiumPerOption);
   const [lo, hi] = useMemo(() => chartRange([spot ?? strike, strike, be ?? strike]), [spot, strike, be]);
 
   // The price being explored. It follows today's price until the user picks one.
@@ -60,12 +62,12 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
 
   const [dragging, setDragging] = useState(false);
 
-  const pnl = (s: number) => profitAt(leg, side, qty, premium, s);
+  const pnl = (s: number) => profitAt(leg, side, qtySafe, premiumPerOption, s);
   const { points, yLo, yHi, yTicks } = useMemo(() => {
     const pts: [number, number][] = [];
     for (let i = 0; i <= SAMPLES; i++) {
       const s = lo + ((hi - lo) * i) / SAMPLES;
-      pts.push([s, profitAt(leg, side, qty, premium, s)]);
+      pts.push([s, profitAt(leg, side, qtySafe, premiumPerOption, s)]);
     }
     const ys = pts.map((p) => p[1]);
     const a = Math.min(0, ...ys);
@@ -77,7 +79,7 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
     if (b > 0 && !ticks.some((t) => t > 0)) ticks.push(b);
     if (!ticks.includes(0)) ticks.push(0);
     return { points: pts, yLo: a - pad, yHi: b + pad, yTicks: ticks };
-  }, [lo, hi, leg, side, qty, premium]);
+  }, [lo, hi, leg, side, qtySafe, premiumPerOption]);
 
   const x = (s: number) => PAD.l + ((s - lo) / (hi - lo)) * (W - PAD.l - PAD.r);
   const y = (v: number) => PAD.t + ((yHi - v) / (yHi - yLo)) * (H - PAD.t - PAD.b);
@@ -101,10 +103,10 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
 
   // Readout for the picked price.
   const net = pnl(price);
-  const payout = payoutPerOption(leg, price) * qty;
-  const total = premium * qty;
+  const payout = payoutPerOption(leg, price) * qtySafe;
+  const total = premiumPerOption * qtySafe;
   const fromToday = spot ? ((price - spot) / spot) * 100 : undefined;
-  const { maxGain, maxLoss } = extremes(leg, side, qty, premium);
+  const { maxGain, maxLoss } = extremes(leg, side, qtySafe, premiumPerOption);
   const sentence =
     side === "long"
       ? payout === 0

@@ -167,7 +167,7 @@ const mintableAbi = [{ type: "function", name: "mint", stateMutability: "nonpaya
 function makerSizeForProduct(p: ReturnType<typeof stackProducts>[number], override?: bigint): bigint {
   if (override !== undefined) return override;
   const symbol = p.underlyingSymbol.toUpperCase();
-  if (symbol === "MON" || symbol === "WMON") return 100_000n * 10n ** 18n;
+  if (symbol === "MON" || symbol === "WMON") return 1_000_000n * 10n ** 18n;
   if (symbol === "BTC" || symbol === "WBTC") return 20n * 10n ** 18n;
   return 200n * 10n ** 18n;
 }
@@ -177,7 +177,10 @@ function makerSizeForProduct(p: ReturnType<typeof stackProducts>[number], overri
  * around the protocol's mark (`priceOf`), `size` options each side: bids funded with USDC, asks with options it
  * writes straight into the book (each mint with a fresh spot update at `price`). Returns the maker's account id.
  */
-export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint } = {}): Promise<bigint> {
+export async function quoteBooks(
+  s: LocalStack,
+  opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint; includeKuru?: boolean } = {},
+): Promise<bigint> {
   const products = stackProducts(s.manifest);
   const px = s.manifest.proxies;
   const mm = stackAccount(0);
@@ -191,7 +194,7 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
     const now = (await s.test.getBlock()).timestamp;
     const livePrice = productSpotPrice(p, products.length === 1 ? opts.price : undefined);
     const size = makerSizeForProduct(p, opts.size);
-    const indices = (opts.indices ?? p.seriesIds.map((_, i) => i)).filter((i) => p.expiries[Math.floor(i / 8)]! > now);
+    const indices = (opts.indices ?? p.seriesIds.map((_, i) => i)).filter((i) => p.expiries[Math.floor(i / 8)]! > now + MIN_SEED_TIME_REMAINING);
     if (indices.length === 0) continue;
     // a fresh surface too: on a fork with real Kuru this runs after listing every Kuru market, which takes minutes
     await pushOracles(s, 4, await freshOracleUpdateForProduct(s, p, { price: livePrice }));
@@ -203,6 +206,7 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
       if (firstAccount === 0n) firstAccount = account;
       await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 100_000_000_000_000n] });
       for (const i of chunk) {
+        if (p.expiries[Math.floor(i / 8)]! <= (await s.test.getBlock()).timestamp + MIN_SEED_TIME_REMAINING) continue;
         const id = p.seriesIds[i]! as Hex;
         let mid: bigint;
         try {
@@ -212,11 +216,18 @@ export async function quoteBooks(s: LocalStack, opts: { price?: number; indices?
         }
         const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
         // With real Kuru (a fork) the Kuru books aren't mocks and are quoted by quoteRealKuru; their slots here are zero.
-        const books = [p.kuruBooks[i], ...(p.optaraDirectBooks?.[i] ? [p.optaraDirectBooks[i]] : [])].filter((b) => b && !/^0x0{40}$/i.test(b)) as Address[];
+        const books = [
+          ...(opts.includeKuru === false ? [] : [p.kuruBooks[i]]),
+          ...(p.optaraDirectBooks?.[i] ? [p.optaraDirectBooks[i]] : []),
+        ].filter((b) => b && !/^0x0{40}$/i.test(b)) as Address[];
         for (const book of books) {
           await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
           const u = await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false });
-          await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
+          try {
+            await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "mintExternalLong", args: [account, id, size, book, 2n ** 255n, u], value: await spotFee(s, u) });
+          } catch {
+            continue;
+          }
           const sizeUnits = (size * 10n ** 16n) / 10n ** 18n; // size precision 1e16 per whole option
           await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setBid", args: [(price * (10_000n - spread)) / 10_000n || 1n, sizeUnits] });
           await send(s, mm, { address: book, abi: mockBookAbi, functionName: "setAsk", args: [(price * (10_000n + spread)) / 10_000n + 1n, sizeUnits] });
@@ -281,6 +292,7 @@ export interface RealKuruMarket {
 
 /** Size: 0.01 option steps, matching the ledger's minimum position. */
 const KURU_SIZE_PRECISION = 10n ** 16n;
+const MIN_SEED_TIME_REMAINING = 15n * 60n;
 /**
  * Price steps per product: Kuru prices are uint32, so precision must fit the dearest option (in-the-money BTC calls
  * reach ~$20k) while resolving the cheapest (MON options are fractions of a cent).
@@ -304,7 +316,7 @@ export async function listOnRealKuru(s: LocalStack, router: Address = KURU_MAINN
     for (const p of stackProducts(s.manifest)) {
       const pricePrecision = kuruPricePrecision(productSpotPrice(p));
       for (let i = 0; i < p.seriesIds.length; i++) {
-        if (p.expiries[Math.floor(i / 8)]! <= now) continue;
+        if (p.expiries[Math.floor(i / 8)]! <= now + MIN_SEED_TIME_REMAINING) continue;
         const seriesId = p.seriesIds[i]! as Hex;
         const wrapper = await wrapperOf(s, seriesId);
         const args = [0, wrapper, p.settlementAsset as Address, KURU_SIZE_PRECISION, Number(pricePrecision), 1, 10n ** 14n, 10n ** 27n, 30n, 10n, 100n] as const;
@@ -337,7 +349,11 @@ export async function quoteRealKuru(s: LocalStack, markets: RealKuruMarket[], op
   const maxSeriesPerAccount = Number(await t.readContract({ address: px.SubAccounts.proxy, abi: subAccountsAbi, functionName: "maxSeriesPerAccount" }));
   let quoted = 0;
   for (const p of stackProducts(s.manifest)) {
-    const indices = p.seriesIds.map((id, i) => [id, i] as const).filter(([id]) => bySeries.has(id.toLowerCase())).map(([, i]) => i);
+    const now = (await t.getBlock()).timestamp;
+    const indices = p.seriesIds
+      .map((id, i) => [id, i] as const)
+      .filter(([id, i]) => bySeries.has(id.toLowerCase()) && p.expiries[Math.floor(i / 8)]! > now + MIN_SEED_TIME_REMAINING)
+      .map(([, i]) => i);
     if (indices.length === 0) continue;
     const price = productSpotPrice(p);
     const size = makerSizeForProduct(p, opts.size);
@@ -353,6 +369,7 @@ export async function quoteRealKuru(s: LocalStack, markets: RealKuruMarket[], op
       const account = await createAccountForAsset(s, 0, asset);
       await send(s, mm, { address: px.OptionClearing.proxy, abi: optionClearingAbi, functionName: "depositCollateral", args: [account, 100_000_000_000_000n] });
       for (const i of chunk) {
+        if (p.expiries[Math.floor(i / 8)]! <= (await t.getBlock()).timestamp + MIN_SEED_TIME_REMAINING) continue;
         const id = p.seriesIds[i]! as Hex;
         const m = bySeries.get(id.toLowerCase())!;
         let mid: bigint;

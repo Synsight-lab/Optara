@@ -36,7 +36,7 @@ import { BackingCard } from "../components/BackingCard.tsx";
 import { LimitsPanel } from "../components/LimitsPanel.tsx";
 import { lessSlip, useSlippage, withSlip } from "../lib/optara/limits.ts";
 import { buyLimits } from "./Trade.tsx";
-import { BuyOutcome, buyCheck } from "../components/BuyOutcome.tsx";
+import { BuyOutcome, SellValueNotice, buyCheck } from "../components/BuyOutcome.tsx";
 import { PayoffChart } from "../components/PayoffChart.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { availability, type ActionContext, type ActionKey } from "../lib/optara/availability.ts";
@@ -332,6 +332,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 ctx={ctx}
                 ask={market?.quote?.ask}
                 bid={market?.quote?.bid}
+                mark={market?.mark}
                 market={market?.quote?.market}
                 walletQty={walletQty}
                 initialSide={tradeSide}
@@ -343,6 +344,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 s={series}
                 ctx={ctx}
                 bid={market?.quote?.bid}
+                mark={market?.mark}
                 market={market?.quote?.market}
                 onQty={setQtyForChart}
               />
@@ -436,6 +438,7 @@ function TradePanel({
   ctx,
   ask,
   bid,
+  mark,
   market,
   walletQty,
   initialSide,
@@ -445,6 +448,7 @@ function TradePanel({
   ctx: ActionContext;
   ask?: bigint;
   bid?: bigint;
+  mark?: bigint;
   market?: Hex;
   walletQty: bigint;
   initialSide: "buy" | "sell";
@@ -466,7 +470,7 @@ function TradePanel({
       {side === "buy" ? (
         <BuyPanel s={s} ctx={ctx} ask={ask} market={market} onQty={onQty} />
       ) : (
-        <SellPanel s={s} ctx={ctx} bid={bid} market={market} walletQty={walletQty} onQty={onQty} />
+        <SellPanel s={s} ctx={ctx} bid={bid} mark={mark} market={market} walletQty={walletQty} onQty={onQty} />
       )}
     </div>
   );
@@ -609,12 +613,14 @@ export function WritePanel({
   s,
   ctx,
   bid,
+  mark,
   market,
   onQty,
 }: {
   s: Series;
   ctx: ActionContext;
   bid?: bigint;
+  mark?: bigint;
   market?: Hex;
   onQty: (q: number, cost?: number) => void;
 }) {
@@ -729,6 +735,11 @@ export function WritePanel({
             </li>
           </ul>
         )}
+        {sellable && net !== undefined && (
+          <div className="border-b border-line py-2.5">
+            <SellValueNotice qty={qty} proceeds={net} decimals={s.assetDecimals} mark={mark} />
+          </div>
+        )}
         <Details summary="Margin and fees">
           <Row
             label={<Term tip="Charged when the options are written, paid from your margin account.">Optara fee (from account)</Term>}
@@ -838,6 +849,7 @@ function SellPanel({
   s,
   ctx,
   bid,
+  mark,
   market,
   walletQty,
   onQty,
@@ -845,6 +857,7 @@ function SellPanel({
   s: Series;
   ctx: ActionContext;
   bid?: bigint;
+  mark?: bigint;
   market?: Hex;
   walletQty: bigint;
   onQty: (q: number, cost?: number) => void;
@@ -887,6 +900,7 @@ function SellPanel({
         <Row label="Best bid per option" value={bid !== undefined ? `${fmtPrice(bid)} ${s.assetSymbol}` : "Nobody is bidding right now"} />
         <Row label={<Term tip="Charged by the Kuru order book on the sale.">Order book fee</Term>} value={fee.data !== undefined ? `−${fmtNative(fee.data, s.assetDecimals)} ${s.assetSymbol}` : "—"} />
         <Row strong label="Cash to your wallet" value={net !== undefined ? `+${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : "—"} tone="good" />
+        <SellValueNotice qty={qty} proceeds={net} decimals={s.assetDecimals} mark={mark} />
       </div>
 
       <LimitsPanel

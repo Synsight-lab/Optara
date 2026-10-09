@@ -14,6 +14,15 @@ export function buyCheck(qty: bigint | undefined, total: bigint | undefined, dec
   return { over, needsAck: over !== undefined && over > OVERPAY_CONFIRM };
 }
 
+/** The cash a seller receives compared with Optara's fair value. Positive `under` means the seller receives less. */
+export function sellCheck(qty: bigint | undefined, proceeds: bigint | undefined, decimals: number, mark: bigint | undefined) {
+  if (!qty || proceeds === undefined) return { under: undefined };
+  const received = Number(proceeds) / 10 ** decimals / (Number(qty) / 1e18);
+  const fair = mark !== undefined ? Number(mark) / 1e18 : undefined;
+  if (fair === undefined || !(fair > 0) || !(received > 0)) return { under: undefined };
+  return { under: 1 - received / fair };
+}
+
 export function BuyOutcome({
   series,
   qty,
@@ -92,8 +101,8 @@ export function BuyOutcome({
           {over <= 0
             ? "You pay at or below fair value."
             : over > OVERPAY_WARN
-            ? `You pay ${(over * 100).toFixed(0)}% above fair value: the sellers on the order book ask a high price right now. A smaller amount, or a different strike or expiry, may cost less.`
-            : `${(over * 100).toFixed(1)}% above fair value: the order book's spread plus fees.`}
+            ? `You pay ${(over * 100).toFixed(0)}% above fair value. This buy fills the current asks, and the all-in price is above Optara's mark. A smaller amount, or a different strike or expiry, may price better.`
+            : `${(over * 100).toFixed(1)}% above fair value: order-book spread plus fees.`}
         </p>
         {needsAck && onAck && (
           <label className="mt-2 flex cursor-pointer items-start gap-2 font-semibold">
@@ -103,6 +112,45 @@ export function BuyOutcome({
         )}
       </div>
     )}
+    </div>
+  );
+}
+
+export function SellValueNotice({
+  qty,
+  proceeds,
+  decimals,
+  mark,
+}: {
+  qty?: bigint;
+  /** Seller proceeds after order-book fees, in native settlement units. */
+  proceeds?: bigint;
+  decimals: number;
+  /** Optara's fair value per option (WAD). */
+  mark?: bigint;
+}) {
+  const { under } = sellCheck(qty, proceeds, decimals, mark);
+  if (!qty || qty === 0n || proceeds === undefined || under === undefined) return null;
+  const received = Number(proceeds) / 10 ** decimals / (Number(qty) / 1e18);
+  const tone = under > OVERPAY_CONFIRM ? "border-bad/40 bg-bad/8" : under > OVERPAY_WARN ? "border-warn/40 bg-warn/8" : "border-line bg-surface-2/60";
+
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 text-[13px] ${tone}`}>
+      <div className="flex justify-between gap-3">
+        <span className="text-muted">You receive per option, fees deducted</span>
+        <span className="num shrink-0 font-semibold">{usd(received)}</span>
+      </div>
+      <div className="flex justify-between gap-3">
+        <span className="text-muted">Optara fair value</span>
+        <span className="num shrink-0 font-semibold">{usd(Number(mark) / 1e18)}</span>
+      </div>
+      <p className={under > OVERPAY_CONFIRM ? "mt-1.5 font-semibold text-bad" : under > OVERPAY_WARN ? "mt-1.5 font-semibold text-warn" : "mt-1.5 text-muted"}>
+        {under <= 0
+          ? `You receive ${Math.abs(under * 100).toFixed(under < -0.1 ? 0 : 1)}% above fair value.`
+          : under > OVERPAY_WARN
+          ? `You receive ${(under * 100).toFixed(0)}% below fair value. This sale fills the current bids, and buyers are bidding below Optara's mark right now. A smaller amount, or a different strike or expiry, may price better.`
+          : `${(under * 100).toFixed(1)}% below fair value: order-book spread plus fees.`}
+      </p>
     </div>
   );
 }
