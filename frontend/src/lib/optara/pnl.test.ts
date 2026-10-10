@@ -63,6 +63,18 @@ describe("pnl", () => {
     expect(a.costHeld).toBe(0);
   });
 
+  it("writer buyback and close burns the repurchased token cost", () => {
+    const a = averageCost([
+      { kind: "mint", qty: 1, cash: 0.1 },
+      { kind: "sell", qty: 1, cash: 6.65 },
+      { kind: "buy", qty: 1, cash: 4.2 },
+      { kind: "close", qty: 1, cash: 0 },
+    ]);
+    expect(a.realized).toBeCloseTo(6.65 - 0.1 - 4.2);
+    expect(a.costHeld).toBe(0);
+    expect(a.qtyHeld).toBe(0);
+  });
+
   it("marks sells beyond known cost basis instead of realizing the whole sale against one small lot", () => {
     const a = averageCost([{ kind: "buy", qty: 1, cash: 2 }, { kind: "sell", qty: 10, cash: 50 }]);
     expect(a.realized).toBeCloseTo(5 - 2);

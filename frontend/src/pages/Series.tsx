@@ -786,9 +786,12 @@ export function WritePanel({
 
   return (
     <div className="space-y-3.5">
-      <div className="flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/8 px-3 py-2 text-[13px] text-accent">
+      <div className="flex items-start gap-2 rounded-xl border border-accent/25 bg-accent/8 px-3 py-2 text-[13px] text-accent">
         <Coins className="h-4 w-4 shrink-0" />
-        <span>You collect the premium now. If the option ends in the money, the payout is taken from your margin account.</span>
+        <span>
+          Premium is received when the option token sells, but the written obligation stays open until you burn matching
+          option tokens or settlement charges the payout from your margin account.
+        </span>
       </div>
 
       <AmountInput
@@ -829,11 +832,11 @@ export function WritePanel({
           disabled={!market || bid === undefined}
         />
         <span className="text-[13px]">
-          <span className="block font-semibold">Sell instantly for cash</span>
+          <span className="block font-semibold">Sell the new tokens now</span>
           <span className="block text-muted">
             {market && bid !== undefined
-              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option on ${venueName ?? "the venue"}. The cash goes to your wallet.`
-              : "Nobody is bidding right now. The new option tokens go to your wallet; you can sell them later."}
+              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option on ${venueName ?? "the venue"}. Cash goes to your wallet; your short remains in the margin account.`
+              : "Nobody is bidding right now. The new option tokens go to your wallet; your short remains open until closed or settled."}
           </span>
         </span>
       </label>
@@ -850,7 +853,7 @@ export function WritePanel({
         {keptNum !== undefined && qtyNum && (
           <ul className="space-y-1.5 border-b border-line py-2.5 text-[13px]">
             <li className="flex justify-between gap-3">
-              <span className="text-muted">You keep it all if {s.underlyingSymbol} ends {isCall ? "at or below" : "at or above"}</span>
+              <span className="text-muted">No expiry payout owed if {s.underlyingSymbol} ends {isCall ? "at or below" : "at or above"}</span>
               <span className="num shrink-0 font-semibold">{priceLevel(leg.strike)}</span>
             </li>
             <li className="flex justify-between gap-3">
@@ -909,14 +912,14 @@ export function WritePanel({
       />
 
       <TxButton
-        summary={qty ? `Write ${fmtQty(qty)} ${seriesName(s)} options from account #${selected}${sellable && net !== undefined ? ` and sell them for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : ""}` : undefined}
-        label={sellable && net !== undefined ? `Write ${amount} and collect ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : `Write ${amount || "0"} option${amount === "1" ? "" : "s"}`}
+        summary={qty ? `Write ${fmtQty(qty)} ${seriesName(s)} options from account #${selected}${sellable && net !== undefined ? `, sell the tokens for about ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}, and keep the short open until you close or settle it` : ", leaving the option tokens in your wallet"}` : undefined}
+        label={sellable && net !== undefined ? `Write and sell for ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : `Write ${amount || "0"} option${amount === "1" ? "" : "s"}`}
         tone="accent"
         steps={ok ? steps : undefined}
         disabled={!a.enabled || !steps || ok === false || capBlocked}
         disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : undefined)}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
-        successMessage={sellable ? "Written and sold. Premium is in your wallet." : "Written. Tokens are in your wallet."}
+        successMessage={sellable ? "Written and sold. Cash is in your wallet; the short remains open." : "Written. Tokens are in your wallet; the short remains open."}
       />
     </div>
   );
@@ -1121,7 +1124,8 @@ function ManagePanel({
           <div>
             <div className="font-display text-lg font-bold">Manage this position</div>
             <p className="mt-0.5 text-xs leading-5 text-muted">
-              Move option tokens between your wallet and margin account, or use wallet tokens to close written options.
+              Closing is not free: it burns matching option tokens from your wallet against the written position. If you sold
+              the tokens earlier, you need to buy or receive them back first.
             </p>
           </div>
         </div>
@@ -1135,7 +1139,7 @@ function ManagePanel({
       <ManageAction
         icon={RotateCcw}
         title="Close written options"
-        text="Best when you wrote this option and want to reduce risk. You need matching option tokens in your wallet."
+        text="Burn matching wallet tokens to reduce the written position. This removes risk only for the amount burned."
         available={maxClose > 0n}
         blocked={!c.enabled ? c.reason : maxClose === 0n ? "No closable written position. You need written options and matching wallet tokens." : undefined}
       >
@@ -1145,7 +1149,7 @@ function ManagePanel({
           steps={selected !== undefined && cq ? closeShortSteps(selected, s, cq) : undefined}
           disabled={!c.enabled || !cq || cq > maxClose}
           disabledReason={c.reason ?? (cq && cq > maxClose ? `You can close up to ${fmtQty(maxClose)}.` : undefined)}
-          successMessage="Closed. Margin freed."
+          successMessage="Closed by burning matching option tokens. Margin freed."
         />
       </ManageAction>
 

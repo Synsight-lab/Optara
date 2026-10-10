@@ -65,7 +65,8 @@ export function PnlCard({ owner, accounts, series }: { owner: Address; accounts:
                 <CashFlowChart paid={t.paid} received={t.received} value={t.value} realized={t.realized} unrealized={t.unrealized} />
               </div>
               <p className="mt-2 text-xs text-muted">
-                Formula: cash received + value still held − cash paid. {t.winners} winner{t.winners === 1 ? "" : "s"} · {t.losers} loser{t.losers === 1 ? "" : "s"}
+                Formula: cash received + value still held − cash paid. Premium from written options is only profit after
+                the matching short is closed or settled. {t.winners} winner{t.winners === 1 ? "" : "s"} · {t.losers} loser{t.losers === 1 ? "" : "s"}
                 {t.pct !== undefined ? ` · % of ${usd(t.paid)} paid in all` : ""}.
               </p>
             </div>
@@ -80,7 +81,8 @@ export function PnlCard({ owner, accounts, series }: { owner: Address; accounts:
 
           <p className="text-xs leading-relaxed text-muted">
             Built from your on-chain history: buys and sells (fees included), writing fees, redemptions and settlement. Each sale
-            is measured against the average cost of the options it closed. What you still hold is valued at Optara's fair
+            is measured against the average cost of the options it closed. Written options stay open as negative value
+            until you burn matching tokens or settlement prices the payout. What you still hold is valued at Optara's fair
             value before expiry (selling on the order book may get a little less), and at its payout after expiry.
             Rows marked ≈ include transferred tokens or partial history where the exact cost basis is not fully known.
           </p>
@@ -202,7 +204,7 @@ function PnlRow({ r }: { r: SeriesPnl }) {
   );
 }
 
-const KIND: Record<HistoryEntry["kind"], string> = { buy: "Bought", sell: "Sold", write: "Wrote", redeem: "Redeemed", settle: "Settled" };
+const KIND: Record<HistoryEntry["kind"], string> = { buy: "Bought", sell: "Sold", write: "Opened short", close: "Closed short", redeem: "Redeemed", settle: "Settled" };
 
 /** What happened to this option for you, oldest first, then how it ended. */
 function History({ r }: { r: SeriesPnl }) {
@@ -221,7 +223,9 @@ function History({ r }: { r: SeriesPnl }) {
                   ? `${qtyText(-e.qty)} written option${-e.qty === 1 ? "" : "s"} at ${priceLevel(e.price!)}: you paid what they owed`
                   : `${qtyText(e.qty)} option${e.qty === 1 ? "" : "s"} in your account at ${priceLevel(e.price!)}`
                 : e.kind === "write"
-                ? `${qtyText(e.qty)} option${e.qty === 1 ? "" : "s"} (writing fee)`
+                ? `${qtyText(e.qty)} written option${e.qty === 1 ? "" : "s"}; fee paid, obligation opened`
+                : e.kind === "close"
+                ? `${qtyText(e.qty)} option token${e.qty === 1 ? "" : "s"} burned against the written position`
                 : `${qtyText(e.qty)} option${e.qty === 1 ? "" : "s"}`}
             </span>
             <span className={cx("num text-right font-semibold", e.cash > 0 ? "text-good" : e.cash < 0 ? "text-bad" : "text-muted")}>

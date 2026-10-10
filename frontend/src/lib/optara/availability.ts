@@ -67,7 +67,7 @@ export function availability(action: ActionKey, c: ActionContext): Availability 
     case "close":
       if (!["ACTIVE", "EXPIRED", "ORACLE_STALLED"].includes(c.groupState)) return no("This expiry is already being settled.");
       if (c.accountBalance >= 0n) return no("You have no short position in this option.");
-      if (c.walletWrappers === 0n) return no("Buy option tokens first to close your short with them.");
+      if (c.walletWrappers === 0n) return no("You need matching option tokens in your wallet to burn against this short.");
       return { enabled: true };
     case "redeem":
       if (c.groupState !== "REDEEMABLE") return no(c.groupState === "ACTIVE" ? "Payouts open after expiry and settlement." : "Payouts open once every account is settled.");

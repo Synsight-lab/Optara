@@ -643,7 +643,16 @@ export async function getTradePnl(owner: Address, accountIds: bigint[], all: Ser
     lastBalance.set(`${b.accountId}:${s.id.toLowerCase()}`, b.balance);
     const r = row(s.id.toLowerCase());
     if (h.liquidationTxs.has(b.tx)) r.approximate = true;
-    if (!settleKeys.has(`${b.tx}:${b.accountId}:${s.groupId.toLowerCase()}`)) continue;
+    if (!settleKeys.has(`${b.tx}:${b.accountId}:${s.groupId.toLowerCase()}`)) {
+      const beforeBalance = b.balance - b.delta;
+      const closedShort = b.delta > 0n && beforeBalance < 0n;
+      if (closedShort) {
+        const closedQty = beforeBalance + b.delta > 0n ? -beforeBalance : b.delta;
+        r.fills.push({ order: b.order, f: { kind: "close", qty: qtyOf(closedQty), cash: 0 } });
+        r.events.push({ kind: "close", qty: qtyOf(closedQty), cash: 0, order: b.order, at: b.at });
+      }
+      continue;
+    }
     // Closed at settlement: the position before was −delta; it was worth its payout at the fixed price.
     const a = groups.get(s.groupId);
     if (!a?.finalized) continue;

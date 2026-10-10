@@ -118,9 +118,9 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
         ? `The option pays ${usd(payout)}, less than the ${usd(total)} you paid.`
         : `The option pays ${usd(payout)}, more than the ${usd(total)} you paid.`
       : payout === 0
-      ? `You owe nothing and keep the whole ${usd(total)} premium.`
+      ? `At expiry you owe nothing. The ${usd(total)} premium remains yours unless you bought tokens back to close earlier.`
       : net >= 0
-      ? `You owe ${usd(payout)} but keep the rest of the ${usd(total)} premium.`
+      ? `At expiry you owe ${usd(payout)} and keep the rest of the ${usd(total)} premium.`
       : `You owe ${usd(payout)}, more than the ${usd(total)} premium you collected.`;
 
   // Direction-aware presets: moves the option profits from, plus one against.

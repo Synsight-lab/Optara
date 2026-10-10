@@ -4,7 +4,8 @@
  *   P&L = value of what you still hold + cash you received − cash you paid
  *
  * Split by average cost (the usual way brokers report it):
- *   realized   = locked in: each sale or redemption against the average cost of the options it closed, plus settlement
+ *   realized   = locked in: each sale, redemption or close-burn against the average cost of the options it removed,
+ *                plus settlement
  *   unrealized = what you still hold: its value now against what it cost
  *   realized + unrealized = the total above
  *
@@ -45,7 +46,7 @@ export interface SeriesPnl {
 export interface HistoryEntry {
   /** Unix seconds. */
   at: number;
-  kind: "buy" | "sell" | "write" | "redeem" | "settle";
+  kind: "buy" | "sell" | "write" | "close" | "redeem" | "settle";
   qty: number;
   /** Cash received (+) or paid (−) by this event, in the settlement asset. */
   cash: number;
@@ -62,6 +63,7 @@ export type Fill =
   | { kind: "buy"; qty: number; cash: number } // cash paid: premium + buyer fee
   | { kind: "mint"; qty: number; cash: number } // written into the wallet; cash = writing fee
   | { kind: "sell"; qty: number; cash: number } // cash received, net of the order-book fee
+  | { kind: "close"; qty: number; cash: 0 } // wallet token burned to close a written option
   | { kind: "redeem"; qty: number; cash: number }; // payout received
 
 /**
