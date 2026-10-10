@@ -166,7 +166,7 @@ export function TradePage() {
             </h1>
             <p className="mt-0.5 text-[13px] text-muted">Direction, target, amount. The quote updates as you go.</p>
           </div>
-          <span className="pill border border-good/25 bg-good/10 text-good">Capped risk</span>
+          <span className="pill border border-good/25 bg-good/10 text-good">Fixed buyer risk</span>
         </div>
 
         <div>
@@ -368,7 +368,7 @@ function TradeSideGuide({ series, spot }: { series: Series; spot?: bigint }) {
         </div>
       </div>
       <div className="rounded-lg border border-good/25 bg-good/8 p-3 text-xs leading-5 text-good">
-        Buying is capped risk: you cannot be liquidated and cannot owe more later.
+        Your downside as the buyer is fixed to the premium. You cannot be liquidated or owe more later; this is not a capped-option product.
       </div>
     </aside>
   );

@@ -772,6 +772,7 @@ export function WritePanel({
   const keptNum = kept !== undefined ? Number(kept) / 10 ** s.assetDecimals : undefined;
   const writerBe = keptNum !== undefined && qtyNum ? breakeven(leg, keptNum / qtyNum) : undefined;
   const isCall = s.optionType === 0;
+  const saleAvailable = !!market && bid !== undefined;
 
   if (!ctx.hasAccount && ctx.connected) return <AccountSetup s={s} />;
   if (!a.enabled && ctx.connected) return <Blocked reason={a.reason} />;
@@ -835,8 +836,8 @@ export function WritePanel({
           <span className="block font-semibold">Sell the new tokens now</span>
           <span className="block text-muted">
             {market && bid !== undefined
-              ? `Best bid ${fmtPrice(bid)} ${s.assetSymbol} per option on ${venueName ?? "the venue"}. Cash goes to your wallet; your short remains in the margin account.`
-              : "Nobody is bidding right now. The new option tokens go to your wallet; your short remains open until closed or settled."}
+              ? `Optional Kuru sale. If it fills, cash goes to your wallet; if you turn this off, you receive tokens and no premium now.`
+              : "No Kuru bid right now. Writing only mints option tokens to your wallet; it does not pay premium until someone buys them."}
           </span>
         </span>
       </label>
@@ -844,10 +845,23 @@ export function WritePanel({
       <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
         {sellable && net !== undefined && (
           <div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
-            <span className="text-[13px] text-muted">Cash to your wallet now</span>
+            <span className="text-[13px] text-muted">Kuru sale proceeds to wallet</span>
             <span className="num font-display text-xl font-bold text-good">
               +{fmtNative(net, s.assetDecimals)} {s.assetSymbol}
             </span>
+          </div>
+        )}
+        {!sellable && (
+          <div className="border-b border-line pb-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px] text-muted">Cash to wallet now</span>
+              <span className="num font-display text-xl font-bold text-ink">0 {s.assetSymbol}</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              {saleAvailable
+                ? "You turned off the Kuru sale. The option tokens go to your wallet, and you only receive premium if you sell them later."
+                : "There is no active Kuru bid to sell into. The option tokens go to your wallet, and the written short stays in your margin account."}
+            </p>
           </div>
         )}
         {keptNum !== undefined && qtyNum && (

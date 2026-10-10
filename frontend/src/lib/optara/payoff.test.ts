@@ -18,7 +18,7 @@ describe("payoff", () => {
   it("profit for buyers and writers is mirror-image", () => {
     expect(profitAt(call4500, "long", 2, 120, 5200)).toBe(1160);
     expect(profitAt(call4500, "short", 2, 120, 5200)).toBe(-1160);
-    expect(profitAt(call4500, "long", 1, 120, 4000)).toBe(-120); // loss capped at the cost
+    expect(profitAt(call4500, "long", 1, 120, 4000)).toBe(-120); // long downside is limited to the cost
     expect(profitAt(call4500, "short", 1, 120, 4000)).toBe(120); // writer keeps the premium
   });
 

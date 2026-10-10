@@ -72,9 +72,32 @@ export function OnboardingModal() {
             <div className="mt-4 space-y-2.5">
               <GuidePoint icon={Wallet} title="Deposit cash first" text="This cash backs what your account may owe at expiry." tone="warn" />
               <GuidePoint icon={CheckCircle2} title="Stay healthy" text="If margin gets too low, add cash or close risk before liquidation." tone="warn" />
-              <GuidePoint icon={HelpCircle} title="Risk can be larger than premium" text="Writing is not the same as buying. You collect premium but take payout risk." tone="bad" />
+              <GuidePoint icon={HelpCircle} title="Risk can be larger than premium" text="Writing is not the same as buying. You only receive premium after the option tokens are sold." tone="bad" />
             </div>
           </section>
+        </div>
+
+        <div className="mt-4 rounded-3xl border border-accent/25 bg-accent/8 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-accent" />
+            <h3 className="font-display text-base font-bold">When do writers receive premium?</h3>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border border-line bg-surface/80 p-3">
+              <div className="text-sm font-bold">Write only</div>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Optara opens the short in your margin account and sends option tokens to your wallet. No cash is paid yet.
+                You can sell those tokens later or burn them to close.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-line bg-surface/80 p-3">
+              <div className="text-sm font-bold">Write and sell on Kuru</div>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                The new tokens are sold into Kuru's current bid. If the sale fills, the stablecoin goes to your wallet,
+                while the short remains open in your margin account.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 rounded-3xl border border-line bg-surface-2/55 p-4">
