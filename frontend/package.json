@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173} --strictPort",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && vitest run -c vitest.integration.config.ts",
     "devnet": "tsx scripts/devnet.ts",

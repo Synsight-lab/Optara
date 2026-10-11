@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: { port: 5173, fs: { allow: [".."] } },
+  // `pnpm start` serves the built app on hosts like Railway; add a custom domain here when one is attached.
+  preview: { allowedHosts: [".up.railway.app"] },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
