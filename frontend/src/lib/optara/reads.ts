@@ -133,6 +133,21 @@ export interface SeriesMarket {
 const kuruBookAbi = [
   { type: "function", name: "bestBidAsk", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }, { type: "uint256" }] },
   { type: "function", name: "getL2Book", stateMutability: "view", inputs: [{ name: "bidPricePoints", type: "uint32" }, { name: "askPricePoints", type: "uint32" }], outputs: [{ type: "bytes" }] },
+  { type: "event", name: "OrderCreated", inputs: [{ name: "orderId", type: "uint40" }, { name: "owner", type: "address" }, { name: "size", type: "uint96" }, { name: "price", type: "uint32" }, { name: "isBuy", type: "bool" }] },
+  {
+    type: "event",
+    name: "Trade",
+    inputs: [
+      { name: "orderId", type: "uint40" },
+      { name: "makerAddress", type: "address" },
+      { name: "isBuy", type: "bool" },
+      { name: "price", type: "uint256" },
+      { name: "updatedSize", type: "uint96" },
+      { name: "takerAddress", type: "address" },
+      { name: "txOrigin", type: "address" },
+      { name: "filledSize", type: "uint96" },
+    ],
+  },
 ] as const;
 
 const kuruRouterAbi = [
@@ -256,6 +271,19 @@ export interface KuruOrderBook {
   asks: KuruBookLevel[];
 }
 
+export interface KuruUserOrder {
+  orderId: bigint;
+  side: "bid" | "ask";
+  price: bigint;
+  originalSize: bigint;
+  filledSize: bigint;
+  remainingSize: bigint;
+  status: "open" | "partial" | "filled";
+  createdBlock: bigint;
+  updatedBlock: bigint;
+  txHash: Hex;
+}
+
 function readU256Words(data: Hex): bigint[] {
   const body = data.startsWith("0x") ? data.slice(2) : data;
   const out: bigint[] = [];
@@ -296,7 +324,7 @@ export async function getKuruOrderBook(s: Series, depth = 16): Promise<KuruOrder
   const router = await c.readContract({ address: ADDR.kuruAdapter, abi: kuruAbi, functionName: "kuruRouter" }).catch(() => KURU_MAINNET_ROUTER);
   const params = await c.readContract({ address: router, abi: kuruRouterAbi, functionName: "verifiedMarket", args: [quote.market] });
   if (params.baseAssetAddress.toLowerCase() !== s.wrapper.toLowerCase() || params.quoteAssetAddress.toLowerCase() !== s.settlementAsset.toLowerCase()) return undefined;
-  const data = await c.readContract({ address: quote.market, abi: kuruBookAbi, functionName: "getL2Book", args: [depth, depth] });
+  const data = await c.readContract({ address: quote.market, abi: kuruBookAbi, functionName: "getL2Book", args: [depth, depth] }).catch(() => "0x" as Hex);
   return {
     market: quote.market,
     pricePrecision: BigInt(params.pricePrecision),
@@ -305,6 +333,61 @@ export async function getKuruOrderBook(s: Series, depth = 16): Promise<KuruOrder
     takerFeeBps: BigInt(params.takerFeeBps),
     ...parseKuruL2(data, BigInt(params.pricePrecision), BigInt(params.sizePrecision)),
   };
+}
+
+/** User-owned Kuru maker orders for one series, reconstructed from Kuru order and fill events. */
+export async function getKuruUserOrders(s: Series, owner?: Address): Promise<KuruUserOrder[]> {
+  if (!owner) return [];
+  const quote = await getVenueQuote(KURU_VENUE, "Kuru", s.id);
+  if (!quote?.market) return [];
+  const router = await c.readContract({ address: ADDR.kuruAdapter, abi: kuruAbi, functionName: "kuruRouter" }).catch(() => KURU_MAINNET_ROUTER);
+  const params = await c.readContract({ address: router, abi: kuruRouterAbi, functionName: "verifiedMarket", args: [quote.market] });
+  if (params.baseAssetAddress.toLowerCase() !== s.wrapper.toLowerCase() || params.quoteAssetAddress.toLowerCase() !== s.settlementAsset.toLowerCase()) return [];
+
+  const head = await c.getBlockNumber();
+  const orders = new Map<bigint, KuruUserOrder>();
+  const ownerLc = owner.toLowerCase();
+  const toQty = (sizeUnits: bigint) => (sizeUnits * WAD_) / BigInt(params.sizePrecision);
+  const toPrice = (priceUnits: bigint) => (priceUnits * WAD_) / BigInt(params.pricePrecision);
+
+  for (let from = DEPLOYED_AT_BLOCK; from <= head; from += LOG_CHUNK) {
+    const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
+    const [created, trades] = await Promise.all([
+      c.getContractEvents({ address: quote.market, abi: kuruBookAbi, eventName: "OrderCreated", fromBlock: from, toBlock: to, strict: true }),
+      c.getContractEvents({ address: quote.market, abi: kuruBookAbi, eventName: "Trade", fromBlock: from, toBlock: to, strict: true }),
+    ]);
+    for (const log of created) {
+      if (log.args.owner.toLowerCase() !== ownerLc) continue;
+      const orderId = BigInt(log.args.orderId);
+      const originalSize = toQty(log.args.size);
+      orders.set(orderId, {
+        orderId,
+        side: log.args.isBuy ? "bid" : "ask",
+        price: toPrice(BigInt(log.args.price)),
+        originalSize,
+        filledSize: 0n,
+        remainingSize: originalSize,
+        status: "open",
+        createdBlock: log.blockNumber,
+        updatedBlock: log.blockNumber,
+        txHash: log.transactionHash,
+      });
+    }
+    for (const log of trades) {
+      if (log.args.makerAddress.toLowerCase() !== ownerLc) continue;
+      const order = orders.get(BigInt(log.args.orderId));
+      if (!order) continue;
+      const remainingSize = toQty(log.args.updatedSize);
+      const filledSize = order.originalSize > remainingSize ? order.originalSize - remainingSize : order.filledSize + toQty(log.args.filledSize);
+      order.remainingSize = remainingSize;
+      order.filledSize = filledSize > order.originalSize ? order.originalSize : filledSize;
+      order.status = remainingSize === 0n ? "filled" : order.filledSize > 0n ? "partial" : "open";
+      order.updatedBlock = log.blockNumber;
+      order.txHash = log.transactionHash;
+    }
+  }
+
+  return [...orders.values()].sort((a, b) => (a.updatedBlock === b.updatedBlock ? Number(b.orderId - a.orderId) : a.updatedBlock < b.updatedBlock ? 1 : -1));
 }
 
 /** Direct Kuru limit-order metadata and the user's Kuru balances for this series. */

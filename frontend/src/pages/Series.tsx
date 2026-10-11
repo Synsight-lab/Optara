@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Link, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 import { settlementWindowAbi } from "@optara/sdk";
 import {
   ArrowLeft,
@@ -68,7 +68,7 @@ import {
   useTokenBalance,
   useWalletWrappers,
 } from "../lib/optara/hooks.ts";
-import { getKuruLimitMarket, getKuruOrderBook, previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee, type KuruBookLevel } from "../lib/optara/reads.ts";
+import { getKuruLimitMarket, getKuruOrderBook, getKuruUserOrders, previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee, type KuruBookLevel, type KuruUserOrder } from "../lib/optara/reads.ts";
 import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
 import type { Quote, Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
@@ -463,9 +463,147 @@ export function KuruBookPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <KuruBookPanel series={series} mark={market?.mark} />
         <section className="space-y-3">
+          <MyKuruOrdersPanel series={series} owner={address} />
           <KuruLimitPanel s={series} ctx={ctx} walletQty={walletQty} mark={market?.mark} onQty={ignorePreview} />
         </section>
       </div>
+    </div>
+  );
+}
+
+function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address }) {
+  const [filter, setFilter] = useState<"active" | "filled" | "all">("active");
+  const orders = useQuery({
+    queryKey: ["kuruUserOrders", series.id, owner],
+    queryFn: () => getKuruUserOrders(series, owner),
+    enabled: !!owner,
+    refetchInterval: 5_000,
+  });
+
+  if (!owner) {
+    return (
+      <section className="rounded-3xl border border-line bg-surface p-4">
+        <div className="font-semibold text-ink">My Kuru orders</div>
+        <p className="mt-1 text-sm text-muted">Connect a wallet to track your open, partially filled, and filled Kuru orders.</p>
+      </section>
+    );
+  }
+
+  if (orders.isLoading) return <Skeleton className="h-40 w-full rounded-3xl" />;
+  const rows = orders.data ?? [];
+  const activeRows = rows.filter((o) => o.status !== "filled");
+  const partialRows = rows.filter((o) => o.status === "partial");
+  const filledRows = rows.filter((o) => o.status === "filled");
+  const shownRows = filter === "active" ? activeRows : filter === "filled" ? filledRows : rows;
+  const visibleRows = shownRows.slice(0, 24);
+  const tone = partialRows.length > 0 ? "warn" : filledRows.length > 0 ? "good" : "neutral";
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
+      <div className="border-b border-line p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-semibold text-ink">My Kuru orders</div>
+            <p className="mt-0.5 text-xs text-muted">Track maker orders from this wallet without leaving the series.</p>
+          </div>
+          <Pill tone={tone}>
+            {rows.length} order{rows.length === 1 ? "" : "s"}
+          </Pill>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <OrderCount label="Active" value={activeRows.length} tone={activeRows.length ? "text-primary" : "text-muted"} />
+          <OrderCount label="Partial" value={partialRows.length} tone={partialRows.length ? "text-warn" : "text-muted"} />
+          <OrderCount label="Filled" value={filledRows.length} tone={filledRows.length ? "text-good" : "text-muted"} />
+        </div>
+
+        <div className="mt-3">
+          <Segmented
+            size="sm"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "filled", label: "Filled" },
+              { value: "all", label: "All" },
+            ]}
+          />
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="m-3 rounded-2xl border border-line bg-surface-2/55 px-3 py-5 text-center text-sm text-muted">No Kuru maker orders from this wallet yet.</div>
+      ) : shownRows.length === 0 ? (
+        <div className="m-3 rounded-2xl border border-line bg-surface-2/55 px-3 py-5 text-center text-sm text-muted">No {filter} orders for this series.</div>
+      ) : (
+        <>
+          <div className="max-h-[380px] space-y-2 overflow-y-auto p-3 pr-2">
+            {visibleRows.map((o) => <CompactKuruOrder key={o.orderId.toString()} order={o} assetSymbol={series.assetSymbol} />)}
+          </div>
+          {shownRows.length > visibleRows.length && (
+            <div className="border-t border-line bg-surface-2/45 px-4 py-2 text-center text-xs font-semibold text-muted">
+              Showing {visibleRows.length} of {shownRows.length}. Use the filters above to narrow the list.
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function OrderCount({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface-2/55 px-3 py-2">
+      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{label}</div>
+      <div className={cx("num mt-0.5 text-lg font-black leading-none", tone)}>{value}</div>
+    </div>
+  );
+}
+
+function CompactKuruOrder({ order, assetSymbol }: { order: KuruUserOrder; assetSymbol: string }) {
+  const progress = order.originalSize > 0n ? Number((order.filledSize * 10000n) / order.originalSize) / 100 : 0;
+  return (
+    <div className="rounded-2xl border border-line bg-surface-2/55 p-3 transition hover:border-primary/25 hover:bg-surface-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cx("rounded-full px-2 py-0.5 text-xs font-bold", order.side === "bid" ? "bg-good/12 text-good" : "bg-bad/12 text-bad")}>
+              {order.side === "bid" ? "Bid" : "Ask"} #{order.orderId.toString()}
+            </span>
+            <OrderStatus status={order.status} />
+          </div>
+          <div className="num mt-1.5 text-sm font-black text-ink">{fmtPrice(order.price)} {assetSymbol}</div>
+        </div>
+        {order.status === "filled" && (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-good/12 text-good">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <OrderMiniStat label="Size" value={fmtQty(order.originalSize)} />
+        <OrderMiniStat label="Filled" value={fmtQty(order.filledSize)} tone={order.filledSize > 0n ? "text-good" : undefined} />
+        <OrderMiniStat label="Left" value={fmtQty(order.remainingSize)} tone={order.remainingSize === 0n ? "text-muted" : "text-ink"} />
+      </div>
+
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface">
+        <div className={cx("h-full rounded-full", order.status === "filled" ? "bg-good" : order.status === "partial" ? "bg-warn" : "bg-primary")} style={{ width: `${progress}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function OrderStatus({ status }: { status: "open" | "partial" | "filled" }) {
+  const cls = status === "filled" ? "bg-good/12 text-good border-good/25" : status === "partial" ? "bg-warn/12 text-warn border-warn/25" : "bg-surface text-muted border-line";
+  return <span className={cx("rounded-full border px-2 py-0.5 text-xs font-bold capitalize", cls)}>{status === "partial" ? "Partially filled" : status}</span>;
+}
+
+function OrderMiniStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-surface px-2.5 py-2">
+      <div className="text-[11px] font-semibold text-muted">{label}</div>
+      <div className={cx("num mt-0.5 break-words font-semibold", tone ?? "text-ink")}>{value}</div>
     </div>
   );
 }
