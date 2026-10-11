@@ -463,8 +463,8 @@ export function KuruBookPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <KuruBookPanel series={series} mark={market?.mark} />
         <section className="space-y-3">
-          <MyKuruOrdersPanel series={series} owner={address} />
           <KuruLimitPanel s={series} ctx={ctx} walletQty={walletQty} mark={market?.mark} onQty={ignorePreview} />
+          <MyKuruOrdersPanel series={series} owner={address} />
         </section>
       </div>
     </div>
@@ -473,6 +473,7 @@ export function KuruBookPage() {
 
 function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address }) {
   const [filter, setFilter] = useState<"active" | "filled" | "all">("active");
+  const [sideFilter, setSideFilter] = useState<"all" | "bid" | "ask">("all");
   const orders = useQuery({
     queryKey: ["kuruUserOrders", series.id, owner],
     queryFn: () => getKuruUserOrders(series, owner),
@@ -494,8 +495,11 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
   const activeRows = rows.filter((o) => o.status !== "filled");
   const partialRows = rows.filter((o) => o.status === "partial");
   const filledRows = rows.filter((o) => o.status === "filled");
-  const shownRows = filter === "active" ? activeRows : filter === "filled" ? filledRows : rows;
+  const statusRows = filter === "active" ? activeRows : filter === "filled" ? filledRows : rows;
+  const shownRows = sideFilter === "all" ? statusRows : statusRows.filter((o) => o.side === sideFilter);
   const visibleRows = shownRows.slice(0, 24);
+  const bidRows = rows.filter((o) => o.side === "bid");
+  const askRows = rows.filter((o) => o.side === "ask");
   const tone = partialRows.length > 0 ? "warn" : filledRows.length > 0 ? "good" : "neutral";
 
   return (
@@ -517,7 +521,7 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
           <OrderCount label="Filled" value={filledRows.length} tone={filledRows.length ? "text-good" : "text-muted"} />
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <Segmented
             size="sm"
             value={filter}
@@ -528,13 +532,23 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
               { value: "all", label: "All" },
             ]}
           />
+          <Segmented
+            size="sm"
+            value={sideFilter}
+            onChange={setSideFilter}
+            options={[
+              { value: "all", label: "Both" },
+              { value: "bid", label: `Bids ${bidRows.length}` },
+              { value: "ask", label: `Asks ${askRows.length}` },
+            ]}
+          />
         </div>
       </div>
 
       {rows.length === 0 ? (
         <div className="m-3 rounded-2xl border border-line bg-surface-2/55 px-3 py-5 text-center text-sm text-muted">No Kuru maker orders from this wallet yet.</div>
       ) : shownRows.length === 0 ? (
-        <div className="m-3 rounded-2xl border border-line bg-surface-2/55 px-3 py-5 text-center text-sm text-muted">No {filter} orders for this series.</div>
+        <div className="m-3 rounded-2xl border border-line bg-surface-2/55 px-3 py-5 text-center text-sm text-muted">No {sideFilter === "all" ? "" : `${sideFilter} `}{filter} orders for this series.</div>
       ) : (
         <>
           <div className="max-h-[380px] space-y-2 overflow-y-auto p-3 pr-2">
