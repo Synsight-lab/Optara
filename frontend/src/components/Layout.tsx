@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import {
   Activity,
+  BookOpen,
   ChevronDown,
   Coins,
   Compass,
@@ -11,6 +12,7 @@ import {
   LockKeyhole,
   Menu,
   Moon,
+  Newspaper,
   PieChart,
   Server,
   ShieldAlert,
@@ -29,6 +31,7 @@ import { useQuickGuide, useTheme } from "../state.tsx";
 import { ConnectButton } from "./ConnectButton.tsx";
 import { OnboardingModal } from "./OnboardingModal.tsx";
 import { Toaster } from "./Toaster.tsx";
+import { SOCIALS, XIcon } from "./Site.tsx";
 import { cx } from "./ui.tsx";
 import { TokenIcon } from "./Icons.tsx";
 
@@ -145,6 +148,17 @@ export function Layout() {
             <button onClick={() => { setMoreOpen(false); openGuide(); }} className="flex w-full items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-left text-sm font-semibold cursor-pointer">
               Learn how options work
             </button>
+            <div className="grid grid-cols-3 gap-2">
+              <Link to="/docs" className="flex items-center justify-center gap-1.5 rounded-2xl border border-line bg-surface-2 p-3 text-sm font-semibold">
+                <BookOpen className="h-4 w-4 text-primary" /> Docs
+              </Link>
+              <Link to="/blog" className="flex items-center justify-center gap-1.5 rounded-2xl border border-line bg-surface-2 p-3 text-sm font-semibold">
+                <Newspaper className="h-4 w-4 text-primary" /> Blog
+              </Link>
+              <a href={SOCIALS.x.href} target="_blank" rel="noreferrer" aria-label={`Optara on ${SOCIALS.x.label}`} className="flex items-center justify-center gap-1.5 rounded-2xl border border-line bg-surface-2 p-3 text-sm font-semibold">
+                <XIcon className="h-3.5 w-3.5" /> X
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -261,6 +275,17 @@ function MoreMenu({ items, onGuide }: { items: MenuItem[]; onGuide: () => void }
               <span className="block text-xs text-muted">A 60-second guide</span>
             </span>
           </button>
+          <div className="flex items-center gap-1 px-1.5 pb-1 pt-1">
+            <Link to="/docs" role="menuitem" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink">
+              <BookOpen className="h-4 w-4" /> Docs
+            </Link>
+            <Link to="/blog" role="menuitem" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink">
+              <Newspaper className="h-4 w-4" /> Blog
+            </Link>
+            <a href={SOCIALS.x.href} target="_blank" rel="noreferrer" role="menuitem" aria-label={`Optara on ${SOCIALS.x.label}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-semibold text-muted transition hover:bg-surface-2 hover:text-ink">
+              <XIcon className="h-3.5 w-3.5" /> {SOCIALS.x.handle}
+            </a>
+          </div>
         </div>
       )}
     </div>

@@ -1,10 +1,10 @@
 import { Link } from "react-router";
-import { ArrowRight, Coins, Compass, LineChart, Route, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, BookOpen, Coins, Compass, Layers, LineChart, Newspaper, Route, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenIcon } from "../components/Icons.tsx";
-import { Pill, cx } from "../components/ui.tsx";
+import { cx } from "../components/ui.tsx";
+import { SOCIALS, SiteFooter, SiteHeader, XIcon } from "../components/Site.tsx";
 import { fmtDuration, fmtLevel } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
-import { IS_LOCAL } from "../config/network.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 export function LandingPage() {
@@ -16,7 +16,7 @@ export function LandingPage() {
 
   return (
     <main className="home-page min-h-screen overflow-hidden bg-bg text-ink">
-      <HomeHeader />
+      <SiteHeader />
 
       <section className="home-column grid min-h-[calc(100vh-76px)] gap-10 pb-12 pt-8 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center lg:pb-16">
         <div>
@@ -93,24 +93,9 @@ export function LandingPage() {
           </div>
         </div>
       </section>
+      <LearnSection />
+      <SiteFooter />
     </main>
-  );
-}
-
-function HomeHeader() {
-  return (
-    <header className="home-column flex h-[76px] items-center justify-between gap-3">
-      <Link to="/" aria-label="Optara home" className="flex items-center gap-3">
-        <img src="/brand/logo/optara-lockup-light.svg" alt="Optara" className="theme-logo-light h-10 w-auto" />
-        <img src="/brand/logo/optara-lockup-dark.svg" alt="Optara" className="theme-logo-dark h-10 w-auto" />
-        {IS_LOCAL && <Pill tone="primary">Local</Pill>}
-      </Link>
-      <nav className="flex items-center gap-2">
-        <Link to="/app" className="btn-primary !px-4 !py-2 text-sm">
-          Optara app <ArrowRight className="h-4 w-4" />
-        </Link>
-      </nav>
-    </header>
   );
 }
 
@@ -163,6 +148,40 @@ function FrameCard({ title, headline, label, tone, product, className }: { title
         <circle cx="115" cy={tone === "good" ? "62" : "15"} r="6" fill="var(--warn)" />
       </svg>
     </div>
+  );
+}
+
+function LearnSection() {
+  const items = [
+    { to: "/docs/introduction", icon: BookOpen, title: "Read the docs", text: "How options, margin, venues, settlement and liquidations work, in plain words." },
+    { to: "/docs/kuru-order-book", icon: Layers, title: "Kuru order book, built in", text: "Place and fill Kuru limit orders from inside Optara. No need to leave the app." },
+    { to: "/blog", icon: Newspaper, title: "From the blog", text: "Product updates and deep dives on how Optara is built." },
+  ];
+  return (
+    <section className="home-column pb-16">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Learn how Optara works</h2>
+          <p className="mt-1 text-sm text-muted">Everything from your first call option to how settlement stays fair.</p>
+        </div>
+        <a href={SOCIALS.x.href} target="_blank" rel="noreferrer" className="btn-ghost text-sm">
+          <XIcon className="h-3.5 w-3.5" /> Follow {SOCIALS.x.handle}
+        </a>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {items.map((it) => (
+          <Link key={it.to} to={it.to} className="group rounded-3xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:border-primary/40">
+            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary-soft text-primary">
+              <it.icon className="h-5 w-5" />
+            </span>
+            <div className="font-display mt-4 flex items-center gap-1.5 text-lg font-bold">
+              {it.title} <ArrowRight className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-primary" />
+            </div>
+            <p className="mt-1.5 text-sm leading-6 text-muted">{it.text}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -7,6 +7,10 @@ import { NotFound } from "./pages/NotFound.tsx";
 /** FRONTEND.md §2. The marketing home is separate; the app shell lives under /app. */
 export const router = createBrowserRouter([
   { path: "/", element: <LandingPage /> },
+  { path: "/docs", element: <Navigate to="/docs/introduction" replace /> },
+  { path: "/docs/:slug", lazy: async () => ({ Component: (await import("./pages/Docs.tsx")).DocsPage }) },
+  { path: "/blog", lazy: async () => ({ Component: (await import("./pages/Blog.tsx")).BlogPage }) },
+  { path: "/blog/:slug", lazy: async () => ({ Component: (await import("./pages/Blog.tsx")).BlogPostPage }) },
   {
     path: "/app",
     element: <Layout />,
