@@ -103,6 +103,12 @@ contracts:
       - event: UpgradeCancelled
       - event: ImplementationAllowed
       - event: GovernanceTransferred
+  - name: KuruOrderBook
+    abi_file_path: ./abis/KuruOrderBook.json
+    events:
+      - event: OrderCreated
+      - event: Trade
+      - event: OrdersCanceled
 chains:
   - id: 31337
     start_block: 0
@@ -140,3 +146,4 @@ chains:
       - name: ExternalOptionWrapper # registered from SeriesCreated
       - name: UpgradeAdmin
         address: "0x0B306BF915C4d645ff596e518fAf3F9669b97016"
+      - name: KuruOrderBook # registered from VenueRegistry.MarketRegistered (Kuru venue)

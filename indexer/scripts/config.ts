@@ -22,6 +22,12 @@ const EVENTS: Partial<Record<ModuleName | "ExternalOptionWrapper", string[]>> = 
   ExternalOptionWrapper: ["Transfer"],
 };
 
+/**
+ * Kuru order books are external (Kuru deploys them), so their ABI lives in indexer/abis rather than deployments/abi.
+ * Each one is registered when the VenueRegistry registers it as a series' Kuru market.
+ */
+const KURU_BOOK_EVENTS = ["OrderCreated", "Trade", "OrdersCanceled"];
+
 const UPGRADE_ADMIN_EVENTS = ["UpgradeScheduled", "UpgradeExecuted", "UpgradeCancelled", "ImplementationAllowed", "GovernanceTransferred"];
 
 export function configYaml(m: Manifest, source: string): string {
@@ -44,6 +50,8 @@ export function configYaml(m: Manifest, source: string): string {
     lines.push(`  - name: ${c}`, `    abi_file_path: ../deployments/abi/${c}.json`, "    events:");
     for (const e of c === "UpgradeAdmin" ? UPGRADE_ADMIN_EVENTS : EVENTS[c as keyof typeof EVENTS]!) lines.push(`      - event: ${e}`);
   }
+  lines.push("  - name: KuruOrderBook", "    abi_file_path: ./abis/KuruOrderBook.json", "    events:");
+  for (const e of KURU_BOOK_EVENTS) lines.push(`      - event: ${e}`);
   lines.push("chains:", `  - id: ${m.chainId}`, `    start_block: ${m.deployedAtBlock}`);
   if (hypersync) {
     const rpc = m.chainId === 143 ? "https://rpc.monad.xyz" : "https://testnet-rpc.monad.xyz";
@@ -60,5 +68,6 @@ export function configYaml(m: Manifest, source: string): string {
     const address = c === "UpgradeAdmin" ? m.upgradeAdmin : m.proxies[c as ModuleName].proxy;
     lines.push(`      - name: ${c}`, `        address: "${address}"`);
   }
+  lines.push("      - name: KuruOrderBook # registered from VenueRegistry.MarketRegistered (Kuru venue)");
   return lines.join("\n") + "\n";
 }

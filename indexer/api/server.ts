@@ -102,6 +102,13 @@ export function startApi(deps: { db: Db; monitor: Monitor; client: PublicClient;
         return s ? send(res, 200, s) : send(res, 404, { error: "no surface" });
       }
       if (a === "markets") return send(res, 200, await db.rows("Market"));
+      // A wallet's Kuru maker orders (newest first), optionally for one series: ?series=<seriesId>.
+      if (a === "kuru-orders" && b && isAddress(b)) {
+        const series = url.searchParams.get("series");
+        if (series && !isHex32(series)) return send(res, 400, { error: "series must be a 32-byte id" });
+        const where = series ? `owner = lower($1) AND "seriesId" = $2` : `owner = lower($1)`;
+        return send(res, 200, await db.rows("KuruOrder", where, series ? [b, series] : [b], `ORDER BY "updatedBlock" DESC, "orderId" DESC LIMIT 500`));
+      }
       if (a === "positions") return send(res, 200, await db.rows("Position", `balance <> 0`));
       if (a === "system") {
         const [products, insurance, progress, head] = await Promise.all([db.rows("Product"), db.rows("Insurance"), db.progressBlock(), client.getBlockNumber()]);

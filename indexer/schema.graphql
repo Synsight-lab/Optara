@@ -195,8 +195,31 @@ type Market {
   id: ID! # venueId-seriesId
   venueId: String!
   seriesId: String! @index
-  market: String!
+  market: String! @index
   status: Int!
+}
+
+"""
+A maker order on a registered Kuru order book (OrderCreated, Trade, OrdersCanceled). Sizes and prices are in the
+market's own units (sizePrecision / pricePrecision from Kuru's verifiedMarket); readers convert them.
+"""
+type KuruOrder {
+  id: ID! # market-orderId
+  market: String! @index
+  seriesId: String! @index
+  orderId: BigInt!
+  owner: String! @index # lowercase
+  isBuy: Boolean!
+  priceUnits: BigInt!
+  sizeUnits: BigInt!
+  remainingUnits: BigInt!
+  filledUnits: BigInt! # kept when the rest is cancelled
+  status: String! # OPEN | PARTIAL | FILLED | CANCELLED
+  createdBlock: BigInt!
+  updatedBlock: BigInt!
+  txHash: String!
+  createdAt: BigInt!
+  updatedAt: BigInt!
 }
 
 type Trade {
