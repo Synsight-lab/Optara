@@ -12,8 +12,19 @@ Every contract the Monad testnet deployment created, with links to its verified 
 
 ## Verification
 
-All 47 contracts below are source-verified on [Sourcify](https://sourcify.dev), status `match`. `exact_match` is not possible because the build sets `bytecode_hash = "none"`, so the bytecode carries no metadata hash.
-MonadVision reads verified source from Sourcify. The 16 option tokens are EIP-1167 clones of the verified `ExternalOptionWrapper`.
+All 47 contracts below are source-verified, status `match`, on both:
+
+- [Sourcify](https://sourcify.dev) (the "Sourcify" links below), and
+- MonadVision's own Sourcify instance (`https://sourcify-api-monad.blockvision.org/`), which is what the MonadVision explorer shows.
+
+`exact_match` is not possible because the build sets `bytecode_hash = "none"`, so the bytecode carries no metadata hash. The 16 option tokens are EIP-1167 clones of the verified `ExternalOptionWrapper`.
+
+To verify a contract on MonadVision (note the trailing slash on the URL):
+
+```sh
+forge verify-contract <address> <path>:<Contract> --chain 10143 --verifier sourcify \
+  --verifier-url https://sourcify-api-monad.blockvision.org/ --rpc-url https://testnet-rpc.monad.xyz
+```
 
 ## Core protocol
 
