@@ -9,7 +9,7 @@ import { ArrowLeft, CalendarClock, CheckCircle2, CircleDollarSign, Clock3, Shiel
 import { AmountInput, Card, CopyButton, EmptyState, Pill, Segmented, Skeleton, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { TxButton } from "../components/TxButton.tsx";
-import { createSeriesSteps, createSeriesWithDirectMarketSteps } from "../lib/optara/actions.ts";
+import { createSeriesSteps } from "../lib/optara/actions.ts";
 import { ADDR, publicClient } from "../lib/optara/client.ts";
 import { fmtDuration, fmtExpiry, fmtExpiryShort, fmtLevel, fmtWad, parseFixed } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
@@ -80,17 +80,6 @@ export function NewMarketPage() {
   const { data: canList } = useQuery({
     queryKey: ["seriesCreator", address],
     queryFn: () => publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [ROLE_KEYS.seriesCreator, address!] }),
-    enabled: !!address,
-  });
-  const { data: canRegisterVenue } = useQuery({
-    queryKey: ["venueCreator", address],
-    queryFn: async () => {
-      const [venueAdmin, governance] = await Promise.all([
-        publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [ROLE_KEYS.venueAdmin, address!] }),
-        publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [ROLE_KEYS.governance, address!] }),
-      ]);
-      return venueAdmin || governance;
-    },
     enabled: !!address,
   });
 
@@ -358,22 +347,20 @@ export function NewMarketPage() {
               </p>
             </div>
             <TxButton
-              label={canRegisterVenue ? "List market and create order book" : "List market"}
-              steps={ready ? (canRegisterVenue ? createSeriesWithDirectMarketSteps(params, address) : createSeriesSteps(params)) : undefined}
+              label="List market"
+              steps={ready ? createSeriesSteps(params) : undefined}
               disabled={!ready}
               disabledReason={!params ? "Enter a strike and expiry first." : strikeBad || expiryBad ? "Fix the highlighted field." : undefined}
-              successMessage={canRegisterVenue ? "Market listed with an Optara Direct order book." : "Market listed."}
+              successMessage="Market listed. Attach its Kuru order book from Admin to open trading."
               onDone={async () => {
                 await qc.invalidateQueries({ queryKey: ["series"] });
                 const id = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params!] });
                 navigate(`/app/series/${id.toLowerCase()}`);
               }}
             />
-            {!canRegisterVenue && (
-              <p className="mt-2 text-xs leading-5 text-muted">
-                This wallet can list the option series but cannot attach an order book. A venue admin can add Optara Direct or Kuru from Admin.
-              </p>
-            )}
+            <p className="mt-2 text-xs leading-5 text-muted">
+              Trading opens once the option&apos;s Kuru market is deployed by Kuru and a venue admin registers it from Admin.
+            </p>
           </div>
         </section>
       ) : (

@@ -25,14 +25,16 @@ export interface TxButtonProps {
   disabled?: boolean;
   disabledReason?: string;
   disclosures?: DisclosureId[];
-  tone?: "primary" | "accent";
+  tone?: "primary" | "accent" | "ghost";
+  /** A smaller button for rows and cards. */
+  compact?: boolean;
   onDone?: (receipts: TransactionReceipt[]) => void;
   successMessage?: string;
   /** What the action moves, in words, e.g. "1,000 USDC from your wallet into account #9". Shown when confirming. */
   summary?: string;
 }
 
-export function TxButton({ label, steps, disabled, disabledReason, disclosures = [], tone = "primary", onDone, successMessage, summary }: TxButtonProps) {
+export function TxButton({ label, steps, disabled, disabledReason, disclosures = [], tone = "primary", compact, onDone, successMessage, summary }: TxButtonProps) {
   const { isConnected, connector, address } = useConnection();
   // Test wallets sign without any popup (anvil holds their keys), so each transaction is confirmed in-app instead.
   const isTestWallet = connector?.type === "test";
@@ -131,7 +133,7 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
   return (
     <div className="space-y-2.5">
       <button
-        className={cx(tone === "accent" ? "btn-accent" : "btn-primary", "w-full !py-3.5 text-[15px]")}
+        className={cx(tone === "accent" ? "btn-accent" : tone === "ghost" ? "btn-ghost" : "btn-primary", "w-full", compact ? "!py-2 text-[13px]" : "!py-3.5 text-[15px]")}
         disabled={disabled || running || !steps}
         onClick={run}
         title={disabled ? disabledReason : undefined}

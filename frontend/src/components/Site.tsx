@@ -5,8 +5,7 @@
 import type { ReactNode, SVGProps } from "react";
 import { Link, NavLink } from "react-router";
 import { ArrowRight, BookOpen, Moon, Newspaper, Sun } from "lucide-react";
-import { Pill, cx } from "./ui.tsx";
-import { IS_LOCAL } from "../config/network.ts";
+import { cx } from "./ui.tsx";
 import { useTheme } from "../state.tsx";
 
 export const SOCIALS = {
@@ -27,11 +26,6 @@ export function SiteLogo({ size = "md" }: { size?: "sm" | "md" }) {
     <Link to="/" aria-label="Optara home" className="flex shrink-0 items-center gap-3">
       <img src="/brand/logo/optara-lockup-light.svg" alt="Optara" className={cx("theme-logo-light w-auto", h)} />
       <img src="/brand/logo/optara-lockup-dark.svg" alt="Optara" className={cx("theme-logo-dark w-auto", h)} />
-      {IS_LOCAL && (
-        <span className="hidden sm:inline-flex">
-          <Pill tone="primary">Local</Pill>
-        </span>
-      )}
     </Link>
   );
 }
@@ -101,6 +95,7 @@ const FOOTER_COLUMNS: { title: string; links: { label: string; to: string; exter
     title: "Learn",
     links: [
       { label: "Introduction", to: "/docs/introduction" },
+      { label: "Whitepaper", to: "/docs/whitepaper" },
       { label: "Options in plain words", to: "/docs/options-101" },
       { label: "Kuru order book", to: "/docs/kuru-order-book" },
       { label: "FAQ", to: "/docs/faq" },

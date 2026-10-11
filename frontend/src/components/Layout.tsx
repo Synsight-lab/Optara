@@ -22,7 +22,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { protocolControlAbi } from "@optara/sdk";
-import { CHAIN, IS_LOCAL, IS_LOCAL_FORK, NETWORK_LABEL } from "../config/network.ts";
 import { fmtLevel, fmtWad } from "../lib/optara/format.ts";
 import { useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
 import { ADDR, publicClient } from "../lib/optara/client.ts";
@@ -62,7 +61,7 @@ export function Layout() {
   const secondary: MenuItem[] = [
     { to: "/app/liquidations", label: "Liquidations", text: "Accounts below their margin, and auctions", icon: ShieldAlert },
     { to: "/app/system", label: "System status", text: "Prices, reserves, upgrades and contracts", icon: Server },
-    { to: "/app/new", label: "New market", text: "List an option with its own order book", icon: Zap },
+    { to: "/app/new", label: "New market", text: "List a new strike and expiry", icon: Zap },
     ...(showAdmin ? [{ to: "/app/admin", label: "Admin", text: adminLabel ? `Your roles: ${adminLabel}` : "Role-holder controls", icon: LockKeyhole }] : []),
   ];
 
@@ -74,7 +73,6 @@ export function Layout() {
             <img src="/brand/logo/optara-lockup-light.svg" alt="Optara" className="theme-logo-light h-8 w-auto" />
             <img src="/brand/logo/optara-lockup-dark.svg" alt="Optara" className="theme-logo-dark h-8 w-auto" />
           </Link>
-          <NetworkBadge />
 
           {/* Primary navigation from tablet width up; phones use the bottom tab bar */}
           <nav className="ml-1 hidden items-center gap-0.5 md:flex lg:ml-4" aria-label="Main">
@@ -289,17 +287,6 @@ function MoreMenu({ items, onGuide }: { items: MenuItem[]; onGuide: () => void }
         </div>
       )}
     </div>
-  );
-}
-
-/** Which chain the app is on, shown only off mainnet so nobody mistakes a test network for the real one. */
-function NetworkBadge() {
-  if (CHAIN.id === 143 && !IS_LOCAL) return null;
-  const label = IS_LOCAL_FORK ? "Local fork" : IS_LOCAL ? "Local" : (NETWORK_LABEL[CHAIN.id] ?? CHAIN.name);
-  return (
-    <span className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[11px] font-semibold text-warn sm:inline-flex" title="Test network: not real money">
-      <span className="h-1.5 w-1.5 rounded-full bg-warn" /> {label}
-    </span>
   );
 }
 

@@ -19,7 +19,7 @@ BYTECODE_DIR = CONTRACT.parent / "deployments" / "bytecode"
 
 # Contracts the frontend DEPLOYS itself (ABI + creation bytecode), keyed by contract name -> source file. Exported
 # from the build so a deploy can never use a stale or hand-copied bytecode.
-DEPLOYABLE = {"OptaraDirectMarket": "OptaraDirectAdapter.sol"}
+DEPLOYABLE: dict[str, str] = {}
 
 # The 15 proxied modules (manifest `proxies` keys), then the non-proxy contracts users and keepers touch.
 CONTRACTS = [
@@ -80,7 +80,7 @@ def main() -> None:
             path.write_text(text)
     extra = sorted(p.name for p in ABI_DIR.glob("*.json") if p.name not in wanted) if ABI_DIR.exists() else []
     deployable = {f"{n}.json": json.dumps(artifact_of(n, src), indent=2, sort_keys=True) + "\n" for n, src in DEPLOYABLE.items()}
-    if not check:
+    if deployable and not check:
         BYTECODE_DIR.mkdir(parents=True, exist_ok=True)
     for file, text in deployable.items():
         path = BYTECODE_DIR / file

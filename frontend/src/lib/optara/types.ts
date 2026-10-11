@@ -49,7 +49,7 @@ export interface Quote {
   market: Address;
   venueId?: Hex;
   venueName?: string;
-  /** Options for sale at the ask / wanted at the bid (WAD), when the venue reports depth (Optara Direct does). */
+  /** Options for sale at the ask / wanted at the bid (WAD), when the venue reports depth. */
   askQty?: bigint;
   bidQty?: bigint;
 }

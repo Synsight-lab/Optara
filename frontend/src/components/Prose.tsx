@@ -49,7 +49,8 @@ export const Code = ({ children }: { children: ReactNode }) => <code className="
 
 /** An internal docs link, or an app link when it starts with /app. */
 export function A({ to, children }: { to: string; children: ReactNode }) {
-  if (/^https?:/.test(to))
+  // External sites and static files (the whitepaper PDF) open outside the router.
+  if (/^https?:/.test(to) || /\.pdf$/.test(to))
     return (
       <a href={to} target="_blank" rel="noreferrer" className="prose-link">
         {children}

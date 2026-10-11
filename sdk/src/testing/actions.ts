@@ -179,7 +179,7 @@ function makerSizeForProduct(p: ReturnType<typeof stackProducts>[number], overri
  */
 export async function quoteBooks(
   s: LocalStack,
-  opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint; includeKuru?: boolean } = {},
+  opts: { price?: number; indices?: number[]; size?: bigint; spreadBps?: bigint } = {},
 ): Promise<bigint> {
   const products = stackProducts(s.manifest);
   const px = s.manifest.proxies;
@@ -216,10 +216,7 @@ export async function quoteBooks(
         }
         const price = (mid * 10_000n) / 10n ** 18n; // the mock books' price precision: 1e4 per whole option
         // With real Kuru (a fork) the Kuru books aren't mocks and are quoted by quoteRealKuru; their slots here are zero.
-        const books = [
-          ...(opts.includeKuru === false ? [] : [p.kuruBooks[i]]),
-          ...(p.optaraDirectBooks?.[i] ? [p.optaraDirectBooks[i]] : []),
-        ].filter((b) => b && !/^0x0{40}$/i.test(b)) as Address[];
+        const books = [p.kuruBooks[i]].filter((b) => b && !/^0x0{40}$/i.test(b)) as Address[];
         for (const book of books) {
           await send(s, mm, { address: p.settlementAsset as Address, abi: erc20Abi, functionName: "transfer", args: [book, 50_000_000_000n] });
           const u = await freshOracleUpdateForProduct(s, p, { price: livePrice, surface: false });

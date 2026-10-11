@@ -3,10 +3,12 @@
  * links straight into the app. Numbers here follow docs/PARAMETERS.md; update both together.
  */
 import type { ReactNode } from "react";
-import { BookOpen, Coins, Gavel, Layers, LineChart, Scale, ShieldCheck, Sparkles, Store, Timer, Wallet } from "lucide-react";
+import { BookOpen, Coins, Download, FileText, Gavel, Layers, LineChart, Scale, ShieldCheck, Sparkles, Store, Timer, Wallet } from "lucide-react";
 import { A, B, Callout, Cards, Code, Example, Flow, Formula, H2, H3, Lead, P, Step, Steps, Table, UL } from "../components/Prose.tsx";
 import { ContractsTable } from "./ContractsTable.tsx";
 import { SOCIALS } from "../components/Site.tsx";
+
+export const WHITEPAPER_URL = "/whitepaper.pdf";
 
 export type DocPage = {
   slug: string;
@@ -42,7 +44,7 @@ export const DOCS: DocPage[] = [
           items={[
             { title: "Buy calls and puts", text: "Risk only the premium. Profit if the price ends beyond the strike.", to: "/docs/buying-and-selling", icon: <LineChart className={ic} /> },
             { title: "Write and earn", text: "Lock collateral, mint options, sell them and keep the premium.", to: "/docs/writing-options", icon: <Coins className={ic} /> },
-            { title: "Kuru order book, built in", text: "Place and fill Kuru limit orders without leaving Optara.", to: "/docs/kuru-order-book", icon: <Store className={ic} /> },
+            { title: "Trade on Kuru", text: "Optara supports Kuru's order book: market orders and limit orders from the app.", to: "/docs/kuru-order-book", icon: <Store className={ic} /> },
             { title: "Fair settlement", text: "One price, one recovery ratio, no race to redeem.", to: "/docs/settlement", icon: <Scale className={ic} /> },
           ]}
         />
@@ -58,8 +60,8 @@ export const DOCS: DocPage[] = [
             hedged book needs far less margin than the sum of its legs.
           </li>
           <li>
-            <B>Options are tokens.</B> A bought option is a plain ERC-20. You can hold it, send it, sell it on Kuru, or list it on an
-            Optara Direct book. Liquidity is never locked inside one venue.
+            <B>Options are tokens.</B> A bought option is a plain ERC-20. You can hold it, send it, or sell it on Kuru&apos;s order book.
+            Liquidity is never locked inside Optara.
           </li>
           <li>
             <B>Settlement without a race.</B> At expiry the protocol fixes one price, settles every account, covers any shortfall from
@@ -76,7 +78,7 @@ export const DOCS: DocPage[] = [
           items={[
             { title: "Writer", text: "Deposits collateral and mints options", tone: "primary" },
             { title: "OptionClearing", text: "Holds custody, checks margin, mints tokens" },
-            { title: "Venues", text: "Kuru order book or Optara Direct" },
+            { title: "Kuru", text: "The order book where options trade" },
             { title: "Buyer", text: "Holds the option token", tone: "primary" },
             { title: "Settlement", text: "Pays in stablecoin at expiry", tone: "good" },
           ]}
@@ -93,15 +95,65 @@ export const DOCS: DocPage[] = [
           rows={[
             ["Buyer", "Pays a premium for a call or put and redeems the payout at expiry.", <A to="/app/markets">Markets</A>],
             ["Writer", "Deposits collateral, mints options, sells them and collects premium.", <A to="/app/write">Earn</A>],
-            ["Market maker", "Quotes bids and asks on Kuru or runs an Optara Direct book.", <A to="/docs/optara-direct-books">Direct books</A>],
+            ["Market maker", "Quotes bids and asks on each option's Kuru order book.", <A to="/docs/kuru-order-book">Kuru order book</A>],
             ["Keeper", "Finalizes prices, settles accounts and liquidates risky ones for a reward.", <A to="/app/settlement">Settle</A>],
-            ["Market creator", "Lists a new strike and expiry with its own order book.", <A to="/app/new">New market</A>],
+            ["Market creator", "Lists a new strike and expiry (series creator role).", <A to="/app/new">New market</A>],
           ]}
         />
+
+        <Callout kind="tip" title="Read the whitepaper">
+          The full design rationale is in the <A to="/docs/whitepaper">Optara Protocol Whitepaper</A>.
+        </Callout>
 
         <Callout kind="warn" title="Options carry risk">
           A buyer can lose the entire premium if the option expires worthless. A writer can lose more than the premium they collected.
           Read <A to="/docs/risks">Risks</A> before you trade.
+        </Callout>
+      </>
+    ),
+  },
+  {
+    slug: "whitepaper",
+    group: "Getting started",
+    title: "Whitepaper",
+    description: "The Optara Protocol Whitepaper: portfolio-margined, cash-settled options for Monad.",
+    keywords: "whitepaper paper pdf research design thesis download",
+    body: () => (
+      <>
+        <Lead>
+          The whitepaper sets out why Optara exists and how it is designed, from the non-technical basics of options to margin, oracles,
+          Kuru trading, liquidation, settlement, governance and the key risks.
+        </Lead>
+        <div className="my-6 flex flex-wrap gap-2.5">
+          <a href={WHITEPAPER_URL} target="_blank" rel="noreferrer" className="btn-primary">
+            <FileText className="h-4 w-4" /> Open the whitepaper
+          </a>
+          <a href={WHITEPAPER_URL} download="optara-whitepaper.pdf" className="btn-ghost">
+            <Download className="h-4 w-4" /> Download PDF
+          </a>
+        </div>
+        <div className="my-6 overflow-hidden rounded-2xl border border-line bg-surface-2/40">
+          <object data={`${WHITEPAPER_URL}#view=FitH`} type="application/pdf" aria-label="Optara whitepaper" className="block h-[78vh] min-h-[520px] w-full">
+            <div className="p-6 text-sm text-muted">
+              Your browser can&apos;t show the PDF here. <A to={WHITEPAPER_URL}>Open the whitepaper</A> in a new tab instead.
+            </div>
+          </object>
+        </div>
+
+        <H2>What it covers</H2>
+        <Table
+          compact
+          head={["Part", "Sections"]}
+          rows={[
+            ["Why Optara", "Executive summary · What an option is · Why options matter · The problem · Protocol thesis · Why Monad · Why Kuru"],
+            ["How it works", "System overview · Option lifecycle · Position model · Margin system · Oracles · Trading and venues · Fees"],
+            ["Safety", "Insurance fund · Liquidation · Settlement · Governance and upgradeability · Security model"],
+            ["For users", "Buyer, writer, market maker, keeper and liquidator journeys · Key risks · Glossary"],
+          ]}
+        />
+        <Callout kind="note">
+          These docs follow the whitepaper but are kept up to date with the live app. Where the two differ, the docs and the deployed
+          contracts are authoritative. Mainnet fee rates are listed in <A to="/docs/fees">Fees</A>.
         </Callout>
       </>
     ),
@@ -152,18 +204,18 @@ export const DOCS: DocPage[] = [
           lines={[
             ["Payout per option", "$4,500 − $4,200 = $300"],
             ["Premium paid", "−$60"],
-            ["Optara buyer fee (3% of premium)", "−$1.80"],
+            ["Optara buyer fee (0.3% of premium)", "−$0.18"],
           ]}
-          result={["Profit", "$238.20"]}
+          result={["Profit", "$239.82"]}
         />
         <Example
           title="ETH ends at $4,100"
           lines={[
             ["Payout per option", "$0 (below the strike)"],
             ["Premium paid", "−$60"],
-            ["Optara buyer fee", "−$1.80"],
+            ["Optara buyer fee", "−$0.18"],
           ]}
-          result={["Loss (the most you can lose)", "−$61.80"]}
+          result={["Loss (the most you can lose)", "−$60.18"]}
         />
 
         <H3>Break-even</H3>
@@ -226,8 +278,8 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             chart of what you get back at each price.
           </Step>
           <Step title="Review the route and sign">
-            The app compares the live venues (Optara Direct and Kuru) and picks the best price. If the book is thin, it caps the order at
-            the available depth instead of failing. Approve the stablecoin once, then sign the buy.
+            The ticket shows the best Kuru ask, the fees and your limits. Approve the stablecoin once, then sign the buy. It routes through
+            Optara&apos;s VenueRouter to the option&apos;s Kuru market.
           </Step>
           <Step title="Track and redeem">
             Your position appears in <A to="/app/portfolio">Portfolio</A> with live profit and loss. After expiry and settlement, press{" "}
@@ -274,7 +326,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             ["LiquidationEngine", "Runs Dutch auctions that move risk from unhealthy accounts to liquidators."],
             ["InsuranceFund", "Absorbs shortfalls at settlement and in liquidation. Funded by fees and penalties."],
             ["FeeController", "Charges buyer and seller fees and splits them between insurance, treasury and keepers."],
-            ["VenueRouter + adapters", "The official way to buy and sell on a venue, with fee and slippage limits. Adapters exist for Kuru and Optara Direct."],
+            ["VenueRouter + KuruAdapter", "The official way to buy and sell on Kuru, with fee and slippage limits."],
             ["Oracles", "LiveSpotOracle (Pyth), VolSurfaceOracle (signed volatility surface), SettlementOracle (Chainlink-style price at expiry)."],
             ["UpgradeAdmin", "Holds upgrade rights behind a 7-day timelock (24 hours in an emergency)."],
           ]}
@@ -288,7 +340,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
           items={[
             { title: "1. Deposit", text: "Writer adds stablecoin to a margin account" },
             { title: "2. Mint", text: "Clearing records a short and mints the token", tone: "primary" },
-            { title: "3. Trade", text: "Token sells on Kuru or a Direct book" },
+            { title: "3. Trade", text: "Token sells on Kuru" },
             { title: "4. Expire", text: "Price fixed by the settlement oracle", tone: "warn" },
             { title: "5. Redeem", text: "Holders burn tokens for stablecoin", tone: "good" },
           ]}
@@ -353,9 +405,8 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             Buys are <B>exact-in</B>: you say the most premium to spend and the fewest options you accept. Kuru market orders are quoted
             in stablecoin, so this matches how the venue works.
           </Step>
-          <Step title="The app picks the venue">
-            It reads both venues (Optara Direct and Kuru), compares prices and available depth, and routes to the best one. You can override
-            the choice.
+          <Step title="The router sends it to Kuru">
+            The router hands your budget to the KuruAdapter, which places a market order on the option&apos;s official Kuru market.
           </Step>
           <Step title="Limits protect you">
             You sign a minimum quantity (your slippage limit), a maximum Optara fee and a maximum venue fee. If any is broken, the whole
@@ -377,10 +428,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
           <li>
             The default slippage is <B>1%</B>. You can change it between 0.1% and 10%; the choice is remembered on your device.
           </li>
-          <li>
-            If you ask for more than the book holds, the ticket caps the order at the available depth and offers a <B>Spend just</B> button
-            with the exact amount, instead of sending an order that would revert.
-          </li>
+          <li>If the book can&apos;t fill your whole budget, the unspent premium is refunded to you in the same transaction.</li>
           <li>Quantities move in steps of 0.01 option.</li>
         </UL>
 
@@ -394,7 +442,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
         <Table
           head={["Fee", "Rate", "Paid to"]}
           rows={[
-            ["Optara buyer fee", "3% of the premium actually spent", "Insurance 60%, treasury 30%, keepers 10%"],
+            ["Optara buyer fee", "0.3% of the premium actually spent", "Insurance 60%, treasury 30%, keepers 10%"],
             ["Venue fee", "Set by the venue (for example Kuru's taker fee)", "The venue"],
           ]}
         />
@@ -407,19 +455,19 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
   {
     slug: "kuru-order-book",
     group: "Trading",
-    title: "Kuru order book (built in)",
-    description: "Place, fill and manage Kuru limit orders directly inside Optara.",
+    title: "Kuru order book",
+    description: "How Optara supports Kuru: market orders, limit orders and live depth from the app.",
     keywords: "kuru limit order bid ask orderbook clob margin account deposit withdraw cancel maker taker",
     body: () => (
       <>
         <Lead>
-          Kuru is Monad&apos;s on-chain central limit order book. Optara has the Kuru book <B>built into its interface</B>: you can see the
+          Kuru is Monad&apos;s on-chain central limit order book. Optara <B>supports Kuru</B> as its trading venue, and the app shows each option&apos;s Kuru book: you can see the
           live depth, take resting orders, and place your own limit bids and asks without ever opening Kuru&apos;s site.
         </Lead>
 
         <Callout kind="tip" title="No need to leave Optara">
           A limit order you place from Optara is a real Kuru order on the official market for that option. Anyone trading on Kuru, or
-          through Optara, can fill it. You track its fills from the same screen.
+          through Optara, can fill it. You track, cancel and withdraw from the same screen.
         </Callout>
 
         <H2>Where to find it</H2>
@@ -437,6 +485,9 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             <B>A limit ticket.</B> Pick buy or sell, set your price and size, and place the order.
           </li>
           <li>
+            <B>Cancel and withdraw.</B> Cancel open orders and withdraw your Kuru balance to your wallet without leaving the page.
+          </li>
+          <li>
             <B>My Kuru orders</B>: your active, partially filled and filled orders on that book.
           </li>
         </UL>
@@ -448,7 +499,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             ["What happens", "Fills now against resting orders", "Rests on the book until someone fills it or you cancel"],
             ["Route", "Optara VenueRouter → KuruAdapter → Kuru market", "Straight to the Kuru market from your wallet"],
             ["Price", "Best available, protected by your slippage limit", "Exactly the price you set"],
-            ["Optara buyer fee", "3% of premium spent", "None at placement"],
+            ["Optara buyer fee", "0.3% of premium spent", "None at placement"],
             ["Where tokens land", "Your wallet", "Your Kuru balance (withdraw to wallet)"],
           ]}
         />
@@ -467,12 +518,25 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             The app calls Kuru&apos;s <Code>addBuyOrder</Code> or <Code>addSellOrder</Code>. Your order appears in the depth and in your
             orders list.
           </Step>
-          <Step title="Get filled, then withdraw">
+          <Step title="Get filled, or cancel">
             When a taker hits your order, the proceeds (option tokens for a bid, stablecoin for an ask) are credited to your Kuru balance.
-            Portfolio lists these under <B>On Kuru</B>. Cancelling a resting order and withdrawing your Kuru balance to your wallet are
-            currently done on Kuru.
+            If it never fills, press <B>Cancel order</B> (or <B>Cancel all</B>) in <i>My Kuru orders</i>: the unfilled funds return to
+            your Kuru balance. A partly filled order keeps what filled and cancels the rest.
+          </Step>
+          <Step title="Withdraw to your wallet">
+            The <B>Ready to withdraw from Kuru</B> card on the same page, and the <B>On Kuru</B> card in Portfolio, show your free Kuru
+            balance with a <B>Withdraw</B> button for the stablecoin and for the options.
           </Step>
         </Steps>
+
+        <H2>How much can I buy right now?</H2>
+        <P>
+          A market buy walks the resting asks from the best price up. The Buy ticket reads the Kuru book and shows{" "}
+          <B>Available to buy now</B>: how many options are for sale and what buying all of them would cost. It estimates your fill by
+          walking the same asks, so a budget that reaches deeper levels shows the higher average price you will actually pay. If your
+          budget is larger than everything for sale, the ticket says so and offers to spend just what fills; the router refunds any
+          unspent premium in the same transaction anyway.
+        </P>
 
         <H2>Important boundaries</H2>
         <Callout kind="warn" title="Kuru balances are not Optara margin">
@@ -495,64 +559,6 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
           tokens from <B>Kuru&apos;s own router records</B>, not from the caller, and requires the base to be the option token and the
           quote to be the settlement stablecoin. A fake market that only claims the right tokens cannot be registered. Once an option
           expires its market is marked expired and the app switches to redemption.
-        </P>
-      </>
-    ),
-  },
-  {
-    slug: "optara-direct-books",
-    group: "Trading",
-    title: "Optara Direct books",
-    description: "Simple per-option books run by a market owner: stock, ask, bid and withdraw.",
-    keywords: "optara direct book owner market maker stock ask bid inventory withdraw",
-    body: () => (
-      <>
-        <Lead>
-          An <B>Optara Direct</B> book is a small contract, one per option, that sells option tokens it holds at its owner&apos;s ask and
-          buys them with stablecoin it holds at its owner&apos;s bid. It is the simplest way to make a new market tradable on day one.
-        </Lead>
-
-        <H2>How it works</H2>
-        <Flow
-          items={[
-            { title: "Owner stocks the book", text: "Sends option tokens (to sell) and/or stablecoin (to buy)" },
-            { title: "Owner sets prices", text: "One ask and one bid, each with a size" },
-            { title: "Traders fill through the router", text: "Same limits and fees as any venue", tone: "primary" },
-          ]}
-        />
-        <UL>
-          <li>
-            The book sells at most what it holds, so a buyer can never be promised options that don&apos;t exist. The trade ticket shows
-            the available size and caps your order to it.
-          </li>
-          <li>Prices are quoted in the settlement stablecoin with a precision that suits the asset (finer steps for sub-$10 assets such as MON).</li>
-          <li>Only the owner can change prices or withdraw inventory.</li>
-        </UL>
-
-        <H2>Running your own book</H2>
-        <P>
-          If you created a market, or own a Direct book, open the option&apos;s Trade tab. A <B>Your order book</B> panel appears with four
-          tabs:
-        </P>
-        <Table
-          head={["Tab", "What it does"]}
-          rows={[
-            ["Stock", "Mint options from your margin account (or send ones from your wallet) into the book so it has something to sell."],
-            ["Ask", "Set the price and size you sell at. The panel suggests a price from fair value and never below one price step."],
-            ["Bid", "Fund the book with stablecoin and set the price you buy back at."],
-            ["Withdraw", "Pull unsold options or unused stablecoin back to your wallet."],
-          ]}
-        />
-        <Callout kind="note">
-          To stock a book with freshly minted options you need a margin account with collateral, because minting creates a short. See{" "}
-          <A to="/docs/writing-options">Writing options</A>.
-        </Callout>
-
-        <H2>Creating a market with a book</H2>
-        <P>
-          On <A to="/app/new">New market</A> you choose the asset, call or put, strike, expiry and contract size. The app creates the series
-          and deploys its Optara Direct book in the same flow, then registers the book with the router. Stock it and set an ask, and the
-          option is buyable.
         </P>
       </>
     ),
@@ -590,8 +596,7 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
             you sign.
           </Step>
           <Step title="Sell">
-            If the book has a bid, sell the new tokens to it instantly for premium. Or keep them and list them with a Kuru limit ask or on
-            your own Direct book.
+            If the Kuru book has a bid, sell the new tokens to it instantly for premium. Or keep them and list them with a Kuru limit ask.
           </Step>
           <Step title="Close or settle">
             Buy tokens back and burn them to close the short early, or wait for expiry. At settlement your account pays the payout owed (if
@@ -604,13 +609,13 @@ Put  break-even = strike − premium per unit       e.g. 3,800 − 45 = $3,755`}
           title="Writing 1 ETH call, strike $4,200, premium $60"
           lines={[
             ["Premium received", "+$60.00"],
-            ["Seller fee (3% of the minted mark, min $0.10)", "−$1.80"],
+            ["Seller fee (0.3% of the minted mark, min $0.10)", "−$0.18"],
             ["If ETH ends at or below $4,200", "owes $0"],
           ]}
-          result={["Profit if it expires worthless", "$58.20"]}
+          result={["Profit if it expires worthless", "$59.82"]}
         />
         <P>
-          If ETH instead ends at $4,500 the writer owes $300 per option, a loss of $241.80. A call writer&apos;s loss has no fixed cap, which
+          If ETH instead ends at $4,500 the writer owes $300 per option, a loss of $240.18. A call writer&apos;s loss has no fixed cap, which
           is why writing needs margin.
         </P>
 
@@ -723,7 +728,8 @@ equity = cash + value of longs − value of shorts`}</Formula>
         <H2>Kuru balances</H2>
         <P>
           Funds and option tokens you deposited for Kuru limit orders, or received from fills, live in Kuru&apos;s MarginAccount. Portfolio
-          lists them in an <B>On Kuru</B> card, marked as outside Optara, so you always know what is waiting there to be withdrawn.
+          lists them in an <B>On Kuru</B> card, marked as outside Optara, with a <B>Withdraw to wallet</B> button for each balance. Funds still
+          locked in open orders show up there once you cancel them.
         </P>
       </>
     ),
@@ -946,8 +952,8 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
         <Table
           head={["Fee", "Rate", "Charged on", "Hard cap"]}
           rows={[
-            ["Buyer fee", "3%", "Premium actually spent on a router buy", "10%"],
-            ["Seller fee", "3% (min $0.10)", "Fair value of options minted", "10%"],
+            ["Buyer fee", "0.3%", "Premium actually spent on a router buy", "10%"],
+            ["Seller fee", "0.3% (min $0.10)", "Fair value of options minted", "10%"],
             ["Liquidation penalty", "2%", "Slice maintenance margin, paid by the liquidated account", "—"],
             ["Sell through router", "0%", "The writer already paid at mint", "—"],
             ["Kuru limit order", "0% Optara fee", "Kuru's own maker/taker fees apply", "—"],
@@ -1119,7 +1125,7 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
             ["Slice size", "5% – 25% (up to 100% after the auction duration)"],
             ["Auction ends at", "IM + 5%"],
             ["Liquidation penalty", "2% of slice MM"],
-            ["Buyer / seller fee", "3% / 3%"],
+            ["Buyer / seller fee", "0.3% / 0.3%"],
             ["Default slippage", "1% (0.1% – 10%)"],
             ["Finalization delay window", "5 minutes – 7 days"],
             ["Upgrade timelock", "7 days (emergency 24 hours)"],
@@ -1146,14 +1152,14 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
 
         <H3>Do I need to go to Kuru to use limit orders?</H3>
         <P>
-          No. The Kuru book is built into each option&apos;s <B>Order book</B> page. You can place, track and fill limit orders there. See{" "}
+          No. Optara supports Kuru directly: each option has an <B>Order book</B> page showing its Kuru book. You can place, track and fill limit orders there. See{" "}
           <A to="/docs/kuru-order-book">Kuru order book</A>.
         </P>
 
         <H3>Why can&apos;t I buy an option I just created?</H3>
         <P>
-          A new market has no sellers yet. Stock its Optara Direct book and set an ask from the <B>Your order book</B> panel, or place a Kuru
-          ask. See <A to="/docs/optara-direct-books">Optara Direct books</A>.
+          A new series can only be traded once its Kuru market is deployed and registered by a venue admin, and someone has written
+          options and listed them with an ask. Writers can mint and place a Kuru limit ask from the app.
         </P>
 
         <H3>Can I exercise early?</H3>
@@ -1169,7 +1175,7 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
         <P>The payout depends only on the settlement price at expiry. If the price crossed the strike by then, the option pays.</P>
 
         <H3>Who sets the price of an option?</H3>
-        <P>The market does, on Kuru or a Direct book. Optara shows a fair value from spot and volatility to help you judge it, but never forces a price.</P>
+        <P>The market does, on Kuru. Optara shows a fair value from spot and volatility to help you judge it, but never forces a price.</P>
       </>
     ),
   },
@@ -1196,8 +1202,7 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
           ["Settlement group", "All series of one product with the same expiry, settled together."],
           ["Recovery ratio", "The share of each payout that is paid, fixed once per group. 1 when everyone is solvent."],
           ["Keeper", "Anyone who runs maintenance calls (finalize, settle, liquidate) for a reward."],
-          ["Venue", "Somewhere option tokens trade: Kuru or an Optara Direct book."],
-          ["Direct book", "A per-option contract that sells and buys at its owner's prices."],
+          ["Venue", "Where option tokens trade. Optara supports Kuru's order books."],
           ["Kuru MarginAccount", "Kuru's balance contract; limit orders draw from it and fills land in it."],
         ]}
       />
@@ -1216,7 +1221,7 @@ ratio      = min(1, (collected + insurance) / grossClaim)`}</Formula>
           items={[
             { title: `X ${SOCIALS.x.handle}`, text: "Announcements, new markets and updates.", to: SOCIALS.x.href, icon: <Sparkles className={ic} /> },
             { title: "Blog", text: "Deep dives on how Optara works and what's new.", to: "/blog", icon: <BookOpen className={ic} /> },
-            { title: "Kuru", text: "The order book Optara routes to, built into every option page.", to: "https://docs.kuru.io/", icon: <Layers className={ic} /> },
+            { title: "Kuru", text: "The order book Optara supports for trading options.", to: "https://docs.kuru.io/", icon: <Layers className={ic} /> },
             { title: "Monad", text: "The chain Optara runs on.", to: "https://docs.monad.xyz/", icon: <Timer className={ic} /> },
           ]}
         />

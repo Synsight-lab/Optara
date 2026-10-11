@@ -7,28 +7,23 @@ import { optionSeriesRegistryAbi, protocolControlAbi, venueRegistryAbi } from "@
 import { CheckCircle2, CircleSlash, Landmark, ListChecks, LockKeyhole, Route, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { Card, EmptyState, Pill, Segmented, Skeleton, cx } from "../components/ui.tsx";
 import { TxButton } from "../components/TxButton.tsx";
-import { callStep, registerExistingDirectMarketSteps } from "../lib/optara/actions.ts";
-import { ADDR, DIRECT_VENUE, KURU_VENUE, publicClient } from "../lib/optara/client.ts";
+import { callStep } from "../lib/optara/actions.ts";
+import { ADDR, KURU_VENUE, publicClient } from "../lib/optara/client.ts";
 import { fmtExpiryShort, fmtLevel } from "../lib/optara/format.ts";
 import { useSeriesList } from "../lib/optara/hooks.ts";
 import { ROLE_KEYS, TRUSTED_ROLES, hasAnyTrustedRole, hasRole, roleNames } from "../lib/optara/roles.ts";
 import type { Series } from "../lib/optara/types.ts";
 
-type VenueKey = "direct" | "kuru";
-const VENUES: Record<VenueKey, { id: Hex; label: string; description: string }> = {
-  direct: { id: DIRECT_VENUE, label: "Optara Direct", description: "The in-house quoted venue. Disable it if you only want external venues shown." },
-  kuru: { id: KURU_VENUE, label: "Kuru", description: "External Kuru order books registered through VenueRegistry." },
-};
+/** Kuru is Optara's venue: its order books are registered per option series through VenueRegistry. */
+const selectedVenue = { id: KURU_VENUE, label: "Kuru", description: "Kuru order books registered through VenueRegistry. Disabling the adapter stops router trading; minting, closing, settlement and redemption keep working." };
 
 export function AdminPage() {
   const { address, isConnected } = useConnection();
   const { data: series, isLoading } = useSeriesList();
-  const [venue, setVenue] = useState<VenueKey>("direct");
   const [seriesId, setSeriesId] = useState<Hex | undefined>();
   const [market, setMarket] = useState("");
   const [metadata, setMetadata] = useState("");
   const selected = (series ?? []).find((s) => s.id === seriesId) ?? series?.[0];
-  const selectedVenue = VENUES[venue];
 
   const products = useMemo(() => [...new Map((series ?? []).map((s) => [s.productId, s])).values()], [series]);
   const [productId, setProductId] = useState<Hex | undefined>();
@@ -133,7 +128,6 @@ export function AdminPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
         <Card title="Venue controls">
           <div className="space-y-4">
-            <Segmented<VenueKey> value={venue} onChange={setVenue} options={[{ value: "direct", label: "Optara Direct" }, { value: "kuru", label: "Kuru" }]} />
             <div className="rounded-2xl border border-line bg-surface-2/50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -201,27 +195,10 @@ export function AdminPage() {
         <Card title="Register a venue market">
           <div className="space-y-3">
             <p className="text-sm leading-6 text-muted">
-              Attach an order book to a specific option series. Optara Direct can be created here. Kuru books must already exist because real Kuru deployment is owner-gated.
+              Attach a Kuru order book to a specific option series. The Kuru market must already exist (Kuru deploys markets) with the option token as base and the settlement asset as quote; the adapter checks this against Kuru's own records.
             </p>
             <SeriesSelect series={series} selected={selected} onChange={setSeriesId} loading={isLoading} compact />
-            {venue === "direct" ? (
-              <div className="rounded-2xl border border-primary/20 bg-primary-soft/45 p-3">
-                <div className="font-bold">Create Optara Direct order book</div>
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  This deploys a simple in-house book for the selected option token and registers it immediately.
-                </p>
-                <div className="mt-3">
-                  <TxButton
-                    label="Create and attach Optara Direct book"
-                    steps={selected ? registerExistingDirectMarketSteps(selected, address) : undefined}
-                    disabled={!isVenueAdmin || !selected || (venueMarket?.market !== zeroAddress && !!venueMarket?.market)}
-                    disabledReason={!isVenueAdmin ? "Needs VENUE_ADMIN." : venueMarket?.market !== zeroAddress && !!venueMarket?.market ? "This venue already has a market for the selected series." : undefined}
-                    successMessage="Optara Direct order book registered."
-                  />
-                </div>
-              </div>
-            ) : (
-              <>
+            <>
                 <label className="block">
                   <span className="mb-1 block text-xs font-bold uppercase text-faint">Existing Kuru market address</span>
                   <input className="input" value={market} onChange={(e) => setMarket(e.target.value.trim())} placeholder="0x..." />
@@ -238,7 +215,6 @@ export function AdminPage() {
                   successMessage="Venue market registered."
                 />
               </>
-            )}
           </div>
         </Card>
       </div>
@@ -281,7 +257,7 @@ export function AdminPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <Guide icon={Landmark} title="1. Approve product" text="Governance approves the underlying, settlement asset, strike bounds, expiry bounds and contract-size limits." />
           <Guide icon={ShieldCheck} title="2. Attach risk and oracle rules" text="Risk and oracle admins prepare the surface, spot source and settlement config before series creation." />
-          <Guide icon={SlidersHorizontal} title="3. Register venue markets" text="Venue admin registers Kuru or Optara Direct books, then activates only the routes that should appear in trading." />
+          <Guide icon={SlidersHorizontal} title="3. Register venue markets" text="Venue admin registers each option's Kuru book, then activates only the routes that should appear in trading." />
         </div>
       </Card>
     </div>

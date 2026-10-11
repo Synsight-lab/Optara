@@ -33,7 +33,6 @@ import {
 import { AmountInput, Card, CopyButton, Details, EmptyState, Pill, Row, Segmented, Skeleton, Stat, Term, cx, useTicker } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { BackingCard } from "../components/BackingCard.tsx";
-import { OwnerBookPanel } from "../components/OwnerBookPanel.tsx";
 import { LimitsPanel } from "../components/LimitsPanel.tsx";
 import { lessSlip, useSlippage, venueMinQty, withSlip } from "../lib/optara/limits.ts";
 import { buyLimits } from "./Trade.tsx";
@@ -45,7 +44,9 @@ import {
   buyVenueSteps,
   closeShortSteps,
   kuruDepositSteps,
+  kuruCancelSteps,
   kuruLimitBuySteps,
+  kuruWithdrawSteps,
   kuruLimitSellSteps,
   mintSteps,
   redeemSteps,
@@ -68,9 +69,10 @@ import {
   useTokenBalance,
   useWalletWrappers,
 } from "../lib/optara/hooks.ts";
-import { getKuruLimitMarket, getKuruOrderBook, getKuruUserOrders, previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee, type KuruBookLevel, type KuruUserOrder } from "../lib/optara/reads.ts";
+import { getKuruLimitMarket, getKuruOrderBook, getKuruUserOrders, previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee, type KuruBookLevel, type KuruOrderStatus, type KuruUserOrder } from "../lib/optara/reads.ts";
 import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
 import type { Quote, Series } from "../lib/optara/types.ts";
+import { fillFromAsks } from "../lib/optara/depth.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
 
@@ -296,8 +298,6 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
             <p className="mt-2 text-xs text-muted">Use this simulator to test settlement prices. The amount follows the order form in the action panel.</p>
           </Card>
 
-          <OwnerBookPanel series={series} />
-
           <div id="backing">
             <BackingCard series={series} spot={spotNum} />
           </div>
@@ -480,6 +480,13 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
     enabled: !!owner,
     refetchInterval: 5_000,
   });
+  // Shares its cache with the limit ticket: the free (withdrawable) Kuru balances for this option and its quote asset.
+  const limit = useQuery({
+    queryKey: ["kuruLimitMarket", series.id, owner],
+    queryFn: () => getKuruLimitMarket(series, owner),
+    enabled: !!owner,
+    refetchInterval: 10_000,
+  });
 
   if (!owner) {
     return (
@@ -492,7 +499,7 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
 
   if (orders.isLoading) return <Skeleton className="h-40 w-full rounded-3xl" />;
   const rows = orders.data ?? [];
-  const activeRows = rows.filter((o) => o.status !== "filled");
+  const activeRows = rows.filter((o) => o.status === "open" || o.status === "partial");
   const partialRows = rows.filter((o) => o.status === "partial");
   const filledRows = rows.filter((o) => o.status === "filled");
   const statusRows = filter === "active" ? activeRows : filter === "filled" ? filledRows : rows;
@@ -520,6 +527,22 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
           <OrderCount label="Partial" value={partialRows.length} tone={partialRows.length ? "text-warn" : "text-muted"} />
           <OrderCount label="Filled" value={filledRows.length} tone={filledRows.length ? "text-good" : "text-muted"} />
         </div>
+
+        {activeRows.length > 1 && (
+          <div className="mt-3">
+            <TxButton
+              compact
+              tone="ghost"
+              label={`Cancel all ${activeRows.length} open orders`}
+              steps={kuruCancelSteps(activeRows[0]!.market, activeRows.map((o) => o.orderId))}
+              successMessage="Orders cancelled. Unfilled funds are back in your Kuru balance."
+            />
+          </div>
+        )}
+
+        {limit.data && (limit.data.quoteBalance > 0n || limit.data.optionBalance > 0n) && (
+          <KuruWithdrawCard series={series} margin={limit.data.margin} quoteBalance={limit.data.quoteBalance} optionBalance={limit.data.optionBalance} />
+        )}
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <Segmented
@@ -565,6 +588,34 @@ function MyKuruOrdersPanel({ series, owner }: { series: Series; owner?: Address 
   );
 }
 
+/** Free Kuru balances (not locked in open orders) with one-click withdrawal to the wallet. */
+function KuruWithdrawCard({ series, margin, quoteBalance, optionBalance }: { series: Series; margin: Address; quoteBalance: bigint; optionBalance: bigint }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-primary/25 bg-primary-soft/50 p-3">
+      <div className="text-sm font-semibold text-ink">Ready to withdraw from Kuru</div>
+      <p className="mt-0.5 text-xs leading-5 text-muted">Filled or cancelled orders leave funds in your Kuru balance. Bring them back to your wallet here.</p>
+      <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+        {quoteBalance > 0n && (
+          <TxButton
+            compact
+            label={`Withdraw ${fmtNative(quoteBalance, series.assetDecimals)} ${series.assetSymbol}`}
+            steps={kuruWithdrawSteps(margin, series.settlementAsset, quoteBalance, series.assetSymbol)}
+            successMessage={`${series.assetSymbol} is back in your wallet.`}
+          />
+        )}
+        {optionBalance > 0n && (
+          <TxButton
+            compact
+            label={`Withdraw ${fmtQty(optionBalance)} options`}
+            steps={kuruWithdrawSteps(margin, series.wrapper, optionBalance, "options")}
+            successMessage="Options are back in your wallet, ready to sell, close or redeem."
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OrderCount({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className="rounded-2xl border border-line bg-surface-2/55 px-3 py-2">
@@ -602,14 +653,26 @@ function CompactKuruOrder({ order, assetSymbol }: { order: KuruUserOrder; assetS
       </div>
 
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface">
-        <div className={cx("h-full rounded-full", order.status === "filled" ? "bg-good" : order.status === "partial" ? "bg-warn" : "bg-primary")} style={{ width: `${progress}%` }} />
+        <div className={cx("h-full rounded-full", order.status === "filled" ? "bg-good" : order.status === "partial" ? "bg-warn" : order.status === "cancelled" ? "bg-faint" : "bg-primary")} style={{ width: `${progress}%` }} />
       </div>
+
+      {(order.status === "open" || order.status === "partial") && (
+        <div className="mt-3">
+          <TxButton
+            compact
+            tone="ghost"
+            label={order.status === "partial" ? "Cancel the unfilled part" : "Cancel order"}
+            steps={kuruCancelSteps(order.market, [order.orderId])}
+            successMessage="Order cancelled. Unfilled funds are back in your Kuru balance, ready to withdraw."
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function OrderStatus({ status }: { status: "open" | "partial" | "filled" }) {
-  const cls = status === "filled" ? "bg-good/12 text-good border-good/25" : status === "partial" ? "bg-warn/12 text-warn border-warn/25" : "bg-surface text-muted border-line";
+function OrderStatus({ status }: { status: KuruOrderStatus }) {
+  const cls = status === "filled" ? "bg-good/12 text-good border-good/25" : status === "partial" ? "bg-warn/12 text-warn border-warn/25" : status === "cancelled" ? "bg-surface text-faint border-line line-through" : "bg-surface text-muted border-line";
   return <span className={cx("rounded-full border px-2 py-0.5 text-xs font-bold capitalize", cls)}>{status === "partial" ? "Partially filled" : status}</span>;
 }
 
@@ -1142,6 +1205,9 @@ function KuruLimitPanel({
 }
 
 // ------------------------------------------------------------------ Buy Panel
+/** Ask levels read for the buy estimate; a full read means deeper asks may exist. */
+const BUY_DEPTH_LEVELS = 50;
+
 function BuyPanel({
   s,
   ctx,
@@ -1185,15 +1251,27 @@ function BuyPanel({
     enabled: !!premiumIn && !!selectedQuote,
   });
 
-  const rawQty =
-    premiumIn && ask && fees.data
-      ? (toWadFromNative(premiumIn - fees.data.kuru, s.assetDecimals) * WAD) / ask
-      : undefined;
-  // A venue that reports depth (Optara Direct) fills at most what it offers; the rest of the budget is refunded.
-  const avail = selectedQuote?.askQty;
-  const depthLimited = rawQty !== undefined && avail !== undefined && rawQty > avail;
-  const estQty = depthLimited ? avail : rawQty;
-  const spend = depthLimited && ask ? toNative((avail! * ask) / WAD, s.assetDecimals) + 1n : undefined; // premium the fill uses
+  // The resting Kuru asks: a market buy walks them from the best price up, so estimate the fill by walking them too.
+  const book = useQuery({
+    queryKey: ["kuruBuyDepth", s.id, selectedQuote?.market],
+    queryFn: () => getKuruOrderBook(s, BUY_DEPTH_LEVELS),
+    enabled: !!selectedQuote,
+    refetchInterval: 10_000,
+  });
+  // A book read with no asks while the venue quotes one means the depth view isn't available: fall back to the best ask.
+  const asks = book.data && book.data.asks.length > 0 ? book.data.asks : undefined;
+  const budgetWad = premiumIn && fees.data && premiumIn > fees.data.kuru ? toWadFromNative(premiumIn - fees.data.kuru, s.assetDecimals) : undefined;
+  const walk = asks ? fillFromAsks(asks, budgetWad ?? 0n) : undefined;
+  const depthPartial = !!book.data && book.data.asks.length >= BUY_DEPTH_LEVELS; // more levels may rest beyond what was read
+  const rawQty = walk ? (budgetWad !== undefined ? walk.qty : undefined) : budgetWad !== undefined && ask ? (budgetWad * WAD) / ask : undefined;
+  // A buy larger than every resting ask fills what is there; the rest of the budget is refunded.
+  const avail = walk ? walk.depthQty : selectedQuote?.askQty;
+  const depthLimited = walk ? walk.exhausted && !depthPartial : rawQty !== undefined && avail !== undefined && rawQty > avail;
+  const estQty = depthLimited && !walk ? avail : rawQty;
+  const spend = depthLimited
+    ? toNative(walk ? walk.cost : (avail! * ask!) / WAD, s.assetDecimals) + (fees.data?.kuru ?? 0n) + 1n // premium the fill uses
+    : undefined;
+  const avgPrice = walk && walk.qty > 0n ? (walk.cost * WAD) / walk.qty : undefined;
 
   const total = premiumIn !== undefined && fees.data ? premiumIn + fees.data.optara : undefined; // what you put up
   // what the buy really costs: a depth-limited fill spends less and pays the fee on that only
@@ -1244,7 +1322,7 @@ function BuyPanel({
         invalid={tooMuch ? `Wallet holds ${fmtNative(balance!, s.assetDecimals)} ${s.assetSymbol}.` : undefined}
       />
 
-      {buyVenues.length > 0 && (
+      {buyVenues.length > 1 && (
         <div>
           <div className="mb-1.5 text-xs font-bold uppercase text-faint">Trading venue</div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -1281,11 +1359,11 @@ function BuyPanel({
             <div>
               <div className="text-[11px] font-bold uppercase text-faint">Estimated tokens</div>
               <div className="mt-1 text-xs leading-5 text-muted">
-                Based on the selected venue ask, venue fee, and your premium amount.
+                Your premium, less the venue fee, walked through the resting asks from the best price up.
               </div>
             </div>
             <div className="min-w-0 text-left sm:text-right">
-              <div className="num break-words font-display text-2xl font-bold tracking-tight text-ink">
+              <div className="num whitespace-nowrap font-display text-2xl font-bold tracking-tight text-ink">
                 {estQty !== undefined ? fmtQty(estQty) : "—"}
               </div>
               <div className="mt-0.5 text-xs text-muted">
@@ -1295,13 +1373,34 @@ function BuyPanel({
           </div>
         </div>
 
+        {walk && walk.depthQty > 0n && (
+          <div className="mt-2.5 rounded-xl border border-line bg-surface px-3 py-2.5 text-[13px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-ink">Available to buy now</span>
+              <span className="num text-right font-semibold text-ink">
+                {depthPartial ? "at least " : "up to "}
+                {fmtQty(walk.depthQty)} options
+              </span>
+            </div>
+            <p className="mt-0.5 text-muted">
+              For about {fmtNative(toNative(walk.depthCost, s.assetDecimals), s.assetDecimals)} {s.assetSymbol} from the current Kuru asks
+              {asks!.length > 1 ? ` across ${asks!.length} prices, ${fmtPrice(asks![0]!.price)} to ${fmtPrice(asks![asks!.length - 1]!.price)}` : ` at ${fmtPrice(asks![0]!.price)}`} {s.assetSymbol} per option, before fees.
+            </p>
+            {avgPrice !== undefined && walk.levels > 1 && (
+              <p className="mt-1 text-muted">
+                Your budget reaches {walk.levels} price levels, so you pay about <b className="num text-ink">{fmtPrice(avgPrice)} {s.assetSymbol}</b> per option on average.
+              </p>
+            )}
+          </div>
+        )}
+
         {avail !== undefined && avail === 0n && (
           <p className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] text-warn">Nothing is for sale on {venueName} right now.</p>
         )}
         {depthLimited && avail! > 0n && spend !== undefined && (
           <div className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">
             <p className="font-semibold text-warn">
-              Only {fmtQty(avail!)} option{avail === WAD ? " is" : "s are"} for sale at this price on {venueName}.
+              Only {fmtQty(avail!)} option{avail === WAD ? " is" : "s are"} for sale on {venueName} right now.
             </p>
             <p className="mt-0.5 text-muted">
               Your buy fills {fmtQty(avail!)} for about {fmtNative(spend, s.assetDecimals)} {s.assetSymbol}; the rest of your budget comes straight back.

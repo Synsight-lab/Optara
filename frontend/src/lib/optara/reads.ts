@@ -24,7 +24,7 @@ import {
 import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
 import { INDEXER_URL, IS_LOCAL } from "../../config/network.ts";
-import { ADDR, DEPLOYED_AT_BLOCK, DIRECT_VENUE, KURU_VENUE, publicClient as c } from "./client.ts";
+import { ADDR, DEPLOYED_AT_BLOCK, KURU_VENUE, publicClient as c } from "./client.ts";
 import { WAD } from "./format.ts";
 import { GROUP_STATES, HEALTH_STATES, SURFACE_STATUS, type GroupState, type Health, type Position, type Quote, type Series, type SurfaceStatus } from "./types.ts";
 
@@ -133,6 +133,7 @@ export interface SeriesMarket {
 const kuruBookAbi = [
   { type: "function", name: "bestBidAsk", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }, { type: "uint256" }] },
   { type: "function", name: "getL2Book", stateMutability: "view", inputs: [{ name: "bidPricePoints", type: "uint32" }, { name: "askPricePoints", type: "uint32" }], outputs: [{ type: "bytes" }] },
+  { type: "event", name: "OrdersCanceled", inputs: [{ name: "orderId", type: "uint40[]" }, { name: "owner", type: "address" }] },
   { type: "event", name: "OrderCreated", inputs: [{ name: "orderId", type: "uint40" }, { name: "owner", type: "address" }, { name: "size", type: "uint96" }, { name: "price", type: "uint32" }, { name: "isBuy", type: "bool" }] },
   {
     type: "event",
@@ -178,54 +179,26 @@ const kuruRouterAbi = [
 ] as const;
 
 const WAD_ = 10n ** 18n;
-const directDepthAbi = [
-  { type: "function", name: "askSize", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "bidSize", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "sizePrecision", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "base", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-] as const;
 
 async function getVenueQuote(venueId: Hex, venueName: string, seriesId: Hex): Promise<Quote | undefined> {
   try {
     const [, market] = await c.readContract({ address: ADDR.venues, abi: venueRegistryAbi, functionName: "tradableMarket", args: [venueId, seriesId] });
     const [bid, ask] = await c.readContract({ address: market, abi: kuruBookAbi, functionName: "bestBidAsk" });
-    // Optara Direct books quote one level with a size, and sell only what they hold: report the depth so forms never
-    // promise more than can fill.
-    let askQty: bigint | undefined;
-    let bidQty: bigint | undefined;
-    if (venueId === DIRECT_VENUE) {
-      const read = (functionName: string) => c.readContract({ address: market, abi: directDepthAbi, functionName } as never) as Promise<bigint>;
-      const [askSize, bidSize, sizePrecision, base] = await Promise.all([
-        read("askSize"),
-        read("bidSize"),
-        read("sizePrecision"),
-        c.readContract({ address: market, abi: directDepthAbi, functionName: "base" }),
-      ]);
-      const held = await c.readContract({ address: base as Address, abi: erc20Abi, functionName: "balanceOf", args: [market] });
-      const asked = (askSize * WAD_) / sizePrecision;
-      askQty = asked < held ? asked : held;
-      bidQty = (bidSize * WAD_) / sizePrecision;
-    }
     return {
       market,
       venueId,
       venueName,
       bid: bid === 0n || bid === maxUint256 ? undefined : bid,
       ask: ask === 0n || ask === maxUint256 ? undefined : ask,
-      askQty,
-      bidQty,
     };
   } catch {
     return undefined;
   }
 }
 
-/** Registered venue quotes. Kuru and Optara Direct expose the same `bestBidAsk` view in the local stack. */
+/** Registered venue quotes. Kuru is the only venue. */
 export async function getQuotes(seriesId: Hex): Promise<Quote[]> {
-  const quotes = await Promise.all([
-    getVenueQuote(DIRECT_VENUE, "Optara", seriesId),
-    getVenueQuote(KURU_VENUE, "Kuru", seriesId),
-  ]);
+  const quotes = await Promise.all([getVenueQuote(KURU_VENUE, "Kuru", seriesId)]);
   return quotes.filter((q): q is Quote => !!q);
 }
 
@@ -271,14 +244,19 @@ export interface KuruOrderBook {
   asks: KuruBookLevel[];
 }
 
+/** `cancelled` covers both untouched and partly filled orders that were cancelled; `filledSize` keeps what filled. */
+export type KuruOrderStatus = "open" | "partial" | "filled" | "cancelled";
+
 export interface KuruUserOrder {
+  /** The Kuru market the order rests on (needed to cancel it). */
+  market: Address;
   orderId: bigint;
   side: "bid" | "ask";
   price: bigint;
   originalSize: bigint;
   filledSize: bigint;
   remainingSize: bigint;
-  status: "open" | "partial" | "filled";
+  status: KuruOrderStatus;
   createdBlock: bigint;
   updatedBlock: bigint;
   txHash: Hex;
@@ -352,15 +330,17 @@ export async function getKuruUserOrders(s: Series, owner?: Address): Promise<Kur
 
   for (let from = DEPLOYED_AT_BLOCK; from <= head; from += LOG_CHUNK) {
     const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
-    const [created, trades] = await Promise.all([
+    const [created, trades, cancels] = await Promise.all([
       c.getContractEvents({ address: quote.market, abi: kuruBookAbi, eventName: "OrderCreated", fromBlock: from, toBlock: to, strict: true }),
       c.getContractEvents({ address: quote.market, abi: kuruBookAbi, eventName: "Trade", fromBlock: from, toBlock: to, strict: true }),
+      c.getContractEvents({ address: quote.market, abi: kuruBookAbi, eventName: "OrdersCanceled", fromBlock: from, toBlock: to, strict: true }),
     ]);
     for (const log of created) {
       if (log.args.owner.toLowerCase() !== ownerLc) continue;
       const orderId = BigInt(log.args.orderId);
       const originalSize = toQty(log.args.size);
       orders.set(orderId, {
+        market: quote.market,
         orderId,
         side: log.args.isBuy ? "bid" : "ask",
         price: toPrice(BigInt(log.args.price)),
@@ -384,6 +364,17 @@ export async function getKuruUserOrders(s: Series, owner?: Address): Promise<Kur
       order.status = remainingSize === 0n ? "filled" : order.filledSize > 0n ? "partial" : "open";
       order.updatedBlock = log.blockNumber;
       order.txHash = log.transactionHash;
+    }
+    for (const log of cancels) {
+      if (log.args.owner.toLowerCase() !== ownerLc) continue;
+      for (const id of log.args.orderId) {
+        const order = orders.get(BigInt(id));
+        if (!order || order.status === "filled") continue;
+        order.remainingSize = 0n;
+        order.status = "cancelled";
+        order.updatedBlock = log.blockNumber;
+        order.txHash = log.transactionHash;
+      }
     }
   }
 
@@ -1079,14 +1070,16 @@ export async function getKuruMarginAccount(): Promise<Address | undefined> {
 /** The owner's balances on Kuru for the settlement tokens and every option token (non-zero only). */
 export async function getKuruBalances(owner: Address, series: Series[]) {
   const margin = await getKuruMarginAccount();
-  if (!margin) return { margin, rows: [] as { label: string; amount: string; series?: Series }[] };
+  if (!margin) return { margin, rows: [] as { label: string; amount: string; series?: Series; token: Address; raw: bigint }[] };
   const assets = [...new Map(series.map((s) => [s.settlementAsset.toLowerCase(), s])).values()];
   const reads = await Promise.all([
-    ...assets.map(async (s) => ({ label: s.assetSymbol, raw: await c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.settlementAsset] }), decimals: s.assetDecimals, series: undefined as Series | undefined })),
-    ...series.map(async (s) => ({ label: "", raw: await c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.wrapper] }), decimals: 18, series: s as Series | undefined })),
+    ...assets.map(async (s) => ({ label: s.assetSymbol, token: s.settlementAsset, raw: await c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.settlementAsset] }), decimals: s.assetDecimals, series: undefined as Series | undefined })),
+    ...series.map(async (s) => ({ label: "", token: s.wrapper, raw: await c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.wrapper] }), decimals: 18, series: s as Series | undefined })),
   ]);
   return {
     margin,
-    rows: reads.filter((r) => r.raw > 0n).map((r) => ({ label: r.label, amount: (Number(r.raw) / 10 ** r.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 }), series: r.series })),
+    rows: reads
+      .filter((r) => r.raw > 0n)
+      .map((r) => ({ label: r.label, amount: (Number(r.raw) / 10 ** r.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 }), series: r.series, token: r.token, raw: r.raw })),
   };
 }

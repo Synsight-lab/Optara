@@ -16,8 +16,7 @@ import {
   venueRouterAbi,
   type OracleUpdate,
 } from "@optara/sdk";
-import { ADDR, DIRECT_VENUE, KURU_VENUE, publicClient } from "./client.ts";
-import { optaraDirectMarketAbi, optaraDirectMarketBytecode } from "./directMarket.ts";
+import { ADDR, KURU_VENUE, publicClient } from "./client.ts";
 import { ERROR_MESSAGES } from "./errors.ts";
 import { fetchOracleUpdate, oracleFee } from "./oracle.ts";
 import { deploy, send, type ContractCall, type Wallet } from "./tx.ts";
@@ -143,11 +142,13 @@ export const buySteps = (s: Series, premiumIn: bigint, minQty: bigint, maxBuyerF
 export const kuruMarginAbi = [
   { type: "function", name: "deposit", stateMutability: "payable", inputs: [{ name: "user", type: "address" }, { name: "token", type: "address" }, { name: "amount", type: "uint256" }], outputs: [] },
   { type: "function", name: "getBalance", stateMutability: "view", inputs: [{ name: "user", type: "address" }, { name: "token", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "withdraw", stateMutability: "nonpayable", inputs: [{ name: "amount", type: "uint256" }, { name: "token", type: "address" }], outputs: [] },
 ] as const;
 
 export const kuruLimitBookAbi = [
   { type: "function", name: "addBuyOrder", stateMutability: "nonpayable", inputs: [{ name: "price", type: "uint32" }, { name: "size", type: "uint96" }, { name: "postOnly", type: "bool" }], outputs: [] },
   { type: "function", name: "addSellOrder", stateMutability: "nonpayable", inputs: [{ name: "price", type: "uint32" }, { name: "size", type: "uint96" }, { name: "postOnly", type: "bool" }], outputs: [] },
+  { type: "function", name: "batchCancelOrders", stateMutability: "nonpayable", inputs: [{ name: "orderIds", type: "uint40[]" }], outputs: [] },
 ] as const;
 
 export const kuruDepositSteps = (margin: Address, token: Address, amount: bigint, symbol: string, owner: Address): Step[] => [
@@ -156,7 +157,7 @@ export const kuruDepositSteps = (margin: Address, token: Address, amount: bigint
     `kuru-deposit-${token}`,
     `Move ${symbol} to Kuru`,
     { address: margin, abi: kuruMarginAbi, functionName: "deposit", args: [owner, token, amount] },
-    "Funds resting on Kuru are outside Optara margin. Cancel or withdraw them on Kuru before using them in Optara.",
+    "Funds on Kuru are outside Optara margin. Cancel open orders and withdraw from the option's Order book page or Portfolio.",
   ),
 ];
 
@@ -167,6 +168,21 @@ export const kuruLimitBuySteps = (market: Address, priceUnits: bigint, sizeUnits
     { address: market, abi: kuruLimitBookAbi, functionName: "addBuyOrder", args: [Number(priceUnits), sizeUnits, false] },
     "Your bid rests on Kuru until it fills or you cancel it. No Optara buyer fee is charged at placement.",
   ),
+];
+
+/** Cancel resting Kuru orders (only the owner can). What was locked in them returns to the owner's Kuru balance. */
+export const kuruCancelSteps = (market: Address, orderIds: bigint[]): Step[] => [
+  callStep(
+    `kuru-cancel-${orderIds.join("-")}`,
+    orderIds.length === 1 ? `Cancel Kuru order #${orderIds[0]}` : `Cancel ${orderIds.length} Kuru orders`,
+    { address: market, abi: kuruLimitBookAbi, functionName: "batchCancelOrders", args: [orderIds.map(Number)] },
+    "Unfilled funds go back to your Kuru balance. Withdraw them to your wallet next.",
+  ),
+];
+
+/** Move a free Kuru balance (not locked in open orders) back to the wallet. */
+export const kuruWithdrawSteps = (margin: Address, token: Address, amount: bigint, what: string): Step[] => [
+  callStep(`kuru-withdraw-${token}`, `Withdraw ${what} from Kuru`, { address: margin, abi: kuruMarginAbi, functionName: "withdraw", args: [amount, token] }, "Sends it from Kuru's margin account to your wallet."),
 ];
 
 export const kuruLimitSellSteps = (market: Address, priceUnits: bigint, sizeUnits: bigint): Step[] => [
@@ -299,89 +315,3 @@ export interface SeriesParams {
 export const createSeriesSteps = (params: SeriesParams): Step[] => [
   callStep("list", "List the market", { address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "createSeries", args: [params] }, "Deploys the option token and opens the market."),
 ];
-
-export function createSeriesWithDirectMarketSteps(params: SeriesParams, owner?: Address): Step[] {
-  let seriesId: Hex | undefined;
-  let market: Address | undefined;
-  return [
-    {
-      key: "list",
-      label: "List the option series",
-      hint: "Deploys the option token with the selected strike and expiry.",
-      run: async (w, onSent) => {
-        const receipt = await send(w, { address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "createSeries", args: [params] }, onSent);
-        seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
-        return receipt;
-      },
-    },
-    {
-      key: "deploy-direct-book",
-      label: "Create Optara Direct book",
-      hint: "Deploys an in-house venue book for this option token.",
-      run: async (w, onSent) => {
-        if (!seriesId) seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
-        const terms = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "getSeries", args: [seriesId] });
-        const quoteDecimals = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "settlementAssetDecimals", args: [params.settlementAsset] });
-        const receipt = await deploy(w, directMarketDeployCall(terms.wrapper, params.settlementAsset, BigInt(quoteDecimals), owner ?? w.account.address, await directPricePrecision(params.volSurfaceProductId)), onSent);
-        market = receipt.contractAddress as Address;
-        return receipt;
-      },
-    },
-    {
-      key: "register-direct-book",
-      label: "Attach order book",
-      hint: "Registers the new book so Buy and Sell can route through Optara Direct.",
-      run: async (w, onSent) => {
-        if (!seriesId) seriesId = await publicClient.readContract({ address: ADDR.registry, abi: optionSeriesRegistryAbi, functionName: "computeSeriesId", args: [params] });
-        if (!market) throw new Error("The direct order book was not deployed.");
-        return send(w, { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [DIRECT_VENUE, market, seriesId, "0x"] }, onSent);
-      },
-    },
-  ];
-}
-
-export function registerExistingDirectMarketSteps(series: Series, owner?: Address): Step[] {
-  let market: Address | undefined;
-  return [
-    {
-      key: "deploy-direct-book",
-      label: "Create Optara Direct book",
-      hint: "Deploys an in-house venue book for this option token.",
-      run: async (w, onSent) => {
-        const receipt = await deploy(w, directMarketDeployCall(series.wrapper, series.settlementAsset, BigInt(series.assetDecimals), owner ?? w.account.address, await directPricePrecision(series.productId)), onSent);
-        market = receipt.contractAddress as Address;
-        return receipt;
-      },
-    },
-    {
-      key: "register-direct-book",
-      label: "Attach order book",
-      hint: "Registers the new book so Buy and Sell can route through Optara Direct.",
-      run: (w, onSent) => {
-        if (!market) throw new Error("The direct order book was not deployed.");
-        return send(w, { address: ADDR.venues, abi: venueRegistryAbi, functionName: "registerMarket", args: [DIRECT_VENUE, market, series.id, "0x"] }, onSent);
-      },
-    },
-  ];
-}
-
-function directMarketDeployCall(wrapper: Address, quote: Address, quoteDecimals: bigint, owner: Address, pricePrecision: bigint) {
-  return {
-    abi: optaraDirectMarketAbi,
-    bytecode: optaraDirectMarketBytecode,
-    args: [wrapper, quote, 18n, quoteDecimals, pricePrecision, 10n ** 16n, ADDR.directAdapter, owner],
-  } as const;
-}
-
-/**
- * Price steps for a new Direct book: 1e4 (= $0.0001) is fine for ETH or BTC options, but a MON option worth ~$0.002
- * would move in 5% jumps; under a $10 underlying, use 1e6 (= $0.000001).
- */
-async function directPricePrecision(productId: Hex): Promise<bigint> {
-  try {
-    const [spot] = (await publicClient.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] })) as unknown as [bigint];
-    return spot < 10n * 10n ** 18n ? 1_000_000n : 10_000n;
-  } catch {
-    return 10_000n;
-  }
-}

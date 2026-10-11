@@ -15,9 +15,9 @@ export type BlogPost = {
 
 export const POSTS: BlogPost[] = [
   {
-    slug: "kuru-order-book-inside-optara",
-    title: "The Kuru order book, now inside Optara",
-    excerpt: "Place limit bids and asks on Kuru, see live depth and fill resting orders without leaving the option you are looking at.",
+    slug: "trading-optara-options-on-kuru",
+    title: "Kuru support in Optara",
+    excerpt: "Optara supports Kuru, Monad's on-chain order book, as its trading venue. See live depth, trade at market or set your own limit price from the app.",
     date: "2026-10-10",
     tag: "Product",
     readMins: 4,
@@ -25,28 +25,29 @@ export const POSTS: BlogPost[] = [
     body: () => (
       <>
         <Lead>
-          Until now, if you wanted to buy an option at your own price, you had to leave Optara, find the option&apos;s market on Kuru and
-          place the order there. Not any more. Every option with a Kuru market now has a full order book page inside Optara.
+          Optara supports <B>Kuru</B>, Monad&apos;s fully on-chain central limit order book, as the venue where option tokens trade. Every
+          listed option has an official Kuru market, and the Optara app works with it directly: you can read the book, trade at market and
+          place limit orders from the option you are looking at.
         </Lead>
 
-        <H2>What&apos;s new</H2>
+        <H2>What you can do</H2>
         <UL>
           <li>
-            <B>Live depth.</B> Every bid and ask level, the spread, and Optara&apos;s fair value sitting right in the middle of the book.
+            <B>See live depth.</B> Every bid and ask level, the spread, and Optara&apos;s fair value sitting in the middle of the book.
           </li>
           <li>
-            <B>Limit orders from the app.</B> Set a price and size, and the app funds your Kuru balance and places the order in one flow.
+            <B>Trade at market.</B> Buys and sells route through Optara&apos;s VenueRouter and the KuruAdapter, with your slippage and fee
+            limits enforced on-chain.
           </li>
           <li>
-            <B>Fill from the book.</B> Hit a resting order straight from the depth view. It routes through Optara&apos;s router with your
-            slippage and fee limits.
+            <B>Set your own price.</B> Place a Kuru limit bid or ask. The app funds your Kuru balance and places the order in one flow.
           </li>
           <li>
-            <B>Order tracking.</B> A <i>My Kuru orders</i> panel shows active, partially filled and filled orders from your wallet.
+            <B>Manage your orders.</B> <i>My Kuru orders</i> shows active, partially filled and filled orders, with Cancel and Withdraw buttons.
           </li>
         </UL>
 
-        <H2>How it works under the hood</H2>
+        <H2>How a limit order works</H2>
         <Flow
           items={[
             { title: "You set price and size", text: "Snapped to tick and lot size" },
@@ -56,21 +57,29 @@ export const POSTS: BlogPost[] = [
           ]}
         />
         <P>
-          The order you place is a real Kuru order on the one official Kuru market for that option. Optara verified that market when it was
+          Your order is a real Kuru order on the one official Kuru market for that option. Optara verified that market when it was
           registered: its base token must be the option token and its quote the settlement stablecoin, read from Kuru&apos;s own records.
           Anyone on Kuru, or anyone buying through Optara, can fill it.
         </P>
 
-        <H2>Fees</H2>
+        <H2>Why Kuru</H2>
         <P>
-          Optara charges <B>no buyer fee</B> when you place a limit order. Kuru&apos;s own maker and taker fees apply as usual. Market orders
-          routed through Optara keep the normal 3% buyer fee on premium actually spent.
+          Options need real price discovery: many strikes, many expiries, and market makers who quote both sides. A central limit order
+          book does that better than a pool, and Kuru runs one fully on-chain at Monad speed. Because Optara options are plain ERC-20
+          tokens, they trade on Kuru like any other asset, while Optara keeps doing what a venue can&apos;t: margin, liquidation and
+          settlement.
         </P>
 
-        <Callout kind="warn" title="Remember: Kuru balances live on Kuru">
+        <H2>Fees</H2>
+        <P>
+          Market orders routed through Optara pay a <B>0.3% buyer fee</B> on the premium actually spent. Limit orders placed on Kuru pay no
+          Optara fee at placement. Kuru&apos;s own maker and taker fees apply as usual.
+        </P>
+
+        <Callout kind="warn" title="Kuru balances live on Kuru">
           Funds and tokens in your Kuru balance are held by Kuru, not Optara. They don&apos;t count as margin, and option tokens there must be
-          withdrawn to your wallet before you can redeem them at expiry. Portfolio shows them in an <i>On Kuru</i> card so nothing gets
-          forgotten.
+          withdrawn to your wallet before you can redeem them at expiry. Cancel unfilled orders and withdraw with one click from the option&apos;s
+          Order book page or the <i>On Kuru</i> card in Portfolio.
         </Callout>
 
         <P>
@@ -208,7 +217,7 @@ export const POSTS: BlogPost[] = [
             <B>Portfolio margin</B> for writers, so hedged positions need less capital.
           </li>
           <li>
-            <B>Options as ERC-20 tokens</B>, so liquidity can live on Kuru, on Optara Direct books, or anywhere else.
+            <B>Options as ERC-20 tokens</B>, traded on Kuru&apos;s on-chain order book and transferable anywhere.
           </li>
           <li>
             <B>Signed volatility surfaces</B> for fair pricing, and Pyth spot prices for margin.

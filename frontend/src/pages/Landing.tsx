@@ -69,7 +69,7 @@ export function LandingPage() {
           <div className="home-journey-rail">
             <JourneyStep k="01" title="Choose an asset" text="Start from MON, ETH, BTC or any listed market." />
             <JourneyStep k="02" title="Review the trade" text="See premium, fees, route and max buyer loss before signing." />
-            <JourneyStep k="03" title="Route liquidity" text="Use Optara direct, Kuru, or future venues without changing the option token." />
+            <JourneyStep k="03" title="Route liquidity" text="Trade on Kuru's order book from inside Optara: market orders or your own limit price." />
             <JourneyStep k="04" title="Settle in cash" text="At expiry, the protocol fixes the price and holders redeem payouts." />
           </div>
         </div>
@@ -154,7 +154,7 @@ function FrameCard({ title, headline, label, tone, product, className }: { title
 function LearnSection() {
   const items = [
     { to: "/docs/introduction", icon: BookOpen, title: "Read the docs", text: "How options, margin, venues, settlement and liquidations work, in plain words." },
-    { to: "/docs/kuru-order-book", icon: Layers, title: "Kuru order book, built in", text: "Place and fill Kuru limit orders from inside Optara. No need to leave the app." },
+    { to: "/docs/kuru-order-book", icon: Layers, title: "Trade on Kuru", text: "Optara supports Kuru's order book: trade at market or set your own limit price from the app." },
     { to: "/blog", icon: Newspaper, title: "From the blog", text: "Product updates and deep dives on how Optara is built." },
   ];
   return (

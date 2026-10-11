@@ -208,7 +208,6 @@ export function stackProducts(m: Manifest) {
       expiries: allExpiries,
       seriesIds: (e.seriesIds as Hex[]).slice(starts[i]!, starts[i + 1]!),
       kuruBooks: (e.kuruBooks as Hex[]).slice(starts[i]!, starts[i + 1]!),
-      optaraDirectBooks: ((e.optaraDirectBooks as Hex[] | undefined) ?? []).slice(starts[i]!, starts[i + 1]!),
       spotWad: BigInt((e.productSpotWads as string[] | number[] | bigint[])[i]!),
     }));
   }
@@ -231,7 +230,6 @@ export function stackProducts(m: Manifest) {
       expiries: allExpiries,
       seriesIds: e.seriesIds as Hex[],
       kuruBooks: e.kuruBooks as Hex[],
-      optaraDirectBooks: (e.optaraDirectBooks as Hex[] | undefined) ?? [],
       spotWad: 4000n * 10n ** 18n,
     },
   ];

@@ -474,9 +474,10 @@ async function main() {
     log(`Kuru: ${markets.length} markets deployed and registered; market maker quoting them through Kuru's MarginAccount…`);
     const quoted = await quoteRealKuru(s, markets, { router: KURU_MAINNET_ROUTER });
     log(`Kuru: resting bids and asks on ${quoted} real Kuru books`);
+  } else {
+    log("market maker: quoting every mock Kuru book");
+    await quoteBooks(s);
   }
-  log(realKuru ? "market maker: quoting Optara direct books" : "market maker: quoting every book");
-  await quoteBooks(s, { includeKuru: !realKuru });
 
   log("starting publishers (:8790 cosigned by :8791) and keepers");
   const common = { RPC_URL: RPC, CHAIN_ID: String(chainId), MANIFEST: "local", SPOT_SOURCE: "restamp" };
