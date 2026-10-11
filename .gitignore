@@ -27,6 +27,7 @@ contract/report/
 
 # Services (step 15)
 indexer/config.e2e*.yaml
+indexer/config.local.yaml
 indexer/generated/
 contract/cache/services-e2e/
 

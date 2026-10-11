@@ -322,11 +322,40 @@ export async function getKuruUserOrders(s: Series, owner?: Address): Promise<Kur
   const params = await c.readContract({ address: router, abi: kuruRouterAbi, functionName: "verifiedMarket", args: [quote.market] });
   if (params.baseAssetAddress.toLowerCase() !== s.wrapper.toLowerCase() || params.quoteAssetAddress.toLowerCase() !== s.settlementAsset.toLowerCase()) return [];
 
+  const toQty = (sizeUnits: bigint) => (sizeUnits * WAD_) / BigInt(params.sizePrecision);
+  const toPrice = (priceUnits: bigint) => (priceUnits * WAD_) / BigInt(params.pricePrecision);
+
+  // The indexer keeps every registered Kuru book's orders; scanning logs from the deploy block is the fallback (on
+  // Monad's public RPC that is one request per 100 blocks, which only stays usable on a young deployment).
+  if (INDEXER_URL) {
+    try {
+      const res = await fetch(`${INDEXER_URL}/kuru-orders/${owner}?series=${s.id}`);
+      if (!res.ok) throw new Error(`indexer /kuru-orders: HTTP ${res.status}`);
+      type Row = { market: string; orderId: string; isBuy: boolean; priceUnits: string; sizeUnits: string; remainingUnits: string; filledUnits: string; status: string; createdBlock: string; updatedBlock: string; txHash: Hex };
+      const rows = (await res.json()) as Row[];
+      return rows
+        .filter((r) => r.market.toLowerCase() === quote.market.toLowerCase())
+        .map((r) => ({
+          market: quote.market,
+          orderId: BigInt(r.orderId),
+          side: r.isBuy ? "bid" : "ask",
+          price: toPrice(BigInt(r.priceUnits)),
+          originalSize: toQty(BigInt(r.sizeUnits)),
+          filledSize: toQty(BigInt(r.filledUnits)),
+          remainingSize: toQty(BigInt(r.remainingUnits)),
+          status: r.status.toLowerCase() as KuruOrderStatus,
+          createdBlock: BigInt(r.createdBlock),
+          updatedBlock: BigInt(r.updatedBlock),
+          txHash: r.txHash,
+        }));
+    } catch {
+      // fall back to the chain's logs
+    }
+  }
+
   const head = await c.getBlockNumber();
   const orders = new Map<bigint, KuruUserOrder>();
   const ownerLc = owner.toLowerCase();
-  const toQty = (sizeUnits: bigint) => (sizeUnits * WAD_) / BigInt(params.sizePrecision);
-  const toPrice = (priceUnits: bigint) => (priceUnits * WAD_) / BigInt(params.pricePrecision);
 
   for (let from = DEPLOYED_AT_BLOCK; from <= head; from += LOG_CHUNK) {
     const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;

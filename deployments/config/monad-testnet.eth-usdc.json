@@ -1,7 +1,7 @@
 {
-  "_comment": "ETH/USDC listing for monad-testnet (DEPLOYMENT.md §3; values from PARAMETERS.md). Read by script/ProposeListing.s.sol (LISTING=eth-usdc), which refuses zero addresses: fill in the WETH and USDC token addresses, the Chainlink-compatible ETH/USD and USDC/USD settlement feeds (and their decimals), and the publisher addresses before proposing. Pyth feed ids are Pyth's ETH/USD and USDC/USD (checked against Hermes 2026-10-07). maxLegSkew must cover the slower leg's heartbeat. insuranceSeed and keeperReserveMin come from the risk review (PARAMETERS.md §7) and must be non-zero. Amounts are in USDC's 6 decimals; strikes and caps in 1e18.",
-  "underlying": "0x0000000000000000000000000000000000000000",
-  "asset": "0x0000000000000000000000000000000000000000",
+  "_comment": "Testnet values verified on Monad testnet (chain 10143) on 2026-10-11: underlying = WETH 0x4547…A2D7 (18 decimals, monad-crypto token list); asset = USDC 0x534b…43A3 (6 decimals, Circle testnet address); settlement feed = Chainlink ETH/USD 0x5c8c…6d31 and quote feed = Chainlink USDC/USD 0x3982…Ff95 (8 decimals each, 24 h heartbeats, so maxLegSkew is 28 h). Kuru stays disabled on testnet. ETH/USDC listing for monad-testnet (DEPLOYMENT.md §3; values from PARAMETERS.md). Read by script/ProposeListing.s.sol (LISTING=eth-usdc), which refuses zero addresses: fill in the WETH and USDC token addresses, the Chainlink-compatible ETH/USD and USDC/USD settlement feeds (and their decimals), and the publisher addresses before proposing. Pyth feed ids are Pyth's ETH/USD and USDC/USD (checked against Hermes 2026-10-07). maxLegSkew must cover the slower leg's heartbeat. insuranceSeed and keeperReserveMin come from the risk review (PARAMETERS.md §7) and must be non-zero. Amounts are in USDC's 6 decimals; strikes and caps in 1e18. ZERO-USDC LAUNCH: bootstrapFromFees = true lists with insuranceSeed and keeperReserveMin at 0 (no treasury deposits); insurance then fills from 60% and the keeper reserve from 10% of every fee. Until it has grown, a writer shortfall at expiry falls on that group's holders through the recovery ratio and keepers earn no USDC reward, so keep the short cap low and run the keepers yourself.",
+  "underlying": "0x45477f4709771331db81944A5E20eF95Bc7BA2D7",
+  "asset": "0x534b2f3A21130d7a60830c2Df862319e593943A3",
   "underlyingSymbol": "ETH",
   "assetSymbol": "USDC",
   "minStrikeWad": 100000000000000000000,
@@ -14,9 +14,9 @@
   "settlement": {
     "primary": {
       "kind": "DERIVED",
-      "feed": "0x0000000000000000000000000000000000000000",
+      "feed": "0x5c8c8482f064049248F86D9F4aFa4B1f2F5b6d31",
       "feedDecimals": 8,
-      "quoteFeed": "0x0000000000000000000000000000000000000000",
+      "quoteFeed": "0x39820e7965e29DC86b94F20eD04e9c5cCf9aFf95",
       "quoteFeedDecimals": 8
     },
     "fallback": {
@@ -26,12 +26,12 @@
     "observationEndOffset": 0,
     "minFinalizationDelay": 300,
     "maxFinalizationDelay": 604800,
-    "maxLegSkew": 86400
+    "maxLegSkew": 100800
   },
   "publishers": [
-    "0x0000000000000000000000000000000000000000",
-    "0x0000000000000000000000000000000000000000",
-    "0x0000000000000000000000000000000000000000"
+    "0x38fc32Ce424d9cCEEC06e72DEA43bEe94d0a9c8c",
+    "0x3D0ECfd79227aA750d5226820FCb5b5888F34320",
+    "0xAb45B0080FD23Bb189e57a54a695b6b437DCCbdC"
   ],
   "independent": [
     true,
@@ -41,6 +41,7 @@
   "minSellerFee": 100000,
   "insuranceSeed": 0,
   "keeperReserveMin": 0,
+  "bootstrapFromFees": true,
   "finalizeReward": 2000000,
   "settleReward": 500000,
   "maxInsurancePerLiquidation": 0,

@@ -98,8 +98,16 @@ contract ProposeListing is Script, ListingCalls {
         }
         if (p.publishers.length != p.independent.length) revert MissingAddress("independent");
         p.minSellerFee = vm.parseJsonUint(json, ".minSellerFee");
-        p.insuranceSeed = _nonZero(".insuranceSeed"); // a zero minimum would pass the launch gate vacuously
-        p.keeperReserveMin = _nonZero(".keeperReserveMin");
+        // A zero minimum passes the reserve gate with nothing deposited, so it must be asked for explicitly:
+        // "bootstrapFromFees": true lists with no seed; insurance and the keeper reserve then fill from fees only
+        // (60% / 10% of every fee) and, until they do, shortfalls fall on holders through the recovery ratio.
+        if (_flag(".bootstrapFromFees")) {
+            p.insuranceSeed = vm.parseJsonUint(json, ".insuranceSeed");
+            p.keeperReserveMin = vm.parseJsonUint(json, ".keeperReserveMin");
+        } else {
+            p.insuranceSeed = _nonZero(".insuranceSeed");
+            p.keeperReserveMin = _nonZero(".keeperReserveMin");
+        }
         p.finalizeReward = vm.parseJsonUint(json, ".finalizeReward");
         p.settleReward = vm.parseJsonUint(json, ".settleReward");
         p.maxInsurancePerLiquidation = vm.parseJsonUint(json, ".maxInsurancePerLiquidation");
@@ -148,6 +156,10 @@ contract ProposeListing is Script, ListingCalls {
     function _addr(string memory key) internal view returns (address a) {
         a = vm.parseJsonAddress(json, key);
         if (a == address(0)) revert MissingAddress(key);
+    }
+
+    function _flag(string memory key) internal view returns (bool) {
+        return vm.keyExistsJson(json, key) && vm.parseJsonBool(json, key);
     }
 
     function _nonZero(string memory key) internal view returns (uint256 v) {

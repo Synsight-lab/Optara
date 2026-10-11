@@ -163,33 +163,42 @@ abstract contract ListingCalls is OptaraDeploy {
     }
 
     /// @notice The treasury's deposits of the minimums `_listingCalls` sets. Until both are funded the asset's products
-    ///         stay close-only (FEES.md §7), so these follow the batch.
+    ///         stay close-only (FEES.md §7), so these follow the batch. A zero amount (a listing that bootstraps its
+    ///         reserves from fees) has nothing to deposit, and the deposit functions reject zero, so its pair is left out.
     function _seedCalls(Deployment memory d, ListingParams memory p) internal pure returns (Call[] memory calls) {
         calls = new Call[](4);
-        calls[0] = Call(
-            "treasury",
-            p.asset,
-            abi.encodeCall(IERC20.approve, (address(d.insurance), p.insuranceSeed)),
-            "approve insurance seed"
-        );
-        calls[1] = Call(
-            "treasury",
-            address(d.insurance),
-            abi.encodeCall(InsuranceFund.deposit, (p.asset, p.insuranceSeed)),
-            "deposit insurance seed"
-        );
-        calls[2] = Call(
-            "treasury",
-            p.asset,
-            abi.encodeCall(IERC20.approve, (address(d.fees), p.keeperReserveMin)),
-            "approve keeper reserve"
-        );
-        calls[3] = Call(
-            "treasury",
-            address(d.fees),
-            abi.encodeCall(FeeController.fundKeeperReserve, (p.asset, p.keeperReserveMin)),
-            "fund keeper reserve"
-        );
+        uint256 n;
+        if (p.insuranceSeed > 0) {
+            calls[n++] = Call(
+                "treasury",
+                p.asset,
+                abi.encodeCall(IERC20.approve, (address(d.insurance), p.insuranceSeed)),
+                "approve insurance seed"
+            );
+            calls[n++] = Call(
+                "treasury",
+                address(d.insurance),
+                abi.encodeCall(InsuranceFund.deposit, (p.asset, p.insuranceSeed)),
+                "deposit insurance seed"
+            );
+        }
+        if (p.keeperReserveMin > 0) {
+            calls[n++] = Call(
+                "treasury",
+                p.asset,
+                abi.encodeCall(IERC20.approve, (address(d.fees), p.keeperReserveMin)),
+                "approve keeper reserve"
+            );
+            calls[n++] = Call(
+                "treasury",
+                address(d.fees),
+                abi.encodeCall(FeeController.fundKeeperReserve, (p.asset, p.keeperReserveMin)),
+                "fund keeper reserve"
+            );
+        }
+        assembly {
+            mstore(calls, n)
+        }
     }
 
     // ------------------------------------------------------------------ PARAMETERS.md defaults

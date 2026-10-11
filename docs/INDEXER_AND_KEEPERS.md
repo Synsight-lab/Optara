@@ -37,6 +37,7 @@ GET /accounts/:owner, /accounts/:id/health, /accounts/:id/events
 GET /liquidatable                            (accounts with equity < MM, sorted by size)
 GET /surfaces/:productId/latest
 GET /markets
+GET /kuru-orders/:owner[?series=:id]         (Kuru maker orders: each registered Kuru book is indexed dynamically)
 GET /system                                  (oracle freshness, close-only flags, insurance)
 GET /positions                               (every non-zero position: keepers' participant source)
 GET /alerts                                  (SECURITY.md §5, plus INDEX_MISMATCH and INDEX_LAG)
