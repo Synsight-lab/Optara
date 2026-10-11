@@ -14,9 +14,15 @@ export interface PayoffProps {
   /** Underlying units per option; defaults to 1. */
   size?: number;
   spot?: number;
-  premium: number; // per option, in the settlement asset: all-in cost (long) or amount received (short)
+  /**
+   * Per option, in the settlement asset: the all-in cost (buy), what the writer keeps after fees (write; negative when
+   * fees exceed the premium), or the cash a sale brings in now (sell).
+   */
+  premium: number;
   qty: number;
   side: "long" | "short";
+  /** `sell` compares selling now with holding to expiry: the long payoff against the sale proceeds. */
+  view?: "trade" | "sell";
   assetSymbol: string;
   underlyingSymbol: string;
 }
@@ -34,8 +40,11 @@ function axisMoney(v: number): string {
   return `${v > 0 ? "+" : "−"}$${body}`;
 }
 
-export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, side, assetSymbol, underlyingSymbol }: PayoffProps) {
-  const premiumPerOption = Number.isFinite(premium) && premium > 0 ? premium : 0;
+export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, side, view = "trade", assetSymbol, underlyingSymbol }: PayoffProps) {
+  // A buyer's cost is never below zero; a writer's net premium can be (fees larger than the sale), and that is a loss
+  // at every price, so it must not be rounded up to zero.
+  const premiumPerOption = !Number.isFinite(premium) ? 0 : side === "short" ? premium : Math.max(0, premium);
+  const selling = view === "sell" && side === "long";
   const qtySafe = Number.isFinite(qty) && qty > 0 ? qty : 0;
   const svg = useRef<SVGSVGElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -52,7 +61,8 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   const PAD = { l: narrow ? 50 : 60, r: 10, t: 32, b: 28 };
   const uid = useId().replace(/:/g, "");
   const leg: Leg = useMemo(() => ({ optionType, strike, size }), [optionType, strike, size]);
-  const be = breakevenOf(leg, premiumPerOption);
+  // A writer whose fees eat the whole premium never breaks even.
+  const be = side === "short" && premiumPerOption <= 0 ? undefined : breakevenOf(leg, premiumPerOption);
   const [lo, hi] = useMemo(() => chartRange([spot ?? strike, strike, be ?? strike]), [spot, strike, be]);
 
   // The price being explored. It follows today's price until the user picks one.
@@ -108,20 +118,39 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   const fromToday = spot ? ((price - spot) / spot) * 100 : undefined;
   const { maxGain, maxLoss } = extremes(leg, side, qtySafe, premiumPerOption);
   const isLong = side === "long";
-  const costLabel = isLong ? "Premium paid" : "Premium collected";
-  const resultLabel = net >= 0 ? (isLong ? "Net profit" : "Writer profit") : (isLong ? "Net loss" : "Writer loss");
-  const sentence =
-    side === "long"
-      ? payout === 0
-        ? `The option pays nothing. You lose the ${usd(total)} you paid.`
-        : net < 0
-        ? `The option pays ${usd(payout)}, less than the ${usd(total)} you paid.`
-        : `The option pays ${usd(payout)}, more than the ${usd(total)} you paid.`
-      : payout === 0
-      ? `At expiry you owe nothing. The ${usd(total)} premium remains yours unless you bought tokens back to close earlier.`
-      : net >= 0
-      ? `At expiry you owe ${usd(payout)} and keep the rest of the ${usd(total)} premium.`
-      : `You owe ${usd(payout)}, more than the ${usd(total)} premium you collected.`;
+  const costLabel = selling ? "Cash from selling now" : isLong ? "Premium paid" : "Premium kept";
+  const resultLabel = selling
+    ? net >= 0
+      ? "Holding pays more by"
+      : "Selling now is better by"
+    : net >= 0
+    ? isLong
+      ? "Net profit"
+      : "Writer profit"
+    : isLong
+    ? "Net loss"
+    : "Writer loss";
+  const sentence = selling
+    ? payout === 0
+      ? `Held to expiry, these options would pay nothing. Selling now gets you ${usd(total)}.`
+      : net < 0
+      ? `Held to expiry, they would pay ${usd(payout)}, less than the ${usd(total)} you get by selling now.`
+      : `Held to expiry, they would pay ${usd(payout)}, more than the ${usd(total)} you get by selling now.`
+    : side === "long"
+    ? payout === 0
+      ? `The option pays nothing. You lose the ${usd(total)} you paid.`
+      : net < 0
+      ? `The option pays ${usd(payout)}, less than the ${usd(total)} you paid.`
+      : `The option pays ${usd(payout)}, more than the ${usd(total)} you paid.`
+    : total <= 0
+    ? payout === 0
+      ? `You owe nothing at expiry, but the fees are larger than the premium, so you are down ${usd(-total)}.`
+      : `You owe ${usd(payout)} at expiry, and the fees were already larger than the premium.`
+    : payout === 0
+    ? `At expiry you owe nothing and keep the ${usd(total)} premium, unless you buy tokens back to close earlier.`
+    : net >= 0
+    ? `At expiry you owe ${usd(payout)} and keep the rest of the ${usd(total)} premium.`
+    : `You owe ${usd(payout)}, more than the ${usd(total)} premium you kept.`;
 
   // Direction-aware presets: moves the option profits from, plus one against.
   const dir = (optionType === 0 ? 1 : -1) * (side === "long" ? 1 : -1);
@@ -146,8 +175,8 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
             <div className="font-display text-base font-bold">Expiry simulator</div>
             <div className="text-xs text-muted">Pick a settlement price and see the outcome.</div>
           </div>
-          <span className={cx("rounded-full px-2.5 py-1 text-xs font-bold", side === "long" ? "bg-primary-soft text-primary" : "bg-accent/10 text-accent")}>
-            {side === "long" ? "Buyer view" : "Writer view"}
+          <span className={cx("rounded-full px-2.5 py-1 text-xs font-bold", selling ? "bg-good/12 text-good" : side === "long" ? "bg-primary-soft text-primary" : "bg-accent/10 text-accent")}>
+            {selling ? "Seller view" : side === "long" ? "Buyer view" : "Writer view"}
           </span>
         </div>
         <div className="grid grid-cols-[1fr_auto] items-end gap-x-3 gap-y-1">
@@ -171,7 +200,7 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
         <div className="mt-3 grid gap-2 text-center sm:grid-cols-3">
           <MiniFact label="Option payout" value={usd(payout)} />
           <MiniFact label={costLabel} value={usd(total)} />
-          <MiniFact label="After premium" value={`${net >= 0 ? "+" : "-"}${usd(Math.abs(net))}`} tone={tone} />
+          <MiniFact label={selling ? "Holding minus selling" : "After premium"} value={`${net >= 0 ? "+" : "−"}${usd(Math.abs(net))}`} tone={tone} />
         </div>
       </div>
 
@@ -236,10 +265,10 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
         <path d={line} fill="none" stroke="var(--good)" strokeWidth="2.5" strokeLinejoin="round" clipPath={`url(#above${uid})`} />
         <path d={line} fill="none" stroke="var(--bad)" strokeWidth="2.5" strokeLinejoin="round" clipPath={`url(#below${uid})`} />
         <text x={W - PAD.r - 4} y={PAD.t + 4} textAnchor="end" className="fill-[var(--good)] text-[11px] font-semibold">
-          profit
+          {selling ? "holding pays more" : "profit"}
         </text>
         <text x={W - PAD.r - 4} y={H - PAD.b - 6} textAnchor="end" className="fill-[var(--bad)] text-[11px] font-semibold">
-          loss
+          {selling ? "selling is better" : "loss"}
         </text>
 
         {/* Markers: strike, today, breakeven */}
@@ -291,12 +320,21 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
 
       {/* The three numbers that matter */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <Fact label="Breakeven price" value={be !== undefined ? `$${fmtLevelNum(be)}` : "No breakeven"} dot="bg-warn" />
-        <Fact label={isLong ? "Best case" : "Most you can make"} value={maxGain === "unlimited" ? "No limit" : usd(maxGain)} tone="text-good" />
-        <Fact label={isLong ? "Max loss" : "Worst case"} value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone="text-bad" />
+        <Fact label={selling ? "Holding wins past" : "Breakeven price"} value={be !== undefined ? `$${fmtLevelNum(be)}` : "No breakeven"} dot="bg-warn" />
+        <Fact
+          label={selling ? "Most holding could add" : isLong ? "Best case" : "Most you can make"}
+          value={maxGain === "unlimited" ? "No limit" : usd(maxGain)}
+          tone={typeof maxGain === "number" && maxGain < 0 ? "text-bad" : "text-good"}
+        />
+        <Fact label={selling ? "Selling locks in" : isLong ? "Max loss" : "Worst case"} value={maxLoss === "unlimited" ? "No limit" : usd(maxLoss)} tone={selling ? "text-good" : "text-bad"} />
       </div>
       <p className="rounded-xl bg-surface-2/60 px-3 py-2 text-xs leading-5 text-muted">
-        Breakeven includes the premium from the action panel. Drag the chart, use arrow keys, or tap a scenario button. All amounts are in {assetSymbol}.
+        {selling
+          ? "Compares selling now with holding the options to expiry. "
+          : isLong
+          ? "Breakeven includes the premium and fees from the action panel. "
+          : "The premium is what you keep per option; the line above the chart says which fees it already includes. "}
+        Drag the chart, use arrow keys, or tap a scenario button. All amounts are in {assetSymbol}.
       </p>
     </div>
   );

@@ -15,7 +15,7 @@ import { TokenIcon } from "../components/Icons.tsx";
 import type { ActionContext } from "../lib/optara/availability.ts";
 import { fmtDuration, fmtExpiryShort, fmtLevel, fmtNative, fmtPrice } from "../lib/optara/format.ts";
 import { useAccountView, useChainTime, useProductMarket, useSeries, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
-import { legOf, moveNeeded, moveText } from "../lib/optara/payoff.ts";
+import { legOf, moveNeeded, moveText, usd } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
 import { WritePanel } from "./Series.tsx";
@@ -263,8 +263,8 @@ function WriteTicket({ s }: { s: Series }) {
   const { data: market } = useSeriesMarket(s);
   const { data: product } = useProductMarket(s.productId);
   const { data: wallet } = useWalletWrappers(address);
-  const [preview, setPreview] = useState<{ qty: number; cost?: number }>({ qty: 1 });
-  const onQty = useCallback((qty: number, cost?: number) => setPreview({ qty, cost }), []);
+  const [preview, setPreview] = useState<{ qty: number; cost?: number; note?: string }>({ qty: 1 });
+  const onQty = useCallback((qty: number, cost?: number, info?: { note?: string }) => setPreview({ qty, cost, note: info?.note }), []);
 
   const ctx: ActionContext = {
     connected: !!address,
@@ -310,7 +310,16 @@ function WriteTicket({ s }: { s: Series }) {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">
-        <Card title="What happens at expiry if you write">
+        <Card
+          title="What happens at expiry if you write"
+          action={
+            premium !== undefined && (
+              <span className="text-[13px] text-muted">
+                {preview.qty.toLocaleString("en-US", { maximumFractionDigits: 4 })} option{preview.qty === 1 ? "" : "s"} at {usd(premium)} each, {preview.note ?? (preview.cost !== undefined ? "kept after fees" : "before fees")}
+              </span>
+            )
+          }
+        >
           {premium !== undefined ? (
             <PayoffChart
               optionType={s.optionType}

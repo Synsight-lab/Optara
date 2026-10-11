@@ -78,6 +78,10 @@ import { HealthBar } from "../components/HealthBar.tsx";
 
 type Tab = "trade" | "write" | "manage" | "redeem" | "buy" | "sell";
 /** WAD amount in the settlement asset → native units. */
+/** What a ticket reports to the expiry chart: quantity, the per-option amount, and how that amount was arrived at. */
+type ChartPreview = { qty: number; cost?: number; note?: string; view?: "sell" };
+type ChartReport = (qty: number, cost?: number, info?: Pick<ChartPreview, "note" | "view">) => void;
+
 const toNative = (wad: bigint, decimals: number) => wad / 10n ** BigInt(18 - decimals);
 const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** BigInt(18 - decimals);
 /** A chart quantity: up to 4 decimals, no trailing zeros. */
@@ -105,9 +109,11 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
     if (fromUrl) setTab(fromUrl);
   }, [fromUrl]);
   // What the open ticket would trade: quantity, and the all-in price per option (fees included) when known.
-  const [preview, setPreview] = useState<{ qty: number; cost?: number }>({ qty: 1 });
-  const setQtyForChart = useCallback((qty: number, cost?: number) => setPreview({ qty, cost }), []);
-  const qtyForChart = preview.qty;
+  const [preview, setPreview] = useState<ChartPreview & { tab?: string }>({ qty: 1 });
+  // Each ticket reports what it would trade; the report is tagged with the tab that made it, so a tab without a
+  // ticket (Position, Settle) never draws another tab's numbers.
+  const chartTab = useRef<string>("");
+  const setQtyForChart = useCallback<ChartReport>((qty, cost, info) => setPreview({ qty, cost, ...info, tab: chartTab.current }), []);
 
   if (!series) {
     return (
@@ -145,6 +151,9 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   };
 
   const canonicalTab: Tab = tab === "buy" || tab === "sell" ? "trade" : tab;
+  chartTab.current = canonicalTab;
+  const chart: ChartPreview = preview.tab === canonicalTab ? preview : { qty: 1 };
+  const qtyForChart = chart.qty;
   const tradeSide: "buy" | "sell" = tab === "sell" ? "sell" : "buy";
   const tabs: { value: Tab; label: string; icon: any; actions: ActionKey[] }[] = [
     { value: "trade", label: "Trade", icon: TrendingUp, actions: ["buy", "sell"] },
@@ -156,9 +165,12 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const spotNum = product ? Number(product.spotWad) / 1e18 : undefined;
   const markNum = market?.mark !== undefined ? Number(market.mark) / 1e18 : undefined;
   const side = canonicalTab === "write" ? "short" : "long";
-  const quoted = (side === "long" ? market?.quote?.ask : market?.quote?.bid) ?? market?.mark;
-  const premiumForChart = preview.cost ?? (quoted !== undefined ? Number(quoted) / 1e18 : undefined);
-  const feesIncluded = preview.cost !== undefined;
+  const chartView = chart.view === "sell" && side === "long" ? "sell" : "trade";
+  // Without a report from the ticket: a buyer pays the ask, a writer or seller gets the bid (fair value if none), before fees.
+  const quoted = (side === "long" && chartView !== "sell" ? market?.quote?.ask : market?.quote?.bid) ?? market?.mark;
+  const premiumForChart = chart.cost ?? (quoted !== undefined ? Number(quoted) / 1e18 : undefined);
+  const chartNote =
+    chart.note ?? (chart.cost !== undefined ? (side === "short" ? "kept after fees" : chartView === "sell" ? "after fees" : "fees included") : "before fees");
 
   const select = (t: Tab) => {
     setTab(t);
@@ -272,11 +284,11 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         <div className="space-y-4">
           <Card
-            title={side === "long" ? "What happens at expiry" : "What happens at expiry if you write"}
+            title={side === "short" ? "What happens at expiry if you write" : chartView === "sell" ? "Sell now or hold to expiry?" : "What happens at expiry"}
             action={
               <span className="text-[13px] text-muted">
                 {fmtQtyNum(qtyForChart)} option{qtyForChart === 1 ? "" : "s"}
-                {premiumForChart !== undefined && ` at ${usd(premiumForChart)} each${feesIncluded ? ", fees included" : ""}`}
+                {premiumForChart !== undefined && ` at ${usd(premiumForChart)} each, ${chartNote}`}
               </span>
             }
           >
@@ -289,6 +301,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
                 premium={premiumForChart ?? 0}
                 qty={qtyForChart}
                 side={side}
+                view={chartView}
                 assetSymbol={series.assetSymbol}
                 underlyingSymbol={series.underlyingSymbol}
               />
@@ -872,7 +885,7 @@ function TradePanel({
   venueName?: string;
   walletQty: bigint;
   initialSide: "buy" | "sell";
-  onQty: (q: number, cost?: number) => void;
+  onQty: ChartReport;
 }) {
   const [side, setSide] = useState<"buy" | "sell">(initialSide);
   useEffect(() => setSide(initialSide), [initialSide, s.id]);
@@ -915,7 +928,7 @@ function KuruLimitPanel({
   ctx: ActionContext;
   walletQty: bigint;
   mark?: bigint;
-  onQty: (q: number, cost?: number) => void;
+  onQty: ChartReport;
 }) {
   const { address } = useConnection();
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -1217,7 +1230,7 @@ function BuyPanel({
   ctx: ActionContext;
   ask?: bigint;
   market?: Hex;
-  onQty: (q: number, cost?: number) => void;
+  onQty: ChartReport;
 }) {
   const { address } = useConnection();
   const [amount, setAmount] = useState("50");
@@ -1355,29 +1368,34 @@ function BuyPanel({
 
       <div className="rounded-2xl border border-line bg-surface-2/70 p-3.5">
         <div className="rounded-xl border border-line bg-surface px-3 py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
               <div className="text-[11px] font-bold uppercase text-faint">Estimated tokens</div>
-              <div className="mt-1 text-xs leading-5 text-muted">
-                Your premium, less the venue fee, walked through the resting asks from the best price up.
-              </div>
-            </div>
-            <div className="min-w-0 text-left sm:text-right">
-              <div className="num whitespace-nowrap font-display text-2xl font-bold tracking-tight text-ink">
-                {estQty !== undefined ? fmtQty(estQty) : "—"}
-              </div>
-              <div className="mt-0.5 text-xs text-muted">
+              <div className="num text-xs text-muted">
                 {ask !== undefined ? `${fmtPrice(ask)} ${s.assetSymbol} per option on ${venueName}` : "Nobody is selling this option right now"}
               </div>
+            </div>
+            {/* Own line, full width: MON-sized options can run to tens of thousands with four decimals. */}
+            <div
+              className={cx(
+                "num mt-1.5 min-w-0 font-display font-bold leading-tight tracking-tight text-ink [overflow-wrap:anywhere]",
+                estQty !== undefined && fmtQty(estQty).length > 12 ? "text-xl" : "text-2xl",
+              )}
+            >
+              {estQty !== undefined ? fmtQty(estQty) : "—"}
+              {estQty !== undefined && <span className="ml-1.5 text-sm font-semibold text-muted">options</span>}
+            </div>
+            <div className="mt-1 text-xs leading-5 text-muted">
+              Your premium, less the venue fee, walked through the resting asks from the best price up.
             </div>
           </div>
         </div>
 
         {walk && walk.depthQty > 0n && (
           <div className="mt-2.5 rounded-xl border border-line bg-surface px-3 py-2.5 text-[13px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-ink">Available to buy now</span>
-              <span className="num text-right font-semibold text-ink">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+              <span className="whitespace-nowrap font-semibold text-ink">Available to buy now</span>
+              <span className="num whitespace-nowrap font-semibold text-ink">
                 {depthPartial ? "at least " : "up to "}
                 {fmtQty(walk.depthQty)} options
               </span>
@@ -1473,7 +1491,7 @@ export function WritePanel({
   market?: Hex;
   venueId?: Hex;
   venueName?: string;
-  onQty: (q: number, cost?: number) => void;
+  onQty: ChartReport;
 }) {
   const { address } = useConnection();
   const { selected } = useAccountState();
@@ -1502,14 +1520,24 @@ export function WritePanel({
   const [fee, equityAfter, imAfter, ok] = preview.data ?? [];
   // Premium kept per option: sale proceeds after the order-book fee, less the Optara fee paid from the account.
   const kept = sellable && net !== undefined && fee !== undefined ? net - fee : undefined;
+  // Not selling right away: the premium still has to come from a later sale. Estimate it at the best bid (fair value
+  // when nobody bids), less the Optara fee that the mint charges either way. The order-book fee is not known yet.
+  const refPrice = bid ?? mark;
+  const estKept = kept === undefined && qty && refPrice !== undefined ? toNative((qty * refPrice) / WAD, s.assetDecimals) - (fee ?? 0n) : undefined;
   const qtyNum = qty ? Number(qty) / 1e18 : undefined;
   useEffect(() => {
     if (!qtyNum) return onQty(1);
-    onQty(qtyNum, kept !== undefined ? Number(kept) / 10 ** s.assetDecimals / qtyNum : undefined);
-  }, [qtyNum, kept, s.assetDecimals, onQty]);
+    if (kept !== undefined) return onQty(qtyNum, Number(kept) / 10 ** s.assetDecimals / qtyNum, { note: "kept after all fees" });
+    if (estKept !== undefined)
+      return onQty(qtyNum, Number(estKept) / 10 ** s.assetDecimals / qtyNum, {
+        note: `if sold later at the ${bid !== undefined ? "best bid" : "fair value"}${fee !== undefined ? ", after the Optara fee" : ", before fees"}`,
+      });
+    onQty(qtyNum);
+  }, [qtyNum, kept, estKept, bid, fee, s.assetDecimals, onQty]);
   const leg = legOf(s);
   const keptNum = kept !== undefined ? Number(kept) / 10 ** s.assetDecimals : undefined;
-  const writerBe = keptNum !== undefined && qtyNum ? breakeven(leg, keptNum / qtyNum) : undefined;
+  // A writer whose fees exceed the sale never breaks even.
+  const writerBe = keptNum !== undefined && keptNum > 0 && qtyNum ? breakeven(leg, keptNum / qtyNum) : undefined;
   const isCall = s.optionType === 0;
   const saleAvailable = !!market && bid !== undefined;
 
@@ -1751,13 +1779,12 @@ function SellPanel({
   venueId?: Hex;
   venueName?: string;
   walletQty: bigint;
-  onQty: (q: number, cost?: number) => void;
+  onQty: ChartReport;
 }) {
   const { address } = useConnection();
   const [slip] = useSlippage();
   const [amount, setAmount] = useState("");
   const qty = parseQty(amount);
-  useEffect(() => onQty(qty ? Number(qty) / 1e18 : 1), [qty, onQty]);
   const a = availability("sell", ctx);
 
   const sold = qty !== undefined && bidQty !== undefined && qty > bidQty ? bidQty : qty;
@@ -1769,6 +1796,12 @@ function SellPanel({
     enabled: !!market && !!gross,
   });
   const net = gross !== undefined && fee.data !== undefined ? gross - fee.data : undefined;
+  // The chart compares the cash this sale brings in with holding the same options to expiry.
+  useEffect(() => {
+    const n = sold ? Number(sold) / 1e18 : 0;
+    if (!n) return onQty(qty ? Number(qty) / 1e18 : 1, undefined, { view: "sell" });
+    onQty(n, net !== undefined ? Number(net) / 10 ** s.assetDecimals / n : undefined, { view: "sell" });
+  }, [qty, sold, net, s.assetDecimals, onQty]);
   if (!a.enabled && ctx.connected) return <Blocked reason={a.reason} />;
 
   const tooMuch = qty !== undefined && qty > walletQty;
