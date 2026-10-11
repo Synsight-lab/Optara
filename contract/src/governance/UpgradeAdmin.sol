@@ -32,7 +32,7 @@ import {
 /// @dev `governance` is the governance timelock, so a normal upgrade is announced at least parameterTimelock before
 ///      it is scheduled here, then waits `upgradeDelay`. Delays are immutable and bounded below.
 contract UpgradeAdmin is IUpgradeAdmin {
-    uint256 public constant MIN_UPGRADE_DELAY = 2 days;
+    uint256 public constant MIN_UPGRADE_DELAY = 1 days;
     uint256 public constant MIN_EMERGENCY_DELAY = 1 hours;
     /// @dev Upper bound for both delays, so `block.timestamp + delay` always fits the uint64 eta.
     uint256 public constant MAX_DELAY = 365 days;

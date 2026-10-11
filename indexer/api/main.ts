@@ -2,7 +2,7 @@
  * Indexer API, health worker and monitor (alongside `envio start`). Environment:
  *   RPC_URL, CHAIN_ID, MANIFEST                                   required
  *   ENVIO_PG_HOST/PORT/USER/PASSWORD/DATABASE, ENVIO_PG_SCHEMA    the indexer's Postgres (Envio's variables)
- *   PORT (8787), HEALTH_INTERVAL_SECONDS (15), RECONCILE_INTERVAL_SECONDS (300)
+ *   PORT (8787), HOST (0.0.0.0; "::" for IPv6 private networks), HEALTH_INTERVAL_SECONDS (15), RECONCILE_INTERVAL_SECONDS (300)
  */
 import { connect } from "@optara/sdk";
 import { loadManifest } from "@optara/sdk/node";

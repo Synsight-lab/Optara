@@ -8,7 +8,7 @@
  *                                                             (default on a local manifest: ETH/USDC synthetic 0.6)
  *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs (restamp: local MockPyth)
  *   HERMES_URL, HERMES_API_KEY, HERMES_API_KEY_HEADER         for hermes
- *   INTERVAL_SECONDS (60; MON products: 30), PORT (8790), LOG_FILE
+ *   INTERVAL_SECONDS (60; MON products: 30), PORT (8790), HOST (0.0.0.0; "::" for IPv6 private networks), LOG_FILE
  */
 import { readFileSync } from "node:fs";
 import { privateKeyToAccount } from "viem/accounts";

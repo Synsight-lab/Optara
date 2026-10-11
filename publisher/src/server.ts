@@ -90,7 +90,8 @@ export function startServer(deps: ServerDeps, port: number): Promise<Server> {
       send(res, 500, { error: (e as Error).message });
     }
   });
-  return new Promise((resolve) => server.listen(port, "0.0.0.0", () => resolve(server)));
+  // HOST="::" listens on IPv6 and IPv4 (needed for IPv6-only private networks such as Railway's); default IPv4.
+  return new Promise((resolve) => server.listen(port, process.env.HOST ?? "0.0.0.0", () => resolve(server)));
 }
 
 /** Another publisher's service as a cosigner. */

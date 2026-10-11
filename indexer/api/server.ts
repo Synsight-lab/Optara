@@ -114,5 +114,6 @@ export function startApi(deps: { db: Db; monitor: Monitor; client: PublicClient;
       send(res, 500, { error: (e as Error).message.split("\n")[0] });
     }
   });
-  return new Promise((resolve) => server.listen(port, "0.0.0.0", () => resolve(server)));
+  // HOST="::" listens on IPv6 and IPv4 (needed for IPv6-only private networks such as Railway's); default IPv4.
+  return new Promise((resolve) => server.listen(port, process.env.HOST ?? "0.0.0.0", () => resolve(server)));
 }

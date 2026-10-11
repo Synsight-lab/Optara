@@ -1,0 +1,49 @@
+{
+  "_comment": "MON/USDC listing for monad-mainnet (DEPLOYMENT.md §3, §6 phase 3; values from PARAMETERS.md). Read by script/ProposeListing.s.sol (LISTING=mon-usdc), which refuses zero addresses: the publisher addresses must still be filled in, and insuranceSeed / keeperReserveMin set from the risk review (non-zero), before proposing. Verified on Monad mainnet (chain 143) on 2026-10-11: underlying = WMON 0x3bd3…433A (18 decimals, docs.monad.xyz token list); asset = native USDC 0x7547…b603 (6 decimals, Circle and docs.monad.xyz); Pyth MON/USD id 0x3149…6cd1 (Hermes: Crypto.MON/USD, live on Monad's Pyth with ~5 bps confidence) and USDC/USD id 0xeaa0…c94a; settlement feed = Chainlink MON/USD reference feed 0xBcD7…22fb (8 decimals, 1 h heartbeat, 2% deviation, Chainlink category 'new'); quote feed = Chainlink USDC/USD reference feed 0xf5F1…ebec (8 decimals, 1 h heartbeat). Both feeds were live with readable previous rounds; the -shared-svr 18-decimal variants are deliberately not used. USDC/USD rounds can be 3,606 s apart, so maxLegSkew stays well above 3,600. MON was ~0.026 USDC at verification: strikes span 0.0001 to 10 USDC; maxReportLifetime is MON's 300 s (PARAMETERS.md §4); the short cap of 10,000,000 MON (~260k USDC) is a conservative phase-3 start, to be confirmed by the risk review. Amounts are in USDC's 6 decimals; strikes and caps in 1e18.",
+  "underlying": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+  "asset": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  "underlyingSymbol": "MON",
+  "assetSymbol": "USDC",
+  "minStrikeWad": 100000000000000,
+  "maxStrikeWad": 10000000000000000000,
+  "maxReportLifetime": 300,
+  "riskSet": "MON/USDC default",
+  "shortCapUnderlyingWad": 10000000000000000000000000,
+  "pythBaseFeed": "0x31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1",
+  "pythQuoteFeed": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+  "settlement": {
+    "primary": {
+      "kind": "DERIVED",
+      "feed": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+      "feedDecimals": 8,
+      "quoteFeed": "0xf5F15f188AbCB0d165D1Edb7f37F7d6fA2fCebec",
+      "quoteFeedDecimals": 8
+    },
+    "fallback": {
+      "kind": "NONE"
+    },
+    "observationStartOffset": -3600,
+    "observationEndOffset": 0,
+    "minFinalizationDelay": 300,
+    "maxFinalizationDelay": 604800,
+    "maxLegSkew": 86400
+  },
+  "publishers": [
+    "0x0000000000000000000000000000000000000000",
+    "0x0000000000000000000000000000000000000000",
+    "0x0000000000000000000000000000000000000000"
+  ],
+  "independent": [
+    true,
+    false,
+    false
+  ],
+  "minSellerFee": 100000,
+  "insuranceSeed": 0,
+  "keeperReserveMin": 0,
+  "finalizeReward": 2000000,
+  "settleReward": 500000,
+  "maxInsurancePerLiquidation": 0,
+  "approveAsset": true,
+  "enableKuru": true
+}
