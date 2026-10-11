@@ -1,0 +1,12 @@
+// Cloudflare Workers deploy of the built frontend (static assets only, no Worker code).
+// Build first with `pnpm --filter @optara/frontend build`; `npx wrangler deploy` then uploads dist/.
+{
+  "$schema": "https://unpkg.com/wrangler@4.149.0/config-schema.json",
+  "name": "optara",
+  "compatibility_date": "2026-10-06",
+  "assets": {
+    "directory": "./dist",
+    // Serve index.html for app routes such as /app/markets.
+    "not_found_handling": "single-page-application"
+  }
+}
