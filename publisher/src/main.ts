@@ -1,7 +1,8 @@
 /**
  * Surface publisher service. Environment:
  *   RPC_URL, CHAIN_ID, MANIFEST (network name or path)       required
- *   PUBLISHER_PRIVATE_KEY                                     this operator's signing key
+ *   PUBLISHER_PRIVATE_KEY                                     this operator's signing key; comma separated for several
+ *                                                             (testnets: one service holding a quorum of keys)
  *   COSIGNER_URLS                                             other publishers' services, comma separated
  *   PRODUCTS                                                  JSON file: [{ symbol, underlying, settlementAsset, inputs, kNodes? }]
  *                                                             inputs: "deribit:ETH" | "synthetic:<atm iv>"
@@ -35,7 +36,11 @@ function inputsFrom(spec: string): VolInputs {
 
 async function main() {
   const manifest = loadManifest(env("MANIFEST"));
-  const key = env("PUBLISHER_PRIVATE_KEY") as Hex;
+  const signers = env("PUBLISHER_PRIVATE_KEY")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .map((k) => privateKeyToAccount(k as Hex));
   const { public: client } = await connect(env("RPC_URL"), Number(env("CHAIN_ID")));
   if (manifest.chainId !== Number(env("CHAIN_ID"))) throw new Error("manifest chain id differs from CHAIN_ID");
 
@@ -85,7 +90,7 @@ async function main() {
     client,
     manifest,
     products,
-    signers: [privateKeyToAccount(key)],
+    signers,
     cosigners: (process.env.COSIGNER_URLS ?? "").split(",").filter(Boolean).map((u) => new RemoteCosigner(u)),
     catalog,
     spot,
@@ -95,7 +100,7 @@ async function main() {
   const last = new Map<Hex, { at: string; result: PublishResult }>();
   const failingSince = new Map<Hex, number>();
   await startServer({ publisher, catalog, client, manifest, status: () => ({ ok: true, products: Object.fromEntries(last) }) }, Number(process.env.PORT ?? 8790));
-  log(`publisher ${privateKeyToAccount(key).address} serving on :${process.env.PORT ?? 8790}`);
+  log(`publisher ${signers.map((s) => s.address).join(", ")} serving on :${process.env.PORT ?? 8790}`);
 
   const interval = Number(process.env.INTERVAL_SECONDS ?? 60) * 1000;
   for (;;) {
