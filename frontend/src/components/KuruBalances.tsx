@@ -4,7 +4,6 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { ExternalLink } from "lucide-react";
 import { seriesName, shortAddr } from "../lib/optara/format.ts";
 import { getKuruBalances } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
@@ -48,7 +47,7 @@ export function KuruBalances({ owner, series }: { owner: Address; series: Series
             </li>
           ))}
           <li className="pt-2 text-xs text-muted">
-            Manage these on Kuru <ExternalLink className="inline h-3 w-3" />
+            Place more Kuru limit orders from each option's Trade tab. Filled or cancelled balances still live on Kuru until withdrawn.
           </li>
         </ul>
       )}

@@ -1,5 +1,5 @@
 /** `/series/:id` (and `/trade/:id`): terms, payoff, simulator and every action on one series (FRONTEND.md §2, §4, §7). */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
@@ -44,6 +44,9 @@ import { availability, type ActionContext, type ActionKey } from "../lib/optara/
 import {
   buyVenueSteps,
   closeShortSteps,
+  kuruDepositSteps,
+  kuruLimitBuySteps,
+  kuruLimitSellSteps,
   mintSteps,
   redeemSteps,
   claimSteps,
@@ -65,7 +68,7 @@ import {
   useTokenBalance,
   useWalletWrappers,
 } from "../lib/optara/hooks.ts";
-import { previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee } from "../lib/optara/reads.ts";
+import { getKuruLimitMarket, getKuruOrderBook, previewBuyerFee, previewMint, previewRedeem, venueBuyFee, venueSellFee, type KuruBookLevel } from "../lib/optara/reads.ts";
 import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
 import type { Quote, Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide } from "../state.tsx";
@@ -77,6 +80,8 @@ const toNative = (wad: bigint, decimals: number) => wad / 10n ** BigInt(18 - dec
 const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** BigInt(18 - decimals);
 /** A chart quantity: up to 4 decimals, no trailing zeros. */
 const fmtQtyNum = (q: number) => q.toLocaleString("en-US", { maximumFractionDigits: 4 });
+const MAX_UINT32 = 2n ** 32n - 1n;
+const MAX_UINT96 = 2n ** 96n - 1n;
 
 export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const { id } = useParams();
@@ -390,6 +395,181 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   );
 }
 
+export function KuruBookPage() {
+  const { id } = useParams();
+  const series = useSeries(id as Hex | undefined);
+  const { address } = useConnection();
+  const { selected } = useAccountState();
+  const { data: market } = useSeriesMarket(series);
+  const { data: product } = useProductMarket(series?.productId);
+  const { data: account } = useAccountView(selected);
+  const { data: wallet } = useWalletWrappers(address);
+  const walletQty = series ? wallet?.find((w) => w.series.id === series.id)?.balance ?? 0n : 0n;
+  const position = series ? account?.positions.find((p) => p.seriesId === series.id)?.balance ?? 0n : 0n;
+  const state = market?.state ?? "ACTIVE";
+  const ctx: ActionContext = {
+    connected: !!address,
+    groupState: state,
+    productCloseOnly: product?.closeOnly ?? false,
+    dataFresh: !!product?.spotFresh && product?.surface === "FRESH",
+    marketTradable: !!market?.quote,
+    hasAccount: selected !== undefined,
+    health: account?.health.state,
+    accountBalance: position,
+    walletWrappers: walletQty,
+    credit: false,
+  };
+  const ignorePreview = useCallback(() => {}, []);
+
+  if (!series) {
+    return (
+      <Card>
+        <Skeleton className="h-40 w-full" />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <Link to={`/app/series/${series.id}?tab=trade`} className="flex items-center gap-1 text-[13px] font-semibold text-muted transition hover:text-ink">
+          <ArrowLeft className="h-4 w-4" /> Back to trade
+        </Link>
+        <Link to="/app/markets" className="text-[13px] font-semibold text-primary hover:underline">
+          All markets
+        </Link>
+      </div>
+
+      <section className="card rise overflow-hidden p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <TokenIcon symbol={series.underlyingSymbol} className="h-10 w-10" />
+            <div>
+              <h1 className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">{seriesName(series)}</h1>
+              <p className="mt-0.5 text-sm text-muted">Public Kuru order book for this option token.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/app/series/${series.id}?tab=buy`} className="btn-up text-sm">
+              Buy best ask
+            </Link>
+            <Link to={`/app/series/${series.id}?tab=sell`} className="btn-down text-sm">
+              Sell into bids
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <KuruBookPanel series={series} mark={market?.mark} />
+        <section className="space-y-3">
+          <KuruLimitPanel s={series} ctx={ctx} walletQty={walletQty} mark={market?.mark} onQty={ignorePreview} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function KuruBookPanel({ series, mark }: { series: Series; mark?: bigint }) {
+  const book = useQuery({
+    queryKey: ["kuruOrderBook", series.id],
+    queryFn: () => getKuruOrderBook(series, 18),
+    refetchInterval: 5_000,
+  });
+  if (book.isLoading) return <Skeleton className="h-[620px] w-full rounded-3xl" />;
+  if (!book.data) {
+    return (
+      <Card>
+        <EmptyState title="No Kuru book yet" body="This series needs a registered Kuru market before public limit orders can appear here." />
+      </Card>
+    );
+  }
+
+  const asks = [...book.data.asks].reverse();
+  const bids = book.data.bids;
+  const maxTotal = [...asks, ...bids].reduce((m, l) => (l.total > m ? l.total : m), 0n);
+  const bestAsk = book.data.asks[0]?.price;
+  const bestBid = book.data.bids[0]?.price;
+  const spread = bestAsk !== undefined && bestBid !== undefined && bestAsk > bestBid ? bestAsk - bestBid : undefined;
+
+  return (
+    <section className="card rise overflow-hidden p-0">
+      <div className="border-b border-line p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">Kuru order book</h2>
+            <p className="mt-0.5 text-sm text-muted">Aggregated public bids and asks. Click the action buttons to fill through Optara.</p>
+          </div>
+          <Pill tone="primary" dot>Live</Pill>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <BookStat label="Best bid" value={bestBid !== undefined ? fmtPrice(bestBid) : "—"} tone="text-good" />
+          <BookStat label="Best ask" value={bestAsk !== undefined ? fmtPrice(bestAsk) : "—"} tone="text-bad" />
+          <BookStat label="Spread" value={spread !== undefined ? fmtPrice(spread) : "—"} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 border-b border-line px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint sm:px-5">
+        <span>Price ({series.assetSymbol})</span>
+        <span className="text-right">Size</span>
+        <span className="text-right">Total</span>
+      </div>
+
+      <div className="p-3 sm:p-4">
+        <div className="space-y-1">
+          {asks.length === 0 ? (
+            <div className="rounded-xl bg-surface-2 px-3 py-4 text-center text-sm text-muted">No asks</div>
+          ) : (
+            asks.map((l) => <BookRow key={`ask-${l.price}`} level={l} maxTotal={maxTotal} series={series} />)
+          )}
+        </div>
+
+        <div className="my-3 flex items-center justify-between rounded-2xl border border-line bg-surface-2 px-3 py-2.5">
+          <span className="text-xs font-semibold text-muted">Optara fair value</span>
+          <span className="num font-display text-lg font-semibold">{mark !== undefined ? `${fmtPrice(mark)} ${series.assetSymbol}` : "—"}</span>
+        </div>
+
+        <div className="space-y-1">
+          {bids.length === 0 ? (
+            <div className="rounded-xl bg-surface-2 px-3 py-4 text-center text-sm text-muted">No bids</div>
+          ) : (
+            bids.map((l) => <BookRow key={`bid-${l.price}`} level={l} maxTotal={maxTotal} series={series} />)
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BookStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface-2/65 px-3 py-2.5">
+      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className={cx("num mt-1 font-display text-lg font-semibold", tone ?? "text-ink")}>{value}</div>
+    </div>
+  );
+}
+
+function BookRow({ level, maxTotal, series }: { level: KuruBookLevel; maxTotal: bigint; series: Series }) {
+  const pct = maxTotal > 0n ? Number((level.total * 10000n) / maxTotal) / 100 : 0;
+  const isBid = level.side === "bid";
+  return (
+    <Link
+      to={`/app/series/${series.id}?tab=${isBid ? "sell" : "buy"}`}
+      className="relative grid grid-cols-[1fr_1fr_1fr] overflow-hidden rounded-xl px-3 py-2 text-sm transition hover:bg-surface-2"
+      title={isBid ? "Sell options into this bid" : "Buy options from this ask"}
+    >
+      <span
+        className={cx("absolute inset-y-0 right-0 opacity-15", isBid ? "bg-good" : "bg-bad")}
+        style={{ width: `${pct}%` }}
+      />
+      <span className={cx("relative num font-semibold", isBid ? "text-good" : "text-bad")}>{fmtPrice(level.price)}</span>
+      <span className="relative num text-right text-ink">{fmtQty(level.size)}</span>
+      <span className="relative num text-right text-muted">{fmtQty(level.total)}</span>
+    </Link>
+  );
+}
+
 function SeriesQuickFacts({
   series,
   state,
@@ -488,8 +668,8 @@ function TradePanel({
         value={side}
         onChange={setSide}
         options={[
-          { value: "buy", label: "Buy" },
-          { value: "sell", label: `Sell${hasTokens ? ` (${fmtQty(walletQty)})` : ""}`, disabled: !hasTokens, title: hasTokens ? undefined : "You hold none of this option yet" },
+          { value: "buy", label: "Buy now" },
+          { value: "sell", label: `Sell now${hasTokens ? ` (${fmtQty(walletQty)})` : ""}`, disabled: !hasTokens, title: hasTokens ? undefined : "You hold none of this option yet" },
         ]}
       />
       {side === "buy" ? (
@@ -497,6 +677,314 @@ function TradePanel({
       ) : (
         <SellPanel s={s} ctx={ctx} bid={bid} bidQty={bidQty} mark={mark} market={market} venueId={venueId} venueName={venueName} walletQty={walletQty} onQty={onQty} />
       )}
+      <Link to={`/app/series/${s.id}/orderbook`} className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2/60 px-3.5 py-3 text-sm transition hover:border-primary/35 hover:bg-primary-soft/40">
+        <span>
+          <span className="block font-semibold text-ink">Open Kuru order book</span>
+          <span className="text-xs text-muted">See public bids and asks, then place or fill orders.</span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-primary" />
+      </Link>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ Kuru limit orders
+function KuruLimitPanel({
+  s,
+  ctx,
+  walletQty,
+  mark,
+  onQty,
+}: {
+  s: Series;
+  ctx: ActionContext;
+  walletQty: bigint;
+  mark?: bigint;
+  onQty: (q: number, cost?: number) => void;
+}) {
+  const { address } = useConnection();
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [qtyText, setQtyText] = useState("1");
+  const [priceText, setPriceText] = useState("");
+  const qty = parseQty(qtyText);
+  const price = parseFixed(priceText, 18);
+  const { data: walletCash } = useTokenBalance(s.settlementAsset, address);
+  const { data: seriesMarket } = useSeriesMarket(s);
+  const limit = useQuery({
+    queryKey: ["kuruLimitMarket", s.id, address],
+    queryFn: () => getKuruLimitMarket(s, address),
+    enabled: !!address,
+    refetchInterval: 15_000,
+  });
+
+  useEffect(() => {
+    if (!priceText && mark !== undefined) setPriceText(fmtPrice(mark, 6).replace(/,/g, ""));
+  }, [mark, priceText]);
+  useEffect(() => {
+    if (!qty) return onQty(1);
+    const q = Number(qty) / 1e18;
+    onQty(q, price !== undefined ? Number(price) / 1e18 : undefined);
+  }, [qty, price, onQty]);
+
+  const m = limit.data;
+  const bestKuru = useMemo(() => {
+    const quotes = seriesMarket?.quotes ?? [];
+    return quotes.find((q) => q.venueName === "Kuru") ?? quotes[0];
+  }, [seriesMarket?.quotes]);
+  const quickPrices = useMemo(
+    () =>
+      [
+        mark !== undefined ? { label: "Fair", value: mark } : undefined,
+        bestKuru?.bid !== undefined ? { label: "Best bid", value: bestKuru.bid } : undefined,
+        bestKuru?.ask !== undefined ? { label: "Best ask", value: bestKuru.ask } : undefined,
+      ].filter((x): x is { label: string; value: bigint } => !!x),
+    [bestKuru?.ask, bestKuru?.bid, mark],
+  );
+  const priceUnitsRaw = price !== undefined && m ? (price * m.pricePrecision) / WAD : undefined;
+  const priceUnits = priceUnitsRaw !== undefined && m ? (priceUnitsRaw / (m.tickSize || 1n)) * (m.tickSize || 1n) : undefined;
+  const sizeUnits = qty !== undefined && m ? (qty * m.sizePrecision) / WAD : undefined;
+  const roundedQty = sizeUnits !== undefined && m ? (sizeUnits * WAD) / m.sizePrecision : undefined;
+  const quoteNeeded = roundedQty !== undefined && priceUnits !== undefined && m ? (priceUnits * roundedQty * 10n ** BigInt(s.assetDecimals)) / m.pricePrecision / WAD + 1n : undefined;
+  const grossValue = quoteNeeded !== undefined && quoteNeeded > 0n ? quoteNeeded - 1n : undefined;
+  const missingQuote = side === "buy" && quoteNeeded !== undefined && m ? (quoteNeeded > m.quoteBalance ? quoteNeeded - m.quoteBalance : 0n) : 0n;
+  const missingOptions = side === "sell" && qty !== undefined && m ? (qty > m.optionBalance ? qty - m.optionBalance : 0n) : 0n;
+  const tooMuchCash = missingQuote > 0n && walletCash !== undefined && missingQuote > walletCash;
+  const tooManyOptions = missingOptions > 0n && missingOptions > walletQty;
+  const priceBad = priceUnits !== undefined && (priceUnits === 0n || priceUnits > MAX_UINT32);
+  const sizeBad = sizeUnits !== undefined && m && (sizeUnits < m.minSize || sizeUnits > m.maxSize || sizeUnits > MAX_UINT96 || roundedQty === 0n);
+  const availableQuote = m ? m.quoteBalance + (walletCash ?? 0n) : 0n;
+  const buyMaxQty = m && priceUnits && priceUnits > 0n ? (availableQuote * m.pricePrecision * WAD) / (priceUnits * 10n ** BigInt(s.assetDecimals)) : 0n;
+  const sellMaxQty = m ? m.optionBalance + walletQty : 0n;
+  const sliderMaxQty = side === "buy" ? buyMaxQty : sellMaxQty;
+  const sliderPct = sliderMaxQty > 0n && qty !== undefined ? Math.min(100, Number((qty * 10000n) / sliderMaxQty) / 100) : 0;
+  const setQtyPct = (pct: number) => {
+    if (sliderMaxQty === 0n) return setQtyText("0");
+    const next = (sliderMaxQty * BigInt(Math.round(pct * 100))) / 10000n;
+    setQtyText(fmtQty(next).replace(/,/g, ""));
+  };
+  const placeSteps =
+    address && m && qty && priceUnits && sizeUnits && !priceBad && !sizeBad
+      ? [
+          ...(side === "buy" && missingQuote > 0n ? kuruDepositSteps(m.margin, s.settlementAsset, missingQuote, s.assetSymbol, address) : []),
+          ...(side === "sell" && missingOptions > 0n ? kuruDepositSteps(m.margin, s.wrapper, missingOptions, "option tokens", address) : []),
+          ...(side === "buy" ? kuruLimitBuySteps(m.market, priceUnits, sizeUnits) : kuruLimitSellSteps(m.market, priceUnits, sizeUnits)),
+        ]
+      : undefined;
+
+  if (!ctx.connected) return <Blocked reason="Connect a wallet to place limit orders." />;
+  if (limit.isLoading) return <Skeleton className="h-64 w-full" />;
+  if (!m) {
+    return (
+      <div className="space-y-3">
+        <Blocked reason="Kuru limit orders are not available for this series yet." />
+        <p className="rounded-xl border border-line bg-surface-2/70 p-3 text-[13px] leading-5 text-muted">
+          The series needs a registered Kuru market with real Kuru order-book support. You can still use Buy now or Sell now when current Kuru liquidity exists.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[26px] border border-line bg-surface shadow-[0_18px_50px_-34px_rgba(20,20,45,0.65)]">
+      <div className="border-b border-line bg-surface-2/60 p-2">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-surface p-1">
+          {(["buy", "sell"] as const).map((next) => (
+            <button
+              key={next}
+              type="button"
+              onClick={() => setSide(next)}
+              className={cx(
+                "rounded-xl px-4 py-3 text-sm font-semibold transition cursor-pointer",
+                side === next
+                  ? next === "buy"
+                    ? "bg-good text-[#02281b] shadow-[0_10px_24px_-16px_rgba(0,207,142,0.85)]"
+                    : "bg-bad text-white shadow-[0_10px_24px_-16px_rgba(239,47,88,0.85)]"
+                  : "text-muted hover:bg-surface-2 hover:text-ink",
+              )}
+            >
+              {next === "buy" ? "Buy / Bid" : "Sell / Ask"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-lg font-semibold tracking-tight">Kuru limit order</h3>
+            <p className="mt-0.5 text-sm text-muted">{side === "buy" ? "Bid at your price. Funds wait on Kuru until filled or cancelled." : "List wallet options at your price. Tokens wait on Kuru until filled or cancelled."}</p>
+          </div>
+          <Term tip="No Optara buyer fee is charged when the bid is placed. If it fills, the filled option tokens stay on Kuru until you withdraw them. Any Optara interface fee should be charged only on filled withdrawals through Optara.">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs font-semibold text-muted shadow-sm">
+              Fee note <Info className="h-3.5 w-3.5" />
+            </span>
+          </Term>
+        </div>
+
+        <div className="rounded-3xl border border-line bg-surface p-4 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <label className="block min-w-0">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-ink">Limit price</span>
+                <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-muted">{s.assetSymbol} per option</span>
+              </div>
+              <input
+                inputMode="decimal"
+                autoComplete="off"
+                className={cx(
+                  "w-full min-w-0 rounded-2xl border border-line bg-surface-2 px-4 py-4 font-display text-[28px] font-semibold leading-none tracking-tight outline-none transition placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/20",
+                  priceBad && "border-bad text-bad focus:border-bad focus:ring-bad/20",
+                )}
+                placeholder="0.00"
+                value={priceText}
+                onChange={(e) => setPriceText(e.target.value.replace(/[^\d.]/g, ""))}
+              />
+              <div className={cx("mt-2 text-[13px]", priceBad ? "text-bad" : "text-muted")}>
+                {priceBad ? "Price is outside Kuru's supported range." : mark !== undefined ? `Fair value ${fmtPrice(mark)} ${s.assetSymbol}.` : "Set the premium per option."}
+              </div>
+            </label>
+
+            <label className="block min-w-0">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-ink">Amount</span>
+                {side === "sell" && (
+                  <button type="button" className="shrink-0 text-xs font-semibold text-primary hover:underline cursor-pointer" onClick={() => setQtyText(fmtQty(walletQty).replace(/,/g, ""))}>
+                    Wallet · {fmtQty(walletQty)}
+                  </button>
+                )}
+              </div>
+              <input
+                inputMode="decimal"
+                autoComplete="off"
+                className={cx(
+                  "w-full min-w-0 rounded-2xl border border-line bg-surface-2 px-4 py-4 font-display text-[28px] font-semibold leading-none tracking-tight outline-none transition placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/20",
+                  sizeBad && "border-bad text-bad focus:border-bad focus:ring-bad/20",
+                )}
+                placeholder="0.00"
+                value={qtyText}
+                onChange={(e) => setQtyText(e.target.value.replace(/[^\d.]/g, ""))}
+              />
+              <div className={cx("mt-2 text-[13px]", sizeBad ? "text-bad" : "text-muted")}>
+                {sizeBad
+                  ? `Kuru accepts ${fmtQty((m.minSize * WAD) / m.sizePrecision)} to ${fmtQty((m.maxSize * WAD) / m.sizePrecision)} options.`
+                  : roundedQty !== undefined && qty !== roundedQty
+                  ? `Kuru rounds this to ${fmtQty(roundedQty)} options.`
+                  : "Option tokens to bid for or offer."}
+              </div>
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            {quickPrices.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {quickPrices.map((p) => (
+                  <button
+                    key={`${p.label}-${p.value}`}
+                    type="button"
+                    className="rounded-full border border-line bg-surface-2 px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-primary/30 hover:text-ink cursor-pointer"
+                    onClick={() => setPriceText(fmtPrice(p.value, 6).replace(/,/g, ""))}
+                    title={`Use ${p.label.toLowerCase()} price`}
+                  >
+                    {p.label} · {fmtPrice(p.value)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-muted">Order size</span>
+              <span className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-ink">{Math.round(sliderPct)}%</span>
+            </div>
+          </div>
+
+          <div className="mt-2 rounded-full bg-surface-2 px-3 py-2 shadow-inner">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(sliderPct)}
+                onChange={(e) => setQtyPct(Number(e.target.value))}
+                style={{ "--fill": `${sliderPct}%` } as CSSProperties}
+                aria-label="Order size"
+                className="w-full cursor-grab active:cursor-grabbing"
+              />
+              <div className="mt-1 flex justify-between text-[11px] font-semibold text-muted">
+                <span>0%</span>
+                <span>{Math.round(sliderPct)}%</span>
+                <span>100%</span>
+              </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-line bg-surface-2/60 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+            <div className="font-semibold text-ink">{side === "buy" ? "Bid summary" : "Ask summary"}</div>
+            <Pill tone={side === "buy" ? "good" : "warn"}>{side === "buy" ? "Buying" : "Selling"}</Pill>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
+              <div className="text-xs font-semibold text-muted">{side === "buy" ? "Reserve on Kuru" : "Proceeds if filled"}</div>
+              <div className="num mt-1 break-words text-[15px] font-semibold leading-snug text-ink">
+                {side === "buy"
+                  ? quoteNeeded !== undefined
+                    ? `${fmtNative(quoteNeeded, s.assetDecimals)} ${s.assetSymbol}`
+                    : "—"
+                  : grossValue !== undefined
+                  ? `${fmtNative(grossValue, s.assetDecimals)} ${s.assetSymbol}`
+                  : "—"}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
+              <div className="text-xs font-semibold text-muted">Move now</div>
+              <div className="num mt-1 break-words text-[15px] font-semibold leading-snug text-ink">
+                {side === "buy" ? (missingQuote > 0n ? `${fmtNative(missingQuote, s.assetDecimals)} ${s.assetSymbol}` : "None") : missingOptions > 0n ? `${fmtQty(missingOptions)} options` : "None"}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
+              <div className="text-xs font-semibold text-muted">{side === "buy" ? "If filled" : "To close short"}</div>
+              <div className="mt-1 break-words text-[15px] font-semibold leading-snug text-ink">{side === "buy" ? `${roundedQty !== undefined ? fmtQty(roundedQty) : "—"} options on Kuru` : "Withdraw, then burn"}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Wallet className="h-4 w-4 text-primary" />
+            Kuru balances
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-surface-2 px-3 py-1.5 font-semibold text-muted">{fmtNative(m.quoteBalance, s.assetDecimals)} {s.assetSymbol}</span>
+            <span className="rounded-full bg-surface-2 px-3 py-1.5 font-semibold text-muted">{fmtQty(m.optionBalance)} options</span>
+            <Term tip="Kuru balances are separate from Optara margin. Withdraw before redeeming, closing shorts, or using them as protocol collateral.">
+              <span className="rounded-full bg-surface-2 px-3 py-1.5 font-semibold text-primary">Info</span>
+            </Term>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-line bg-surface-2/45 p-4 sm:p-5">
+        <TxButton
+          label={side === "buy" ? "Place bid on Kuru" : "Place ask on Kuru"}
+          summary={
+            qty && price
+              ? side === "buy"
+                ? `Place a Kuru bid for ${fmtQty(qty)} ${seriesName(s)} options at ${fmtPrice(price)} ${s.assetSymbol} each. Unfilled funds stay on Kuru.`
+                : `Place a Kuru ask for ${fmtQty(qty)} ${seriesName(s)} options at ${fmtPrice(price)} ${s.assetSymbol} each. Unfilled tokens stay on Kuru.`
+              : undefined
+          }
+          steps={placeSteps}
+          disabled={!placeSteps || tooMuchCash || tooManyOptions || priceBad || !!sizeBad}
+          disabledReason={
+            tooMuchCash
+              ? `Wallet holds ${walletCash !== undefined ? fmtNative(walletCash, s.assetDecimals) : "0"} ${s.assetSymbol}.`
+              : tooManyOptions
+              ? `Wallet holds ${fmtQty(walletQty)} option tokens.`
+              : undefined
+          }
+          successMessage={side === "buy" ? "Limit bid placed on Kuru." : "Limit ask placed on Kuru."}
+        />
+      </div>
     </div>
   );
 }

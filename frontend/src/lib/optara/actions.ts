@@ -138,6 +138,46 @@ export const buyVenueSteps = (s: Series, venueId: Hex, venueName: string, premiu
 export const buySteps = (s: Series, premiumIn: bigint, minQty: bigint, maxBuyerFee: bigint, maxVenueFee: bigint, recipient: Address): Step[] =>
   buyVenueSteps(s, KURU_VENUE, "Kuru", premiumIn, minQty, maxBuyerFee, maxVenueFee, recipient);
 
+// ------------------------------------------------------------------ direct Kuru limit orders
+
+export const kuruMarginAbi = [
+  { type: "function", name: "deposit", stateMutability: "payable", inputs: [{ name: "user", type: "address" }, { name: "token", type: "address" }, { name: "amount", type: "uint256" }], outputs: [] },
+  { type: "function", name: "getBalance", stateMutability: "view", inputs: [{ name: "user", type: "address" }, { name: "token", type: "address" }], outputs: [{ type: "uint256" }] },
+] as const;
+
+export const kuruLimitBookAbi = [
+  { type: "function", name: "addBuyOrder", stateMutability: "nonpayable", inputs: [{ name: "price", type: "uint32" }, { name: "size", type: "uint96" }, { name: "postOnly", type: "bool" }], outputs: [] },
+  { type: "function", name: "addSellOrder", stateMutability: "nonpayable", inputs: [{ name: "price", type: "uint32" }, { name: "size", type: "uint96" }, { name: "postOnly", type: "bool" }], outputs: [] },
+] as const;
+
+export const kuruDepositSteps = (margin: Address, token: Address, amount: bigint, symbol: string, owner: Address): Step[] => [
+  approveStep(token, margin, amount, symbol),
+  callStep(
+    `kuru-deposit-${token}`,
+    `Move ${symbol} to Kuru`,
+    { address: margin, abi: kuruMarginAbi, functionName: "deposit", args: [owner, token, amount] },
+    "Funds resting on Kuru are outside Optara margin. Cancel or withdraw them on Kuru before using them in Optara.",
+  ),
+];
+
+export const kuruLimitBuySteps = (market: Address, priceUnits: bigint, sizeUnits: bigint): Step[] => [
+  callStep(
+    "kuru-limit-buy",
+    "Place limit bid on Kuru",
+    { address: market, abi: kuruLimitBookAbi, functionName: "addBuyOrder", args: [Number(priceUnits), sizeUnits, false] },
+    "Your bid rests on Kuru until it fills or you cancel it. No Optara buyer fee is charged at placement.",
+  ),
+];
+
+export const kuruLimitSellSteps = (market: Address, priceUnits: bigint, sizeUnits: bigint): Step[] => [
+  callStep(
+    "kuru-limit-sell",
+    "Place limit ask on Kuru",
+    { address: market, abi: kuruLimitBookAbi, functionName: "addSellOrder", args: [Number(priceUnits), sizeUnits, false] },
+    "Your option tokens rest on Kuru. They cannot close an Optara short until cancelled, withdrawn, and burned in Optara.",
+  ),
+];
+
 // ------------------------------------------------------------------ positions (F4, F5, F11)
 
 export const unwrapSteps = (accountId: bigint, s: Series, qty: bigint): Step[] => [

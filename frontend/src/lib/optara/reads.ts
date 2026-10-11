@@ -132,6 +132,34 @@ export interface SeriesMarket {
 
 const kuruBookAbi = [
   { type: "function", name: "bestBidAsk", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }, { type: "uint256" }] },
+  { type: "function", name: "getL2Book", stateMutability: "view", inputs: [{ name: "bidPricePoints", type: "uint32" }, { name: "askPricePoints", type: "uint32" }], outputs: [{ type: "bytes" }] },
+] as const;
+
+const kuruRouterAbi = [
+  {
+    type: "function",
+    name: "verifiedMarket",
+    stateMutability: "view",
+    inputs: [{ name: "orderBook", type: "address" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "pricePrecision", type: "uint32" },
+          { name: "sizePrecision", type: "uint96" },
+          { name: "baseAssetAddress", type: "address" },
+          { name: "baseAssetDecimals", type: "uint256" },
+          { name: "quoteAssetAddress", type: "address" },
+          { name: "quoteAssetDecimals", type: "uint256" },
+          { name: "tickSize", type: "uint32" },
+          { name: "minSize", type: "uint96" },
+          { name: "maxSize", type: "uint96" },
+          { name: "takerFeeBps", type: "uint256" },
+          { name: "makerFeeBps", type: "uint256" },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 const WAD_ = 10n ** 18n;
@@ -196,6 +224,117 @@ export async function getQuote(seriesId: Hex): Promise<Quote | undefined> {
     if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
     return 0;
   })[0];
+}
+
+export interface KuruLimitMarket {
+  margin: Address;
+  market: Address;
+  pricePrecision: bigint;
+  sizePrecision: bigint;
+  minSize: bigint;
+  maxSize: bigint;
+  tickSize: bigint;
+  makerFeeBps: bigint;
+  quoteBalance: bigint;
+  optionBalance: bigint;
+}
+
+export interface KuruBookLevel {
+  side: "bid" | "ask";
+  price: bigint;
+  size: bigint;
+  total: bigint;
+}
+
+export interface KuruOrderBook {
+  market: Address;
+  pricePrecision: bigint;
+  sizePrecision: bigint;
+  makerFeeBps: bigint;
+  takerFeeBps: bigint;
+  bids: KuruBookLevel[];
+  asks: KuruBookLevel[];
+}
+
+function readU256Words(data: Hex): bigint[] {
+  const body = data.startsWith("0x") ? data.slice(2) : data;
+  const out: bigint[] = [];
+  for (let i = 0; i + 64 <= body.length; i += 64) out.push(BigInt(`0x${body.slice(i, i + 64)}`));
+  return out;
+}
+
+function parseKuruL2(data: Hex, pricePrecision: bigint, sizePrecision: bigint): Pick<KuruOrderBook, "bids" | "asks"> {
+  const words = readU256Words(data);
+  const bids: KuruBookLevel[] = [];
+  const asks: KuruBookLevel[] = [];
+  let i = 1; // word 0 is the block number encoded by Kuru.
+  let bidTotal = 0n;
+  while (i < words.length) {
+    const rawPrice = words[i++] ?? 0n;
+    if (rawPrice === 0n) break;
+    const rawSize = words[i++] ?? 0n;
+    const size = (rawSize * WAD_) / sizePrecision;
+    bidTotal += size;
+    bids.push({ side: "bid", price: (rawPrice * WAD_) / pricePrecision, size, total: bidTotal });
+  }
+  let askTotal = 0n;
+  while (i < words.length) {
+    const rawPrice = words[i++] ?? 0n;
+    if (rawPrice === 0n) break;
+    const rawSize = words[i++] ?? 0n;
+    const size = (rawSize * WAD_) / sizePrecision;
+    askTotal += size;
+    asks.push({ side: "ask", price: (rawPrice * WAD_) / pricePrecision, size, total: askTotal });
+  }
+  return { bids, asks };
+}
+
+/** Public aggregated Kuru order book. This is visible even when no wallet is connected. */
+export async function getKuruOrderBook(s: Series, depth = 16): Promise<KuruOrderBook | undefined> {
+  const quote = await getVenueQuote(KURU_VENUE, "Kuru", s.id);
+  if (!quote?.market) return undefined;
+  const router = await c.readContract({ address: ADDR.kuruAdapter, abi: kuruAbi, functionName: "kuruRouter" }).catch(() => KURU_MAINNET_ROUTER);
+  const params = await c.readContract({ address: router, abi: kuruRouterAbi, functionName: "verifiedMarket", args: [quote.market] });
+  if (params.baseAssetAddress.toLowerCase() !== s.wrapper.toLowerCase() || params.quoteAssetAddress.toLowerCase() !== s.settlementAsset.toLowerCase()) return undefined;
+  const data = await c.readContract({ address: quote.market, abi: kuruBookAbi, functionName: "getL2Book", args: [depth, depth] });
+  return {
+    market: quote.market,
+    pricePrecision: BigInt(params.pricePrecision),
+    sizePrecision: BigInt(params.sizePrecision),
+    makerFeeBps: BigInt(params.makerFeeBps),
+    takerFeeBps: BigInt(params.takerFeeBps),
+    ...parseKuruL2(data, BigInt(params.pricePrecision), BigInt(params.sizePrecision)),
+  };
+}
+
+/** Direct Kuru limit-order metadata and the user's Kuru balances for this series. */
+export async function getKuruLimitMarket(s: Series, owner?: Address): Promise<KuruLimitMarket | undefined> {
+  if (!owner) return undefined;
+  const quote = await getVenueQuote(KURU_VENUE, "Kuru", s.id);
+  if (!quote?.market) return undefined;
+  const [router, margin] = await Promise.all([
+    c.readContract({ address: ADDR.kuruAdapter, abi: kuruAbi, functionName: "kuruRouter" }).catch(() => KURU_MAINNET_ROUTER),
+    getKuruMarginAccount(),
+  ]);
+  if (!margin) return undefined;
+  const params = await c.readContract({ address: router, abi: kuruRouterAbi, functionName: "verifiedMarket", args: [quote.market] });
+  if (params.baseAssetAddress.toLowerCase() !== s.wrapper.toLowerCase() || params.quoteAssetAddress.toLowerCase() !== s.settlementAsset.toLowerCase()) return undefined;
+  const [quoteBalance, optionBalance] = await Promise.all([
+    c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.settlementAsset] }),
+    c.readContract({ address: margin, abi: kuruAbi, functionName: "getBalance", args: [owner, s.wrapper] }),
+  ]);
+  return {
+    margin,
+    market: quote.market,
+    pricePrecision: BigInt(params.pricePrecision),
+    sizePrecision: BigInt(params.sizePrecision),
+    minSize: BigInt(params.minSize),
+    maxSize: BigInt(params.maxSize),
+    tickSize: BigInt(params.tickSize),
+    makerFeeBps: BigInt(params.makerFeeBps),
+    quoteBalance,
+    optionBalance,
+  };
 }
 
 export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {

@@ -15,6 +15,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="markets" replace /> },
       { path: "markets", element: <MarketsPage /> },
       { path: "series/:id", lazy: async () => ({ Component: (await import("./pages/Series.tsx")).SeriesPage }) },
+      { path: "series/:id/orderbook", lazy: async () => ({ Component: (await import("./pages/Series.tsx")).KuruBookPage }) },
       { path: "trade", element: <Navigate to="/app/markets" replace /> },
       { path: "trade/:id", element: <Navigate to="/app/markets" replace /> },
       { path: "new", lazy: async () => ({ Component: (await import("./pages/NewMarket.tsx")).NewMarketPage }) },
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
   },
   { path: "/markets", element: <Navigate to="/app/markets" replace /> },
   { path: "/series/:id", element: <NavigateToApp prefix="series" /> },
+  { path: "/series/:id/orderbook", element: <NavigateToApp suffix="orderbook" /> },
   { path: "/trade", element: <Navigate to="/app/markets" replace /> },
   { path: "/trade/:id", element: <Navigate to="/app/markets" replace /> },
   { path: "/new", element: <Navigate to="/app/new" replace /> },
@@ -43,6 +45,9 @@ export const router = createBrowserRouter([
   { path: "*", element: <NotFound /> },
 ]);
 
-function NavigateToApp({ prefix }: { prefix: string }) {
-  return <Navigate to={`/app/${prefix}/${location.pathname.split("/").at(-1) ?? ""}${location.search}`} replace />;
+function NavigateToApp({ prefix, suffix }: { prefix?: string; suffix?: string }) {
+  const parts = location.pathname.split("/").filter(Boolean);
+  const id = suffix ? parts.at(-2) : parts.at(-1);
+  const path = suffix ? `/app/series/${id}/${suffix}` : `/app/${prefix}/${id ?? ""}`;
+  return <Navigate to={`${path}${location.search}`} replace />;
 }
