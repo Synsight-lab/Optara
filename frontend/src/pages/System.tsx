@@ -1,6 +1,5 @@
-/** `/system`: oracle freshness, close-only flags, reserves, services and contract addresses (FRONTEND.md §2). Admin only. */
+/** `/system`: oracle freshness, close-only flags, reserves, services and contract addresses (FRONTEND.md §2). */
 import { useMemo } from "react";
-import { useConnection } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -8,40 +7,21 @@ import {
   Copy,
   ExternalLink,
   Lock,
-  LockKeyhole,
   Radio,
   Server,
   Shield,
   ShieldCheck,
   Zap,
 } from "lucide-react";
-import { Card, CopyButton, EmptyState, Pill, Row, Skeleton, Term } from "../components/ui.tsx";
+import { Card, CopyButton, Pill, Row, Skeleton, Term } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { INDEXER_URL, MANIFEST, PUBLISHER_URL, RPC_URL } from "../config/network.ts";
 import { fmtDuration, fmtLevel, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
-import { useChainTime, useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
-import { hasAnyTrustedRole } from "../lib/optara/roles.ts";
+import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
 import { getInsurance, getUpgrades } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
 
-/** Shown only to wallets holding a trusted Optara role, like `/admin`. */
 export function SystemPage() {
-  const { address, isConnected } = useConnection();
-  const { data: roleMap, isLoading } = useTrustedRoles(address);
-
-  if (!isConnected) return <Card><EmptyState icon={<LockKeyhole className="h-5 w-5" />} title="Connect an admin wallet" body="System status is for Optara role holders. Connect a wallet with a trusted role to see it." /></Card>;
-  if (isLoading) return <Card><Skeleton className="h-28 w-full" /></Card>;
-  if (!hasAnyTrustedRole(roleMap)) {
-    return (
-      <Card>
-        <EmptyState icon={<LockKeyhole className="h-5 w-5" />} title="System status is for admins" body="This wallet does not hold a trusted Optara role." />
-      </Card>
-    );
-  }
-  return <SystemStatus />;
-}
-
-function SystemStatus() {
   const { data: series } = useSeriesList();
   const products = useMemo(() => [...new Map((series ?? []).map((s) => [s.productId, s])).values()], [series]);
   const assets = useMemo(() => [...new Map((series ?? []).map((s) => [s.settlementAsset, s])).values()], [series]);

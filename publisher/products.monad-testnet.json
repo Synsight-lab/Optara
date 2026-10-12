@@ -2,7 +2,7 @@
   {
     "symbol": "WETH/USDC",
     "underlying": "0x45477f4709771331db81944A5E20eF95Bc7BA2D7",
-    "settlementAsset": "0x3bA3d39AFcf8bb994f7964B3e0171Ea2Ba361570",
+    "settlementAsset": "0x534b2f3A21130d7a60830c2Df862319e593943A3",
     "inputs": "synthetic:0.55"
   }
 ]

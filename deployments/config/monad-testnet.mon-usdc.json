@@ -1,7 +1,7 @@
 {
-  "_comment": "TESTNET short-dated listing written for scripts/testnet-markets.sh, which fills settlement.primary.feed with the TestnetPushFeed it deploys (a Chainlink-compatible feed the keeper updates from Pyth every 5 minutes; testnet Chainlink has no MON/USD feed and updates ETH/USD too rarely for 1-6 h expiries). Settlement through it trusts the keeper: testnet only. asset = Kuru's testnet USDC 0x3bA3...1570 (6 decimals; docs.kuru.io), so every option can have a Kuru book. strikeStepWad and contractSizeWad are read by script/testnet/RollShortSeries.s.sol. underlying = WMON 0xFb8b...C541 (monad-crypto testnet token list). The asset is approved by the WETH listing, so approveAsset is false here.",
+  "_comment": "TESTNET short-dated listing written for scripts/testnet-markets.sh, which fills settlement.primary.feed with the TestnetPushFeed it deploys (a Chainlink-compatible feed the keeper updates from Pyth every 5 minutes; testnet Chainlink has no MON/USD feed and updates ETH/USD too rarely for 1-6 h expiries). Settlement through it trusts the keeper: testnet only. asset = Circle's testnet USDC 0x534b...43A3 (6 decimals; free from faucet.circle.com). Kuru's testnet factory accepts it as the quote of each option's book. strikeStepWad and contractSizeWad are read by script/testnet/RollShortSeries.s.sol. underlying = WMON 0xFb8b...C541 (monad-crypto testnet token list). The asset is approved by the WETH listing, so approveAsset is false here.",
   "underlying": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
-  "asset": "0x3bA3d39AFcf8bb994f7964B3e0171Ea2Ba361570",
+  "asset": "0x534b2f3A21130d7a60830c2Df862319e593943A3",
   "underlyingSymbol": "MON",
   "assetSymbol": "USDC",
   "minStrikeWad": 100000000000000,
