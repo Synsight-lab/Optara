@@ -51,16 +51,48 @@ export interface Clients {
   wallet?: WalletClient<Transport, Chain, Account>;
 }
 
+/** True for an RPC refusal caused by rate limiting (anywhere in the error's cause chain). */
+export function isRateLimited(e: unknown): boolean {
+  for (let x: any = e, depth = 0; x && depth < 8; x = x.cause, depth++) {
+    // -32011: Monad's public RPC ("requests limited to 25/sec"); -32005: the standard "limit exceeded"; 429: HTTP.
+    if (x.code === -32011 || x.code === -32005 || x.status === 429) return true;
+    if (typeof x.message === "string" && /requests limited|rate limit|too many requests/i.test(x.message)) return true;
+  }
+  return false;
+}
+
+/**
+ * `http(rpcUrl)` that waits and retries requests refused for rate limiting (viem does not retry Monad's -32011), so
+ * a long log scan on a shared public RPC slows down instead of failing. Other errors are thrown at once.
+ */
+export function patientHttp(rpcUrl: string, maxRetries = 8, baseDelayMs = 250): Transport {
+  const base = http(rpcUrl);
+  return ((opts: Parameters<Transport>[0]) => {
+    const t = base(opts);
+    const request: typeof t.request = async (args, options) => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await t.request(args, options);
+        } catch (e) {
+          if (attempt >= maxRetries || !isRateLimited(e)) throw e;
+          await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs));
+        }
+      }
+    };
+    return { ...t, request };
+  }) as Transport;
+}
+
 /**
  * A public client (and a wallet client when an account is given) for `rpcUrl`. Checks the RPC's chain id against
  * the expected one, so a service never acts on the wrong network.
  */
 export async function connect(rpcUrl: string, expectedChainId: number, account?: Account): Promise<Clients> {
   const chain = chainFor(expectedChainId, rpcUrl);
-  const pub = createPublicClient({ chain, transport: http(rpcUrl) });
+  const pub = createPublicClient({ chain, transport: patientHttp(rpcUrl) });
   const actual = await pub.getChainId();
   if (actual !== expectedChainId) throw new Error(`RPC ${rpcUrl} is chain ${actual}, expected ${expectedChainId}`);
-  const wallet = account ? createWalletClient({ chain, transport: http(rpcUrl), account }) : undefined;
+  const wallet = account ? createWalletClient({ chain, transport: patientHttp(rpcUrl), account }) : undefined;
   return { chain, public: pub, wallet };
 }
 

@@ -10,6 +10,7 @@ import {
   mergeOracleUpdates,
   emptyOracleUpdate,
   sortSignatures,
+  isRateLimited,
   surfaceLeaf,
   toWad,
   WAD,
@@ -101,5 +102,16 @@ describe("mergeOracleUpdates", () => {
     expect(m.spotProductIds).toEqual([pid]);
     expect(m.nodes).toHaveLength(1);
     expect(m.spotUpdates).toHaveLength(2);
+  });
+});
+
+describe("isRateLimited", () => {
+  it("recognises rate-limit refusals anywhere in the cause chain, and nothing else", () => {
+    expect(isRateLimited({ code: -32011, message: "requests limited to 25/sec" })).toBe(true); // Monad public RPC
+    expect(isRateLimited(new Error("RPC Request failed.", { cause: { code: -32011 } }))).toBe(true);
+    expect(isRateLimited({ status: 429 })).toBe(true);
+    expect(isRateLimited(new Error("Too Many Requests"))).toBe(true);
+    expect(isRateLimited({ code: 3, message: "execution reverted" })).toBe(false);
+    expect(isRateLimited(new Error("nonce too low"))).toBe(false);
   });
 });
