@@ -69,7 +69,7 @@ function ProductStatus({ s }: { s: Series }) {
         <Skeleton className="h-28 w-full" />
       ) : (
         <div className="space-y-2 text-xs">
-          <Row label="Live price (Pyth)" value={`$${fmtLevel(m.spotWad)}`} strong />
+          <Row label={`Live price (${m.spotProvider})`} value={`$${fmtLevel(m.spotWad)}`} strong />
           <Row
             label="Last price update"
             value={

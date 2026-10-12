@@ -106,6 +106,8 @@ export interface ProductMarket {
   surface: SurfaceStatus;
   surfaceStaleSeconds: bigint;
   closeOnly: boolean;
+  /** Who signs the live spot price: Pyth or RedStone (the product's spot source). */
+  spotProvider: "Pyth" | "RedStone";
   /** True when spot and surface are the publisher's current data (simulated, see liveProduct); false: on-chain only. */
   live: boolean;
   /** When a spot price was last written on-chain (by a trade or a keeper). */
@@ -163,13 +165,15 @@ function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
 }
 
 export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
-  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly, live] = await Promise.all([
+  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly, live, source] = await Promise.all([
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] }),
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] }),
     c.readContract({ address: ADDR.surface, abi: volSurfaceOracleAbi, functionName: "surfaceStatus", args: [productId] }),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "isProductCloseOnly", args: [productId] }),
     liveProduct(productId),
+    c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [productId] }),
   ]);
+  const spotProvider: ProductMarket["spotProvider"] = source.kind >= 3 ? "RedStone" : "Pyth"; // REDSTONE_DIRECT = 3, REDSTONE_DERIVED = 4
   const chain = { spotWad, spotPublishTime: BigInt(publishTime), spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale) };
   const fresh =
     live?.spot && live.surface
@@ -177,7 +181,7 @@ export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
       : undefined;
   // Close-only as the next transaction sees it: a trade applies its fresh surface before the check, so an expired
   // stored surface alone does not stop trading.
-  return { productId, ...(fresh ?? chain), closeOnly: (fresh && live?.closeOnly) ?? closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime };
+  return { productId, ...(fresh ?? chain), closeOnly: (fresh && live?.closeOnly) ?? closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime, spotProvider };
 }
 
 export interface SeriesMarket {

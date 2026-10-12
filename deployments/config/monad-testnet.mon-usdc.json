@@ -1,5 +1,5 @@
 {
-  "_comment": "TESTNET short-dated listing written for scripts/testnet-markets.sh, which fills settlement.primary.feed with the TestnetPushFeed it deploys (a Chainlink-compatible feed the keeper updates from Pyth every 5 minutes; testnet Chainlink has no MON/USD feed and updates ETH/USD too rarely for 1-6 h expiries). Settlement through it trusts the keeper: testnet only. asset = Circle's testnet USDC 0x534b...43A3 (6 decimals; free from faucet.circle.com). Kuru's testnet factory accepts it as the quote of each option's book. strikeStepWad and contractSizeWad are read by script/testnet/RollShortSeries.s.sol. underlying = WMON 0xFb8b...C541 (monad-crypto testnet token list). The asset is approved by the WETH listing, so approveAsset is false here.",
+  "_comment": "TESTNET short-dated listing written for scripts/testnet-markets.sh, which fills settlement.primary.feed with the TestnetPushFeed it deploys (a Chainlink-compatible feed the keeper updates from Pyth every 5 minutes; testnet Chainlink has no MON/USD feed and updates ETH/USD too rarely for 1-6 h expiries). Settlement through it trusts the keeper: testnet only. asset = Circle's testnet USDC 0x534b...43A3 (6 decimals; free from faucet.circle.com). Kuru's testnet factory accepts it as the quote of each option's book. strikeStepWad and contractSizeWad are read by script/testnet/RollShortSeries.s.sol. underlying = WMON 0xFb8b...C541 (monad-crypto testnet token list). The asset is approved by the WETH listing, so approveAsset is false here. Spot: RedStone pull feeds MON/USD ÷ USDC/USD (spotSource = redstone; verified on-chain against config.redstone signers), because the Pyth key in use has no MON/USD entitlement.",
   "underlying": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
   "asset": "0x534b2f3A21130d7a60830c2Df862319e593943A3",
   "underlyingSymbol": "MON",
@@ -14,7 +14,7 @@
   "settlement": {
     "primary": {
       "kind": "DIRECT",
-      "feed": "0x0000000000000000000000000000000000000000",
+      "feed": "0x31FA8a075D4adAd7390a6bA8152B3F38361807A2",
       "feedDecimals": 8
     },
     "fallback": {
@@ -46,5 +46,8 @@
   "approveAsset": false,
   "enableKuru": true,
   "strikeStepWad": 500000000000000,
-  "contractSizeWad": 100000000000000000000
+  "contractSizeWad": 100000000000000000000,
+  "spotSource": "redstone",
+  "redstoneBaseFeed": "MON",
+  "redstoneQuoteFeed": "USDC"
 }

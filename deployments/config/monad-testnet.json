@@ -1,5 +1,5 @@
 {
-  "_comment": "Optara deployment config for monad-testnet (DEPLOYMENT.md §2-§3). Role addresses are the multisigs/timelock and MUST be filled in before deploying; Deploy.s.sol refuses zero addresses. pyth: verified on-chain 2026-10-07 (getUpdateFee, MON/USD feed). kuruRouter: Kuru's mainnet Router (verified on a mainnet fork, test/fork/KuruAdapter.fork.t.sol); zero on testnet, whose Kuru 'Spot V2' needs its own adapter.",
+  "_comment": "Optara deployment config for monad-testnet (DEPLOYMENT.md \u00a72-\u00a73). Role addresses are the multisigs/timelock and MUST be filled in before deploying; Deploy.s.sol refuses zero addresses. pyth: verified on-chain 2026-10-07 (getUpdateFee, MON/USD feed). kuruRouter: Kuru's mainnet Router (verified on a mainnet fork, test/fork/KuruAdapter.fork.t.sol); zero on testnet, whose Kuru 'Spot V2' needs its own adapter.",
   "chainId": 10143,
   "governance": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
   "guardian": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
@@ -15,5 +15,17 @@
   "surfaceQuorum": 2,
   "maxSeriesPerAccount": 16,
   "maxBucketsPerAccount": 4,
-  "minPositionQty": 10000000000000000
+  "minPositionQty": 10000000000000000,
+  "redstone": {
+    "_comment": "RedStone pull prices (redstone-primary-prod): the signers LiveSpotOracle accepts and how many distinct ones a feed needs. Signer list from RedStone's SDK (getSignersForDataServiceId), checked 2026-10-12 against live payloads.",
+    "dataServiceId": "redstone-primary-prod",
+    "signers": [
+      "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+      "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+      "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+      "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
+      "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de"
+    ],
+    "threshold": 3
+  }
 }

@@ -41,8 +41,11 @@ abstract contract ListingCalls is OptaraDeploy {
         uint32 maxReportLifetime; // PARAMETERS.md §4 (ETH, BTC: 900; MON: 300)
         bytes32 riskSetId;
         uint256 shortCapUnderlyingWad; // product short cap in underlying units (PARAMETERS.md §4)
-        bytes32 pythBaseFeed; // DIRECT: underlying/asset; DERIVED: underlying/USD
-        bytes32 pythQuoteFeed; // DERIVED: asset/USD; zero for DIRECT
+        bytes32 pythBaseFeed; // DIRECT: underlying/asset; DERIVED: underlying/USD (RedStone: bytes32 of its feed name)
+        bytes32 pythQuoteFeed; // DERIVED: asset/USD; zero for DIRECT (RedStone: bytes32 of its feed name)
+        bool redstoneSpot; // spot from RedStone pull feeds instead of Pyth
+        address[] redstoneSigners; // RedStone signers the oracle accepts (redstoneSpot only)
+        uint8 redstoneThreshold; // distinct signers a feed needs (redstoneSpot only)
         ISettlementOracle.SettlementOracleConfig settlement;
         address[] publishers;
         bool[] independent;
@@ -59,7 +62,7 @@ abstract contract ListingCalls is OptaraDeploy {
     function _listingCalls(Deployment memory d, ListingParams memory p) internal view returns (Call[] memory calls) {
         bytes32 productId = d.registry.computeProductId(p.underlying, p.asset);
         bytes32 cfgId = d.settlementOracle.computeConfigId(p.settlement);
-        calls = new Call[](15 + p.publishers.length);
+        calls = new Call[](16 + p.publishers.length);
         uint256 n;
         if (p.approveAsset) {
             calls[n++] = Call(
@@ -93,6 +96,14 @@ abstract contract ListingCalls is OptaraDeploy {
             abi.encodeCall(PortfolioRiskManager.setProductShortCap, (productId, p.shortCapUnderlyingWad)),
             "product short cap"
         );
+        if (p.redstoneSpot) {
+            calls[n++] = Call(
+                "governance",
+                address(d.spot),
+                abi.encodeCall(LiveSpotOracle.setRedstoneSigners, (p.redstoneSigners, p.redstoneThreshold)),
+                "RedStone signers"
+            );
+        }
         calls[n++] = Call(
             "governance",
             address(d.spot),
@@ -106,6 +117,9 @@ abstract contract ListingCalls is OptaraDeploy {
             "surface config"
         );
         for (uint256 i; i < p.publishers.length; ++i) {
+            // Publishers are global to the surface oracle: one an earlier listing added is already active.
+            (bool active,) = d.surface.isPublisher(p.publishers[i]);
+            if (active) continue;
             calls[n++] = Call(
                 "governance",
                 address(d.surface),
@@ -218,10 +232,14 @@ abstract contract ListingCalls is OptaraDeploy {
     }
 
     function _spotSource(ListingParams memory p) internal pure returns (ILiveSpotOracle.SpotSource memory) {
+        ILiveSpotOracle.SourceKind kind;
+        if (p.redstoneSpot) {
+            kind = p.pythQuoteFeed == 0 ? ILiveSpotOracle.SourceKind.REDSTONE_DIRECT : ILiveSpotOracle.SourceKind.REDSTONE_DERIVED;
+        } else {
+            kind = p.pythQuoteFeed == 0 ? ILiveSpotOracle.SourceKind.PYTH_DIRECT : ILiveSpotOracle.SourceKind.PYTH_DERIVED;
+        }
         return ILiveSpotOracle.SpotSource({
-            kind: p.pythQuoteFeed == 0
-                ? ILiveSpotOracle.SourceKind.PYTH_DIRECT
-                : ILiveSpotOracle.SourceKind.PYTH_DERIVED,
+            kind: kind,
             baseFeedId: p.pythBaseFeed,
             quoteFeedId: p.pythQuoteFeed,
             maxSpotAge: 60,

@@ -14,7 +14,7 @@
   "settlement": {
     "primary": {
       "kind": "DIRECT",
-      "feed": "0x7212FCf6B16969D92464FDf6046a812146f3a09a",
+      "feed": "0x575AeAeF1A3E1670bc25cC205184b6aC7ad3075f",
       "feedDecimals": 8
     },
     "fallback": {

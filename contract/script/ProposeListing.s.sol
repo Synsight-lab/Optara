@@ -31,6 +31,7 @@ contract ProposeListing is Script, ListingCalls {
     error UnknownFeedKind(string kind);
 
     string internal json;
+    string internal networkConfig; // deployments/config/<NETWORK>.json
 
     function run() external returns (string memory path) {
         string memory network = vm.envString("NETWORK");
@@ -42,6 +43,7 @@ contract ProposeListing is Script, ListingCalls {
         Deployment memory d = _fromManifest(manifest);
 
         json = vm.readFile(string.concat(dir, "config/", network, ".", listing, ".json"));
+        networkConfig = vm.readFile(string.concat(dir, "config/", network, ".json"));
         ListingParams memory p = _params();
         Call[] memory batch = _listingCalls(d, p);
         Call[] memory seed = _seedCalls(d, p);
@@ -88,8 +90,20 @@ contract ProposeListing is Script, ListingCalls {
         p.maxReportLifetime = uint32(vm.parseJsonUint(json, ".maxReportLifetime")); // seconds; the oracle bounds it
         p.riskSetId = keccak256(bytes(vm.parseJsonString(json, ".riskSet")));
         p.shortCapUnderlyingWad = vm.parseJsonUint(json, ".shortCapUnderlyingWad");
-        p.pythBaseFeed = vm.parseJsonBytes32(json, ".pythBaseFeed");
-        p.pythQuoteFeed = vm.parseJsonBytes32(json, ".pythQuoteFeed");
+        // spotSource "redstone": RedStone pull feeds (names, e.g. "MON") verified against the network's RedStone signers
+        p.redstoneSpot = vm.keyExistsJson(json, ".spotSource") && _is(vm.parseJsonString(json, ".spotSource"), "redstone");
+        if (p.redstoneSpot) {
+            p.pythBaseFeed = bytes32(bytes(vm.parseJsonString(json, ".redstoneBaseFeed")));
+            string memory q = vm.parseJsonString(json, ".redstoneQuoteFeed");
+            p.pythQuoteFeed = bytes(q).length == 0 ? bytes32(0) : bytes32(bytes(q));
+            p.redstoneSigners = vm.parseJsonAddressArray(networkConfig, ".redstone.signers");
+            // forge-lint: disable-next-line(unsafe-typecast)
+            p.redstoneThreshold = uint8(vm.parseJsonUint(networkConfig, ".redstone.threshold"));
+            if (p.redstoneSigners.length == 0 || p.redstoneThreshold == 0) revert MissingValue(".redstone (network config)");
+        } else {
+            p.pythBaseFeed = vm.parseJsonBytes32(json, ".pythBaseFeed");
+            p.pythQuoteFeed = vm.parseJsonBytes32(json, ".pythQuoteFeed");
+        }
         p.settlement = _settlement(p.underlying, p.asset);
         p.publishers = vm.parseJsonAddressArray(json, ".publishers");
         p.independent = vm.parseJsonBoolArray(json, ".independent");

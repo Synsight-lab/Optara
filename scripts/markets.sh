@@ -115,6 +115,37 @@ e=d+be-qe
 print(bp*10**e//qp if e>=0 else bp//(qp*10**-e))' "$base" "$quote" "$decimals"
 }
 
+# Spot of a product (base / quote) scaled to `decimals`, from the product's own spot provider: RedStone (median of
+# the network's authorized signers, as LiveSpotOracle computes it) or Pyth.
+spot_ratio() {
+  local p="$1" decimals="$2" c; c="$(cfg "$p")"
+  if [ "$(jq -r '.spotSource // "pyth"' "$c")" = redstone ]; then
+    local service; service=$(jq -r .redstone.dataServiceId "$CONFIG")
+    curl -s -m 20 "https://oracle-gateway-1.a.redstone.finance/data-packages/latest/$service" | python3 -c '
+import json,sys
+from statistics import median
+gw=json.load(sys.stdin); signers={s.lower() for s in json.loads(sys.argv[1])}; need=int(sys.argv[2]); d=int(sys.argv[5])
+def px(name):
+    if not name: return 1.0
+    v=[p["dataPoints"][0]["value"] for p in gw.get(name,[]) if p["signerAddress"].lower() in signers]
+    if len(v)<need: sys.exit(f"RedStone: only {len(v)} authorized signers for {name}")
+    return median(v)
+print(int(px(sys.argv[3])/px(sys.argv[4])*10**d))' "$(jq -c .redstone.signers "$CONFIG")" "$(jq -r .redstone.threshold "$CONFIG")"       "$(jq -r .redstoneBaseFeed "$c")" "$(jq -r '.redstoneQuoteFeed // ""' "$c")" "$decimals"
+  else
+    pyth_ratio "$(jq -r .pythBaseFeed "$c")" "$(jq -r .pythQuoteFeed "$c")" "$decimals"
+  fi
+}
+
+# The feed ids the keeper reads for a product's settlement push feed: RedStone names (bytes32) or Pyth ids.
+feed_ids() {
+  local c; c="$(cfg "$1")"
+  if [ "$(jq -r '.spotSource // "pyth"' "$c")" = redstone ]; then
+    printf '%s %s' "$(cast format-bytes32-string "$(jq -r .redstoneBaseFeed "$c")")"       "$( [ -n "$(jq -r '.redstoneQuoteFeed // ""' "$c")" ] && cast format-bytes32-string "$(jq -r .redstoneQuoteFeed "$c")" || echo "")"
+  else
+    printf '%s %s' "$(jq -r .pythBaseFeed "$c")" "$(jq -r .pythQuoteFeed "$c")"
+  fi
+}
+
 # Role calls: direct sends them from the admin key; propose leaves the file for the multisigs.
 run_calls() {
   local file="$1" n i to data value label role
@@ -129,7 +160,8 @@ run_calls() {
     value=$(jq -r ".calls[$i].value" "$file"); label=$(jq -r ".calls[$i].label" "$file"); role=$(jq -r ".calls[$i].role" "$file")
     [ "$role" = treasury ] && die "call $((i + 1)) needs the treasury; list with bootstrapFromFees or execution = propose"
     printf '  %2d/%d %-13s %s … ' $((i + 1)) "$n" "$role" "$label"
-    cast send "$to" "$data" --value "$value" --private-key "$ADMIN_KEY" --rpc-url "$RPC_URL" --json >/dev/null && echo ok
+    cast send "$to" "$data" --value "$value" --private-key "$ADMIN_KEY" --rpc-url "$RPC_URL" --json >/dev/null || die "call $((i + 1)) ($label) failed"
+    echo ok
   done
 }
 
@@ -186,8 +218,8 @@ cmd_list() {
     [ -f "$(cfg "$p")" ] || die "$(cfg "$p") not found"
     [ "$(jq -r --arg p "$p" '.products[$p].vol // "null"' "$PROFILE")" != null ] || die "$p has no vol source in $NETWORK.markets.json"
     sym=$(jq -r .underlyingSymbol "$(cfg "$p")")
-    base=$(jq -r .pythBaseFeed "$(cfg "$p")"); quote=$(jq -r .pythQuoteFeed "$(cfg "$p")")
-    price=$(pyth_ratio "$base" "$quote" 8) # the Hermes key must cover this product before anything is sent
+    read -r base quote <<< "$(feed_ids "$p")"
+    price=$(spot_ratio "$p" 8) # the product's spot provider must serve it before anything is sent
     echo "-- $p: $sym/$(jq -r .assetSymbol "$(cfg "$p")") $(python3 -c "print($price/1e8)")"
     if [ "$FEEDS" = push ]; then
       [ -n "$KEEPER" ] || die "push feeds need KEEPER_PRIVATE_KEY (the pusher)"
@@ -213,17 +245,29 @@ cmd_roll() {
   expiries=$(expiry_times); offsets=$(jq -r '.strikeOffsetsBps | join(",")' "$PROFILE")
   step "Rolling $PRODUCTS: expiries $(python3 -c "import sys,datetime as d;print(', '.join(d.datetime.fromtimestamp(int(t),d.timezone.utc).strftime('%d %b %H:%M') for t in sys.argv[1].split(',')))" "$expiries") UTC; strikes spot ${offsets} bps"
   for p in ${PRODUCTS//,/ }; do
-    local w; w=$(pyth_ratio "$(jq -r .pythBaseFeed "$(cfg "$p")")" "$(jq -r .pythQuoteFeed "$(cfg "$p")")" 18)
+    local w; w=$(spot_ratio "$p" 18)
     echo "-- $p spot $(python3 -c "print($w/1e18)")"
     env+=("SPOT_WAD_$i=$w"); i=$((i + 1))
   done
   [ "$EXECUTION" = direct ] && echo "Admin $ADMIN: $(cast balance "$ADMIN" --ether --rpc-url "$RPC_URL") MON"
   confirm "Create these options on $NETWORK ($EXECUTION, Kuru books: $BOOKS)?"
   local bc=(); [ "$EXECUTION" = direct ] && bc=(--broadcast --slow)
+  local series="$DEPLOY_DIR/$NETWORK.series.json" prev=""
+  [ -f "$series" ] && prev=$(cat "$series") # the roll rewrites the file; other products' entries are kept below
   (cd "$ROOT/contract" && env "${env[@]}" NETWORK=$NETWORK PRODUCTS="$PRODUCTS" EXPIRIES="$expiries" STRIKE_OFFSETS_BPS="$offsets" \
     KURU_BOOKS=$BOOKS KURU_ROUTER=$KURU_ROUTER EXECUTION=$EXECUTION ADMIN_PRIVATE_KEY="${ADMIN_KEY:-0x01}" \
     forge script script/RollSeries.s.sol --rpc-url "$RPC_URL" --disable-code-size-limit ${bc[@]+"${bc[@]}"} 2>&1 | grep -E "listed|proposal|Error|error" || true)
-  [ -f "$DEPLOY_DIR/$NETWORK.series.json" ] || die "the roll wrote no series file"
+  [ -f "$series" ] || die "the roll wrote no series file"
+  # forge writes the file while simulating: in direct mode, make sure the options really exist on-chain
+  if [ "$EXECUTION" = direct ] && [ "$(cast code "$(jq -r '.series[-1].wrapper' "$series")" --rpc-url "$RPC_URL")" = 0x ]; then
+    [ -n "$prev" ] && echo "$prev" > "$series"
+    die "the roll was not broadcast (no option token on-chain); nothing changed, run it again"
+  fi
+  if [ -n "$prev" ]; then # keep the entries of products not rolled this time
+    echo "$prev" | jq --slurpfile new "$series" --arg rolled "$PRODUCTS" \
+      '($rolled | split(",")) as $r | $new[0] + {series: ([.series[] | select(.listing as $l | $r | index($l) | not)] + $new[0].series)}' \
+      > "$series.tmp" && mv "$series.tmp" "$series"
+  fi
   [ "$EXECUTION" = propose ] && run_calls "$DEPLOY_DIR/$NETWORK.roll.proposals.json"
   [ "$BOOKS" = none ] && echo "Kuru books: send Kuru the option tokens in deployments/$NETWORK.series.json; register them with: markets.sh register"
   return 0

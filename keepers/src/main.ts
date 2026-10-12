@@ -15,8 +15,8 @@
  */
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { connect, HermesSource, LedgerLogDirectory, RestampMockPythSource, SeriesCatalog, type AccountDirectory, type SpotSource } from "@optara/sdk";
-import { loadManifest } from "@optara/sdk/node";
+import { connect, LedgerLogDirectory, RestampMockPythSource, SeriesCatalog, type AccountDirectory, type SpotSource } from "@optara/sdk";
+import { loadManifest, networkName, spotSourceFor } from "@optara/sdk/node";
 import { FeedPusher, type PushFeedSpec } from "./feedPusher.ts";
 import { IndexerDirectory } from "./indexerDirectory.ts";
 import { LiquidationBot } from "./liquidationBot.ts";
@@ -52,7 +52,7 @@ async function main() {
   const spot: SpotSource =
     (process.env.SPOT_SOURCE ?? (manifest.chainId === 31337 ? "restamp" : "hermes")) === "restamp"
       ? new RestampMockPythSource(client, (manifest.extra as any).pyth)
-      : new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+      : spotSourceFor({ network: networkName(env("MANIFEST")), hermesUrl: process.env.HERMES_URL, hermesApiKey: process.env.HERMES_API_KEY, hermesApiKeyHeader: process.env.HERMES_API_KEY_HEADER });
 
   const loops: Promise<never>[] = [];
   const every = (name: string, seconds: number, fn: () => Promise<unknown>) =>
@@ -81,9 +81,9 @@ async function main() {
     const feeds = ((manifest.extra as { testnetFeeds?: PushFeedSpec[] }).testnetFeeds ?? []) as PushFeedSpec[];
     if (feeds.length === 0) throw new Error("feeds: the manifest lists no testnetFeeds");
     if (manifest.chainId === 143) throw new Error("feeds: testnet push feeds are refused on Monad mainnet (settlement must use Chainlink)");
-    const hermes = new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+    const prices = spotSourceFor({ network: networkName(env("MANIFEST")), hermesUrl: process.env.HERMES_URL, hermesApiKey: process.env.HERMES_API_KEY, hermesApiKeyHeader: process.env.HERMES_API_KEY_HEADER }); // Pyth and RedStone, per feed
     const intervalSeconds = Number(process.env.FEED_INTERVAL_SECONDS ?? 300);
-    const pusher = new FeedPusher(ctx, { feeds, hermes, intervalSeconds });
+    const pusher = new FeedPusher(ctx, { feeds, prices, intervalSeconds });
     every("feeds", 30, () => pusher.tick());
   }
   if (modes.includes("settle")) {

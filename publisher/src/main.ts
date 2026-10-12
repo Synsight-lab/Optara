@@ -7,15 +7,16 @@
  *   PRODUCTS                                                  JSON file: [{ symbol, underlying, settlementAsset, inputs, kNodes? }]
  *                                                             inputs: "deribit:ETH" | "synthetic:<atm iv>"
  *                                                             (default on a local manifest: ETH/USDC synthetic 0.6)
- *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs (restamp: local MockPyth)
+ *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs: hermes = Pyth (Hermes) and RedStone
+ *                                                             per feed (RedStone signers from config/<network>.json); restamp: local MockPyth
  *   HERMES_URL, HERMES_API_KEY, HERMES_API_KEY_HEADER         for hermes
  *   INTERVAL_SECONDS (60; MON products: 30), PORT (8790), HOST (0.0.0.0; "::" for IPv6 private networks), LOG_FILE
  */
 import { readFileSync } from "node:fs";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { connect, HermesSource, RestampMockPythSource, optionSeriesRegistryAbi, type SpotSource } from "@optara/sdk";
-import { loadManifest } from "@optara/sdk/node";
+import { connect, RestampMockPythSource, optionSeriesRegistryAbi, type SpotSource } from "@optara/sdk";
+import { loadManifest, networkName, spotSourceFor } from "@optara/sdk/node";
 import { SeriesCatalog } from "@optara/sdk";
 import { DeribitInputs, SyntheticInputs, skewSmile, type VolInputs } from "./inputs.ts";
 import { Publisher, type ProductSpec, type PublishResult } from "./publisher.ts";
@@ -82,7 +83,7 @@ async function main() {
   const spot: SpotSource =
     spotKind === "restamp"
       ? new RestampMockPythSource(client, (manifest.extra as any).pyth)
-      : new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+      : spotSourceFor({ network: networkName(env("MANIFEST")), hermesUrl: process.env.HERMES_URL, hermesApiKey: process.env.HERMES_API_KEY, hermesApiKeyHeader: process.env.HERMES_API_KEY_HEADER });
 
   const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
   const catalog = new SeriesCatalog(client, registry, BigInt(manifest.deployedAtBlock), BigInt(process.env.LOG_CHUNK ?? "100"));

@@ -1,10 +1,9 @@
 /**
  * TESTNET: keeps each TestnetPushFeed (a Chainlink-compatible settlement feed, contract/src/testnet) current from
- * Pyth: price = base / quote (e.g. ETH/USD ÷ USDC/USD) at the feed's decimals, pushed once a round is
+ * Pyth or RedStone (whichever serves the feed ids): price = base / quote (e.g. ETH/USD ÷ USDC/USD) at the feed's decimals, pushed once a round is
  * `intervalSeconds` old. Settlement reads the round in force at expiry, so the interval bounds its staleness.
  */
 import { parseAbi, type Address, type Hex } from "viem";
-import type { HermesSource } from "@optara/sdk";
 import { sendTx, type Ctx } from "./tx.ts";
 
 export const testnetPushFeedAbi = parseAbi([
@@ -12,6 +11,11 @@ export const testnetPushFeedAbi = parseAbi([
   "function decimals() view returns (uint8)",
   "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
 ]);
+
+/** Parsed prices per feed id (lower-case hex): price × 10^expo. */
+export interface PriceSource {
+  prices(feedIds: readonly Hex[]): Promise<Map<string, { price: bigint; expo: number; publishTime: bigint }>>;
+}
 
 export interface PushFeedSpec {
   /** The TestnetPushFeed. */
@@ -25,7 +29,7 @@ export interface PushFeedSpec {
 export class FeedPusher {
   constructor(
     private readonly ctx: Ctx,
-    private readonly o: { feeds: readonly PushFeedSpec[]; hermes: HermesSource; intervalSeconds: number },
+    private readonly o: { feeds: readonly PushFeedSpec[]; prices: PriceSource; intervalSeconds: number },
   ) {}
 
   /** One pass: pushes every feed whose latest round is at least intervalSeconds old. Returns the feeds pushed. */
@@ -42,7 +46,7 @@ export class FeedPusher {
     }
     if (due.length === 0) return [];
     const ids = [...new Set(due.flatMap((f) => (f.quote ? [f.base, f.quote] : [f.base])))];
-    const px = await this.o.hermes.prices(ids);
+    const px = await this.o.prices.prices(ids);
     const pushed: Address[] = [];
     for (const f of due) {
       const decimals = await client.readContract({ address: f.feed, abi: testnetPushFeedAbi, functionName: "decimals" });

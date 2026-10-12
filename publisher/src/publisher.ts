@@ -243,7 +243,8 @@ export class Publisher {
     for (const s of series) {
       const tb = findTenors(r.tenorTimestamps, s.expiry);
       if (!tb) continue; // not priceable from this report; the contract will say SeriesNotPriceable
-      const [lo, hi] = findNodes(r.kNodes, logMoneyness(s.strikeWad, spotWad));
+      // No spot stored yet (a new product): every node of the tenors, so the series is priceable whatever spot lands.
+      const [lo, hi] = spotWad === 0n ? [0, r.kNodes.length - 1] : findNodes(r.kNodes, logMoneyness(s.strikeWad, spotWad));
       for (const t of new Set(tb)) {
         for (let j = Math.max(0, lo - margin); j <= Math.min(r.kNodes.length - 1, hi + margin); j++) want.add(`${t}:${j}`);
       }
