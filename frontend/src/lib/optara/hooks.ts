@@ -3,7 +3,9 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { Address, Hex } from "viem";
 import { IS_LOCAL } from "../../config/network.ts";
-import { publicClient } from "./client.ts";
+import { protocolControlAbi } from "@optara/sdk";
+import { ADDR, publicClient } from "./client.ts";
+import { TRUSTED_ROLES, type RoleMap } from "./roles.ts";
 import {
   estimateLiquidationSpots,
   getAccount,
@@ -36,6 +38,19 @@ export const useProductMarket = (productId: Hex | undefined) =>
 
 export const useSeriesMarket = (s: Series | undefined) =>
   useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!), enabled: !!s, refetchInterval: FAST });
+
+/** The wallet's trusted Optara roles (ProtocolControl.hasRole), shared by the nav and the role-gated pages. */
+export const useTrustedRoles = (address: Address | undefined) =>
+  useQuery({
+    queryKey: ["trustedRoles", address],
+    queryFn: async (): Promise<RoleMap> =>
+      new Map(
+        await Promise.all(
+          TRUSTED_ROLES.map(async (r) => [r.key, await publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [r.key, address!] })] as const),
+        ),
+      ),
+    enabled: !!address,
+  });
 
 export const useAccounts = (owner: Address | undefined) =>
   useQuery({ queryKey: ["accounts", owner], queryFn: () => getAccounts(owner!), enabled: !!owner, staleTime: 10_000 });

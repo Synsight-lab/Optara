@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import {
   Activity,
@@ -21,11 +20,9 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { protocolControlAbi } from "@optara/sdk";
 import { fmtLevel, fmtWad } from "../lib/optara/format.ts";
-import { useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
-import { ADDR, publicClient } from "../lib/optara/client.ts";
-import { TRUSTED_ROLES, hasAnyTrustedRole, roleNames } from "../lib/optara/roles.ts";
+import { useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
+import { hasAnyTrustedRole, roleNames } from "../lib/optara/roles.ts";
 import { useQuickGuide, useTheme } from "../state.tsx";
 import { ConnectButton } from "./ConnectButton.tsx";
 import { OnboardingModal } from "./OnboardingModal.tsx";
@@ -39,16 +36,7 @@ export function Layout() {
   const { open: openGuide } = useQuickGuide();
   const [moreOpen, setMoreOpen] = useState(false);
   const { address } = useConnection();
-  const { data: roleMap } = useQuery({
-    queryKey: ["trustedRoles", address],
-    queryFn: async () => {
-      const entries = await Promise.all(
-        TRUSTED_ROLES.map(async (r) => [r.key, await publicClient.readContract({ address: ADDR.control, abi: protocolControlAbi, functionName: "hasRole", args: [r.key, address!] })] as const),
-      );
-      return new Map(entries);
-    },
-    enabled: !!address,
-  });
+  const { data: roleMap } = useTrustedRoles(address);
   const showAdmin = hasAnyTrustedRole(roleMap);
   const adminLabel = roleNames(roleMap, true).slice(0, 2).join(", ");
   const [scrolled, setScrolled] = useState(false);
@@ -60,9 +48,13 @@ export function Layout() {
   }, []);
   const secondary: MenuItem[] = [
     { to: "/app/liquidations", label: "Liquidations", text: "Accounts below their margin, and auctions", icon: ShieldAlert },
-    { to: "/app/system", label: "System status", text: "Prices, reserves, upgrades and contracts", icon: Server },
     { to: "/app/new", label: "New market", text: "List a new strike and expiry", icon: Zap },
-    ...(showAdmin ? [{ to: "/app/admin", label: "Admin", text: adminLabel ? `Your roles: ${adminLabel}` : "Role-holder controls", icon: LockKeyhole }] : []),
+    ...(showAdmin
+      ? [
+          { to: "/app/system", label: "System status", text: "Prices, reserves, upgrades and contracts", icon: Server },
+          { to: "/app/admin", label: "Admin", text: adminLabel ? `Your roles: ${adminLabel}` : "Role-holder controls", icon: LockKeyhole },
+        ]
+      : []),
   ];
 
   return (
@@ -140,9 +132,11 @@ export function Layout() {
                 <LockKeyhole className="h-4 w-4 text-primary" /> Admin controls{adminLabel && <span className="ml-auto text-xs text-muted">{adminLabel}</span>}
               </Link>
             )}
-            <Link to="/app/system" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
-              <Server className="h-4 w-4 text-primary" /> System status
-            </Link>
+            {showAdmin && (
+              <Link to="/app/system" onClick={() => setMoreOpen(false)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-sm font-semibold">
+                <Server className="h-4 w-4 text-primary" /> System status
+              </Link>
+            )}
             <button onClick={() => { setMoreOpen(false); openGuide(); }} className="flex w-full items-center gap-2.5 rounded-2xl border border-line bg-surface-2 p-3.5 text-left text-sm font-semibold cursor-pointer">
               Learn how options work
             </button>
