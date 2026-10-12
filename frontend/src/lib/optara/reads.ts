@@ -116,6 +116,7 @@ interface LiveProduct {
   spot?: readonly [bigint, bigint];
   spotFresh?: boolean;
   surface?: readonly [number, bigint];
+  closeOnly?: boolean;
   marks: Map<string, { mark?: bigint; iv?: bigint }>;
 }
 
@@ -141,6 +142,7 @@ function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
       { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] },
       { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] },
       { address: ADDR.surface, abi: volSurfaceOracleAbi, functionName: "surfaceStatus", args: [productId] },
+      { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "isProductCloseOnly", args: [productId] },
       ...series.flatMap((s) => [
         { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.seriesId] },
         { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.seriesId] },
@@ -148,13 +150,13 @@ function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
     ]);
     const marks = new Map<string, { mark?: bigint; iv?: bigint }>();
     series.forEach((s, i) => {
-      const price = r[3 + 2 * i] as readonly bigint[] | undefined;
-      const iv = r[4 + 2 * i] as readonly bigint[] | undefined;
+      const price = r[4 + 2 * i] as readonly bigint[] | undefined;
+      const iv = r[5 + 2 * i] as readonly bigint[] | undefined;
       marks.set(s.seriesId.toLowerCase(), { mark: price?.[0], iv: iv?.[0] });
     });
     const spot = r[0] as readonly [bigint, bigint | number] | undefined;
     const surface = r[2] as readonly [number, bigint] | undefined;
-    return { spot: spot && [spot[0], BigInt(spot[1])], spotFresh: r[1] as boolean | undefined, surface, marks };
+    return { spot: spot && [spot[0], BigInt(spot[1])], spotFresh: r[1] as boolean | undefined, surface, closeOnly: r[3] as boolean | undefined, marks };
   })().catch(() => undefined);
   liveCache.set(key, { at: Date.now(), p });
   return p;
@@ -173,7 +175,9 @@ export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
     live?.spot && live.surface
       ? { spotWad: live.spot[0], spotPublishTime: live.spot[1], spotFresh: live.spotFresh ?? false, surface: SURFACE_STATUS[live.surface[0]] ?? "NONE", surfaceStaleSeconds: live.surface[1] }
       : undefined;
-  return { productId, ...(fresh ?? chain), closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime };
+  // Close-only as the next transaction sees it: a trade applies its fresh surface before the check, so an expired
+  // stored surface alone does not stop trading.
+  return { productId, ...(fresh ?? chain), closeOnly: (fresh && live?.closeOnly) ?? closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime };
 }
 
 export interface SeriesMarket {
