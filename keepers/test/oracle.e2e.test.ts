@@ -9,6 +9,9 @@ let s: LocalStack;
 let server: Server;
 let served: OracleUpdate | undefined;
 
+const rpc = async (method: string, params: unknown[]) =>
+  ((await (await fetch(s.anvil.rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()) as { result: unknown }).result;
+
 beforeAll(async () => {
   const { statePath, manifestPath } = inject("stack");
   s = await startLocalStack(statePath, manifestPath);
@@ -29,6 +32,34 @@ afterAll(async () => {
 });
 
 describe("oracle pusher", () => {
+  it("without open interest, refreshes a stored surface once it is refreshSeconds old", { timeout: 300_000 }, async () => {
+    const p = stackProduct(s.manifest);
+    const catalog = new SeriesCatalog(s.test, s.manifest.proxies.OptionSeriesRegistry.proxy, 0n, 1000n);
+    const pusher = new OraclePusher(
+      { client: s.test, wallet: walletFor(s, 4), log: () => {} },
+      { manifest: s.manifest, products: [p.productId], spot: new RestampMockPythSource(s.test, p.pyth), catalog, publisherUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`, refreshSeconds: 1200 },
+    );
+    // This test moves the clock; the snapshot puts the chain back for the next one.
+    const snapshot = await rpc("evm_snapshot", []);
+    await pushOracles(s, 4, await freshOracleUpdate(s, { price: 4000 }));
+
+    // Stored surface younger than refreshSeconds: nothing, even with a newer report available.
+    served = await freshOracleUpdate(s, { price: 4000, iv: 0.61 });
+    expect(await pusher.tick()).toMatchObject({ spot: [], reports: [] });
+
+    // Older than refreshSeconds: the newer report and a fresh spot are pushed.
+    await increaseTime(s.anvil.rpcUrl, 1201);
+    served = await freshOracleUpdate(s, { price: 4000, iv: 0.62 });
+    const r = await pusher.tick();
+    expect(r.reports).toEqual([{ productId: p.productId, seq: served.reports[0]!.surfaceSeq }]);
+    expect(r.spot).toEqual([p.productId]);
+
+    // Refreshed: quiet again.
+    expect(await pusher.tick()).toMatchObject({ spot: [], reports: [] });
+    served = undefined;
+    await rpc("evm_revert", [snapshot]);
+  });
+
   it("pushes spot at maxSpotAge / 2 for products with open interest, and newer reports with their leaves", { timeout: 300_000 }, async () => {
     const p = stackProduct(s.manifest);
     const catalog = new SeriesCatalog(s.test, s.manifest.proxies.OptionSeriesRegistry.proxy, 0n, 1000n);
@@ -68,5 +99,29 @@ describe("oracle pusher", () => {
 
     // Same report again: nothing new.
     expect((await pusher.tick()).reports).toEqual([]);
+  });
+
+  it("with open interest and activeSeconds, pushes once the stored surface is that old instead of every 30 s", { timeout: 300_000 }, async () => {
+    const p = stackProduct(s.manifest); // the previous test left an open short on this product
+    const catalog = new SeriesCatalog(s.test, s.manifest.proxies.OptionSeriesRegistry.proxy, 0n, 1000n);
+    const pusher = new OraclePusher(
+      { client: s.test, wallet: walletFor(s, 4), log: () => {} },
+      { manifest: s.manifest, products: [p.productId], spot: new RestampMockPythSource(s.test, p.pyth), catalog, publisherUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`, activeSeconds: 300 },
+    );
+    await pushOracles(s, 4, await freshOracleUpdate(s, { price: 4000 }));
+
+    // 60 s on: past maxSpotAge / 2, but the stored surface is younger than activeSeconds: nothing.
+    await increaseTime(s.anvil.rpcUrl, 60);
+    served = await freshOracleUpdate(s, { price: 4000, iv: 0.63 });
+    expect(await pusher.tick()).toMatchObject({ spot: [], reports: [] });
+
+    // Past activeSeconds: the newer report and a fresh spot.
+    await increaseTime(s.anvil.rpcUrl, 241);
+    served = await freshOracleUpdate(s, { price: 4000, iv: 0.64 });
+    const r = await pusher.tick();
+    expect(r.reports).toEqual([{ productId: p.productId, seq: served.reports[0]!.surfaceSeq }]);
+    expect(r.spot).toEqual([p.productId]);
+    expect(await pusher.tick()).toMatchObject({ spot: [], reports: [] });
+    served = undefined;
   });
 });

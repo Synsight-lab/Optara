@@ -5,6 +5,8 @@
  *   PUBLISHER_URL          a surface publisher (/surface, /oracle-update); used by oracle and liquidate
  *   PRODUCTS               product ids to keep fresh (comma separated; default: every listed product)
  *   ORACLE_ALWAYS=1        push spot without open interest (testnets)
+ *   ORACLE_REFRESH_SECONDS without open interest, refresh a product's stored surface once it is this old (e.g. 7200)
+ *   ORACLE_ACTIVE_SECONDS  with open interest, push at most this often instead of every maxSpotAge / 2 (e.g. 300)
  *   INDEXER_URL            participant and candidate lists from the indexer API (default: the ledger's events)
  *   LIQUIDATOR_ACCOUNT_ID  the bot's funded subaccount; MIN_PROFIT (native units), SLICE_BPS
  *   SETTLE_BATCH (50), INTERVAL_SECONDS (oracle: maxSpotAge / 2 = 30; settle 60; liquidate 15), GAS_BUFFER_BPS (1000)
@@ -69,7 +71,7 @@ async function main() {
     const products = process.env.PRODUCTS
       ? (process.env.PRODUCTS.split(",") as Hex[])
       : [...new Set(catalog.all().map((s) => s.productId))];
-    const pusher = new OraclePusher(ctx, { manifest, products, spot, catalog, publisherUrl: process.env.PUBLISHER_URL, always: process.env.ORACLE_ALWAYS === "1" });
+    const pusher = new OraclePusher(ctx, { manifest, products, spot, catalog, publisherUrl: process.env.PUBLISHER_URL, always: process.env.ORACLE_ALWAYS === "1", refreshSeconds: process.env.ORACLE_REFRESH_SECONDS ? Number(process.env.ORACLE_REFRESH_SECONDS) : undefined, activeSeconds: process.env.ORACLE_ACTIVE_SECONDS ? Number(process.env.ORACLE_ACTIVE_SECONDS) : undefined });
     every("oracle", Number(process.env.INTERVAL_SECONDS ?? 30), () => pusher.tick());
   }
   if (modes.includes("settle")) {

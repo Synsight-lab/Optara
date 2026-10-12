@@ -29,6 +29,17 @@ export interface OraclePusherOptions {
   publisherUrl?: string;
   /** Push even without open interest (testnets, demos). */
   always?: boolean;
+  /**
+   * Without open interest, still refresh a product whose stored surface is at least this old (seconds), so it never
+   * reaches maxSurfaceStale and turns close-only while nobody trades. One push per interval instead of `always`'s
+   * one every maxSpotAge / 2.
+   */
+  refreshSeconds?: number;
+  /**
+   * With open interest, push at most this often (seconds) instead of every maxSpotAge / 2. Safe because every
+   * transaction (trades, liquidations) carries its own fresh update; the pushes keep the stored data presentable.
+   */
+  activeSeconds?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -49,10 +60,16 @@ export class OraclePusher {
     await this.o.catalog.sync();
     for (const p of this.o.products) {
       const oi = await client.readContract({ address: m.proxies.SubAccounts.proxy, abi: subAccountsAbi, functionName: "productShortNotional", args: [p] });
-      if (oi === 0n && !this.o.always) continue;
+      // Push interval: undefined = every maxSpotAge / 2 (always, or open interest without activeSeconds).
+      const every = this.o.always ? undefined : oi === 0n ? (this.o.refreshSeconds ?? 0) : this.o.activeSeconds;
+      if (every === 0) continue; // no open interest and no idle refresh: nothing to keep fresh
+      if (every !== undefined) {
+        const h = await client.readContract({ address: m.proxies.VolSurfaceOracle.proxy, abi: volSurfaceOracleAbi, functionName: "header", args: [p] });
+        if (now - h.validAfter < BigInt(every)) continue;
+      }
       const src = await client.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [p] });
       const [, publishTime] = await client.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [p] });
-      if (now - BigInt(publishTime) >= BigInt(src.maxSpotAge) / 2n) spotProducts.push(p);
+      if (now - BigInt(publishTime) >= (every !== undefined ? BigInt(every) : BigInt(src.maxSpotAge) / 2n)) spotProducts.push(p);
       if (this.o.publisherUrl) {
         const r = await this.newerReport(p, now);
         if (r) {
