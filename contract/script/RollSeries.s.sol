@@ -41,11 +41,13 @@ interface IKuruMarketFactory {
 contract RollSeries is Script {
     bytes32 internal constant KURU = keccak256("KURU");
 
-    // Kuru book parameters (the ones the Kuru fork test trades through): prices to 1e-4 of the settlement asset
-    // with a 0.01 tick, sizes to 1e-16 wrapper, minimum 0.01 and maximum 10,000 wrappers per order.
+    // Kuru book parameters: sizes to 1e-16 wrapper, minimum 0.01 and maximum 10,000 wrappers per order. The price grid
+    // is per product (listing config kuruPricePrecision / kuruTickSize); the default, prices to 1e-4 of the settlement
+    // asset with a 0.01 tick, suits options worth dollars (WETH). Cheap options (MON: fractions of a cent per token)
+    // need a finer grid, e.g. precision 1e6 with tick 1 (0.000001).
     uint96 internal constant SIZE_PRECISION = 1e16;
-    uint32 internal constant PRICE_PRECISION = 1e4;
-    uint32 internal constant TICK_SIZE = 100;
+    uint32 internal constant DEFAULT_PRICE_PRECISION = 1e4;
+    uint32 internal constant DEFAULT_TICK_SIZE = 100;
     uint96 internal constant MIN_SIZE = 1e14;
     uint96 internal constant MAX_SIZE = 1e20;
     uint256 internal constant TAKER_FEE_BPS = 30;
@@ -62,6 +64,8 @@ contract RollSeries is Script {
         uint256 spotWad;
         uint256 strikeStepWad;
         uint256 contractSizeWad;
+        uint32 kuruPricePrecision;
+        uint32 kuruTickSize;
     }
 
     OptionSeriesRegistry internal registry;
@@ -144,7 +148,7 @@ contract RollSeries is Script {
         address market;
         if (deployBooks) {
             market = kuru.deployProxy(
-                0, wrapper, p.asset, SIZE_PRECISION, PRICE_PRECISION, TICK_SIZE, MIN_SIZE, MAX_SIZE, TAKER_FEE_BPS, MAKER_FEE_BPS, AMM_SPREAD
+                0, wrapper, p.asset, SIZE_PRECISION, p.kuruPricePrecision, p.kuruTickSize, MIN_SIZE, MAX_SIZE, TAKER_FEE_BPS, MAKER_FEE_BPS, AMM_SPREAD
             );
             venues.registerMarket(KURU, market, id, "");
         }
@@ -171,6 +175,10 @@ contract RollSeries is Script {
         p.asset = vm.parseJsonAddress(cfg, ".asset");
         p.strikeStepWad = vm.parseJsonUint(cfg, ".strikeStepWad");
         p.contractSizeWad = vm.parseJsonUint(cfg, ".contractSizeWad");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        p.kuruPricePrecision = uint32(vm.keyExistsJson(cfg, ".kuruPricePrecision") ? vm.parseJsonUint(cfg, ".kuruPricePrecision") : DEFAULT_PRICE_PRECISION);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        p.kuruTickSize = uint32(vm.keyExistsJson(cfg, ".kuruTickSize") ? vm.parseJsonUint(cfg, ".kuruTickSize") : DEFAULT_TICK_SIZE);
         p.productId = vm.parseJsonBytes32(props, ".productId");
         p.settlementConfigId = vm.parseJsonBytes32(props, ".settlementConfigId");
         p.riskSetId = risk.productRiskSet(p.productId);

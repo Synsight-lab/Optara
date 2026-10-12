@@ -48,5 +48,7 @@
   "approveAsset": true,
   "enableKuru": true,
   "strikeStepWad": 500000000000000,
-  "contractSizeWad": 100000000000000000000
+  "contractSizeWad": 100000000000000000000,
+  "kuruPricePrecision": 1000000,
+  "kuruTickSize": 1
 }

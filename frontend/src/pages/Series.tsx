@@ -981,6 +981,9 @@ function KuruLimitPanel({
   const tooMuchCash = missingQuote > 0n && walletCash !== undefined && missingQuote > walletCash;
   const tooManyOptions = missingOptions > 0n && missingOptions > walletQty;
   const priceBad = priceUnits !== undefined && (priceUnits === 0n || priceUnits > MAX_UINT32);
+  // The book's price grid: prices are rounded down to a multiple of the tick, so anything below one tick rounds to 0.
+  const priceStep = m ? ((m.tickSize || 1n) * WAD) / m.pricePrecision : undefined;
+  const belowStep = priceBad && priceUnits === 0n && price !== undefined && price > 0n;
   const sizeBad = sizeUnits !== undefined && m && (sizeUnits < m.minSize || sizeUnits > m.maxSize || sizeUnits > MAX_UINT96 || roundedQty === 0n);
   const availableQuote = m ? m.quoteBalance + (walletCash ?? 0n) : 0n;
   const buyMaxQty = m && priceUnits && priceUnits > 0n ? (availableQuote * m.pricePrecision * WAD) / (priceUnits * 10n ** BigInt(s.assetDecimals)) : 0n;
@@ -1070,7 +1073,13 @@ function KuruLimitPanel({
                 onChange={(e) => setPriceText(e.target.value.replace(/[^\d.]/g, ""))}
               />
               <div className={cx("mt-2 text-[13px]", priceBad ? "text-bad" : "text-muted")}>
-                {priceBad ? "Price is outside Kuru's supported range." : mark !== undefined ? `Fair value ${fmtPrice(mark)} ${s.assetSymbol}.` : "Set the premium per option."}
+                {belowStep && priceStep !== undefined
+                  ? `This book prices in steps of ${fmtPrice(priceStep)} ${s.assetSymbol}: enter at least ${fmtPrice(priceStep)}.${mark !== undefined ? ` Fair value is ${fmtPrice(mark)}.` : ""}`
+                  : priceBad
+                    ? "Price is outside Kuru's supported range."
+                    : mark !== undefined
+                      ? `Fair value ${fmtPrice(mark)} ${s.assetSymbol}${priceStep !== undefined ? ` (price step ${fmtPrice(priceStep)})` : ""}.`
+                      : "Set the premium per option."}
               </div>
             </label>
 
@@ -1256,6 +1265,9 @@ function BuyPanel({
   }, [buyVenues, venueKey]);
   const ask = selectedQuote?.ask;
   const venueName = selectedQuote?.venueName ?? "venue";
+  // Loaded, and no venue has an ask: nobody has offered this option yet (written tokens sit in the writer's wallet
+  // until they place an ask), so there is nothing to buy.
+  const nothingForSale = !!sm && buyVenues.length === 0;
 
   const fees = useQuery({
     queryKey: ["buyFees", s.id, premiumIn?.toString(), selectedQuote?.venueId, selectedQuote?.market],
@@ -1414,8 +1426,17 @@ function BuyPanel({
           </div>
         )}
 
-        {avail !== undefined && avail === 0n && (
-          <p className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] text-warn">Nothing is for sale on {venueName} right now.</p>
+        {(nothingForSale || (avail !== undefined && avail === 0n)) && (
+          <div className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">
+            <p className="font-semibold text-warn">Nothing is for sale on Kuru yet.</p>
+            <p className="mt-0.5 text-muted">
+              Options become buyable when a holder offers them. If you wrote this option, its tokens are in your wallet: place an ask on the{" "}
+              <Link to={`/app/series/${s.id}/orderbook`} className="font-semibold text-primary underline">
+                order book
+              </Link>{" "}
+              to sell them, then anyone can buy here.
+            </p>
+          </div>
         )}
         {depthLimited && avail! > 0n && spend !== undefined && (
           <div className="mt-2.5 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px]">
@@ -1460,7 +1481,7 @@ function BuyPanel({
         summary={estQty && total !== undefined ? `Pay up to ${fmtNative(total, s.assetDecimals)} ${s.assetSymbol} (fees included${depthLimited ? "; the unused part is refunded" : ""}) for about ${fmtQty(estQty)} ${seriesName(s)} options on ${venueName}${check.over !== undefined && check.over > 0.1 ? `, ${(check.over * 100).toFixed(0)}% above fair value` : ""}` : undefined}
         steps={steps}
         disabled={!a.enabled || !steps || tooMuch || (check.needsAck && !ack)}
-        disabledReason={a.reason ?? (check.needsAck && !ack ? "Confirm the price above first." : undefined)}
+        disabledReason={a.reason ?? (nothingForSale ? "Nothing is for sale on Kuru yet." : check.needsAck && !ack ? "Confirm the price above first." : undefined)}
         disclosures={disclosuresFor("buy", s.underlyingSymbol)}
         successMessage="Bought. Tokens are in your wallet."
         onDone={() => recordTrade(address, s.id, "buy")}
@@ -1715,7 +1736,11 @@ export function WritePanel({
         disabled={!a.enabled || !steps || ok === false || capBlocked}
         disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : writeBlockedReason)}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
-        successMessage={sellable ? "Written and sold. Cash is in your wallet; the short remains open." : "Written. Tokens are in your wallet; the short remains open."}
+        successMessage={
+          sellable
+            ? "Written and sold. Cash is in your wallet; the short remains open."
+            : "Written. The tokens are in your wallet: to sell them, place an ask on the order book (Trade → Open Kuru order book)."
+        }
       />
     </div>
   );

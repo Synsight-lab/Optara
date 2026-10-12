@@ -3,7 +3,7 @@
  * plain message. The test checks this table against Errors.sol, so a new error can't ship without a message.
  */
 import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError } from "viem";
-import { decodeRevert } from "@optara/sdk";
+import { decodeRevert, isRateLimited } from "@optara/sdk";
 
 export const ERROR_MESSAGES: Record<string, string> = {
   // the FRONTEND.md §9 table
@@ -117,6 +117,13 @@ export interface FriendlyError {
 
 /** A viem/wallet error → a message for people. */
 export function friendlyError(e: unknown): FriendlyError {
+  // A busy RPC (the app's or the wallet's) refused the request: nothing was sent, so this is not a revert.
+  if (isRateLimited(e) || (e instanceof Error && /rate.?limit/i.test(e.message))) {
+    return {
+      message:
+        "The network is busy: Monad's RPC rate-limited the request, so nothing was sent. Wait a few seconds and try again. If it keeps happening, change your wallet's Monad Testnet RPC to another endpoint (for example https://rpc.ankr.com/monad_testnet).",
+    };
+  }
   if (e instanceof BaseError) {
     if (e.walk((x) => x instanceof UserRejectedRequestError)) return { message: "You cancelled in your wallet.", rejected: true };
     const revert = e.walk((x) => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;

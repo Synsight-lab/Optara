@@ -185,7 +185,7 @@ export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
 }
 
 export interface SeriesMarket {
-  /** Model mid / short / long marks per contract (WAD); undefined when the series can't be priced now. */
+  /** Fair value per option token (WAD of the settlement asset: unit price × contract size); undefined when the series can't be priced now. */
   mark?: bigint;
   iv?: bigint;
   quote?: Quote;
@@ -524,7 +524,11 @@ export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
     if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
     return 0;
   })[0];
-  return { mark: fresh?.mark ?? price?.[0], iv: fresh?.iv ?? iv?.[0], quote, quotes, state, ...capacity };
+  // priceOf is per unit of the underlying; one option token covers contractSize units (100 for MON), and settlement
+  // pays intrinsic × contractSize per token, so the fair value of an option is the unit price × contractSize.
+  const unit = fresh?.mark ?? price?.[0];
+  const mark = unit !== undefined ? (unit * s.contractSizeWad) / WAD : undefined;
+  return { mark, iv: fresh?.iv ?? iv?.[0], quote, quotes, state, ...capacity };
 }
 
 async function getWriteCapacity(s: Series): Promise<Pick<SeriesMarket, "openInterest" | "openInterestCap" | "writeCapacity">> {
