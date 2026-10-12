@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChainId, useConfig, useConnection, useSwitchChain } from "wagmi";
-import { getWalletClient } from "wagmi/actions";
+import { getWalletClient, switchChain as switchWalletChain } from "wagmi/actions";
 import type { TransactionReceipt } from "viem";
 import { CHAIN, EXPLORER_URL, IS_LOCAL_FORK, NETWORK_LABEL } from "../config/network.ts";
 import type { Step } from "../lib/optara/actions.ts";
@@ -58,6 +58,20 @@ export function TxButton({ label, steps, disabled, disabledReason, disclosures =
     const pending = pendingDisclosures(disclosures);
     if (pending.length) return setAskDisclosures(pending);
     setRunning(true);
+    // The wallet can change network on its own (e.g. switched inside the wallet) without wagmi's state following,
+    // so ask the wallet itself and have it switch before anything is signed.
+    if (connector && !isTestWallet) {
+      const current = await connector.getChainId().catch(() => CHAIN.id);
+      if (current !== CHAIN.id) {
+        try {
+          await switchWalletChain(config, { chainId: CHAIN.id, connector });
+        } catch (e) {
+          setRunning(false);
+          push({ tone: "bad", title: `Switch your wallet to ${NETWORK_LABEL[CHAIN.id] ?? CHAIN.name}`, body: (e as Error).message.split("\n")[0] });
+          return;
+        }
+      }
+    }
     let wallet: Wallet;
     try {
       wallet = (await getWalletClient(config, { chainId: CHAIN.id })) as Wallet;
