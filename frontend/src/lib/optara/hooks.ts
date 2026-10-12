@@ -35,7 +35,7 @@ export const useProductMarket = (productId: Hex | undefined) =>
   useQuery({ queryKey: ["product", productId], queryFn: () => getProductMarket(productId!), enabled: !!productId, refetchInterval: FAST });
 
 export const useSeriesMarket = (s: Series | undefined) =>
-  useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!), enabled: !!s, refetchInterval: SLOW });
+  useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!), enabled: !!s, refetchInterval: FAST });
 
 export const useAccounts = (owner: Address | undefined) =>
   useQuery({ queryKey: ["accounts", owner], queryFn: () => getAccounts(owner!), enabled: !!owner, staleTime: 10_000 });

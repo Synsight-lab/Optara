@@ -23,7 +23,8 @@ import {
 } from "@optara/sdk";
 import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
-import { INDEXER_URL, IS_LOCAL } from "../../config/network.ts";
+import { INDEXER_URL, IS_LOCAL, PUBLISHER_URL } from "../../config/network.ts";
+import { fetchOracleUpdate, readAfterUpdate } from "./oracle.ts";
 import { ADDR, DEPLOYED_AT_BLOCK, KURU_VENUE, publicClient as c } from "./client.ts";
 import { WAD } from "./format.ts";
 import { GROUP_STATES, HEALTH_STATES, SURFACE_STATUS, type GroupState, type Health, type Position, type Quote, type Series, type SurfaceStatus } from "./types.ts";
@@ -105,16 +106,74 @@ export interface ProductMarket {
   surface: SurfaceStatus;
   surfaceStaleSeconds: bigint;
   closeOnly: boolean;
+  /** True when spot and surface are the publisher's current data (simulated, see liveProduct); false: on-chain only. */
+  live: boolean;
+  /** When a spot price was last written on-chain (by a trade or a keeper). */
+  chainSpotPublishTime: bigint;
+}
+
+interface LiveProduct {
+  spot?: readonly [bigint, bigint];
+  spotFresh?: boolean;
+  surface?: readonly [number, bigint];
+  marks: Map<string, { mark?: bigint; iv?: bigint }>;
+}
+
+const LIVE_TTL_MS = 8_000;
+const liveCache = new Map<string, { at: number; p: Promise<LiveProduct | undefined> }>();
+
+/**
+ * A product's prices as the next transaction would see them: the publisher's newest signed surface and a fresh Pyth
+ * spot, applied in a simulated call (nothing is sent). The chain only stores new oracle data when someone trades or a
+ * keeper pushes, so its own spot and surface can lag by minutes. One publisher request and one eth_call cover every
+ * live series of the product, shared by all callers for a few seconds. Undefined without a publisher or on failure.
+ */
+function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
+  const key = productId.toLowerCase();
+  const hit = liveCache.get(key);
+  if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.p;
+  const p = (async (): Promise<LiveProduct | undefined> => {
+    if (!PUBLISHER_URL) return undefined;
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const series = (await listedSeries()).filter((s) => s.productId.toLowerCase() === key && s.expiry > now);
+    const u = await fetchOracleUpdate(undefined, series.map((s) => s.seriesId));
+    const r = await readAfterUpdate(u, [
+      { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] },
+      { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] },
+      { address: ADDR.surface, abi: volSurfaceOracleAbi, functionName: "surfaceStatus", args: [productId] },
+      ...series.flatMap((s) => [
+        { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.seriesId] },
+        { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.seriesId] },
+      ]),
+    ]);
+    const marks = new Map<string, { mark?: bigint; iv?: bigint }>();
+    series.forEach((s, i) => {
+      const price = r[3 + 2 * i] as readonly bigint[] | undefined;
+      const iv = r[4 + 2 * i] as readonly bigint[] | undefined;
+      marks.set(s.seriesId.toLowerCase(), { mark: price?.[0], iv: iv?.[0] });
+    });
+    const spot = r[0] as readonly [bigint, bigint | number] | undefined;
+    const surface = r[2] as readonly [number, bigint] | undefined;
+    return { spot: spot && [spot[0], BigInt(spot[1])], spotFresh: r[1] as boolean | undefined, surface, marks };
+  })().catch(() => undefined);
+  liveCache.set(key, { at: Date.now(), p });
+  return p;
 }
 
 export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
-  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly] = await Promise.all([
+  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly, live] = await Promise.all([
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] }),
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] }),
     c.readContract({ address: ADDR.surface, abi: volSurfaceOracleAbi, functionName: "surfaceStatus", args: [productId] }),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "isProductCloseOnly", args: [productId] }),
+    liveProduct(productId),
   ]);
-  return { productId, spotWad, spotPublishTime: BigInt(publishTime), spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale), closeOnly };
+  const chain = { spotWad, spotPublishTime: BigInt(publishTime), spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale) };
+  const fresh =
+    live?.spot && live.surface
+      ? { spotWad: live.spot[0], spotPublishTime: live.spot[1], spotFresh: live.spotFresh ?? false, surface: SURFACE_STATUS[live.surface[0]] ?? "NONE", surfaceStaleSeconds: live.surface[1] }
+      : undefined;
+  return { productId, ...(fresh ?? chain), closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime };
 }
 
 export interface SeriesMarket {
@@ -441,13 +500,15 @@ export async function getKuruLimitMarket(s: Series, owner?: Address): Promise<Ku
 }
 
 export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
-  const [price, iv, quotes, state, capacity] = await Promise.all([
+  const [price, iv, quotes, state, capacity, live] = await Promise.all([
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.id] }).catch(() => undefined),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.id] }).catch(() => undefined),
     getQuotes(s.id),
     getGroupState(s.groupId),
     getWriteCapacity(s),
+    liveProduct(s.productId),
   ]);
+  const fresh = live?.marks.get(s.id.toLowerCase());
   const quote = [...quotes].sort((a, b) => {
     if (a.ask !== undefined && b.ask !== undefined && a.ask !== b.ask) return a.ask < b.ask ? -1 : 1;
     if (a.ask !== undefined) return -1;
@@ -455,7 +516,7 @@ export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
     if (a.bid !== undefined && b.bid !== undefined && a.bid !== b.bid) return a.bid > b.bid ? -1 : 1;
     return 0;
   })[0];
-  return { mark: price?.[0], iv: iv?.[0], quote, quotes, state, ...capacity };
+  return { mark: fresh?.mark ?? price?.[0], iv: fresh?.iv ?? iv?.[0], quote, quotes, state, ...capacity };
 }
 
 async function getWriteCapacity(s: Series): Promise<Pick<SeriesMarket, "openInterest" | "openInterestCap" | "writeCapacity">> {

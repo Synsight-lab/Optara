@@ -81,6 +81,12 @@ function ProductStatus({ s }: { s: Series }) {
               </span>
             }
           />
+          {m.live && (
+            <Row
+              label={<Term tip="The chain stores a new price only when someone trades or a keeper pushes one. Every trade carries a fresh price, so an older on-chain price never affects what you pay.">Stored on-chain</Term>}
+              value={now === undefined ? "…" : now - m.chainSpotPublishTime <= 0n ? "just now" : `${fmtDuration(now - m.chainSpotPublishTime)} ago`}
+            />
+          )}
           <Row
             label={<Term tip="The signed volatility data used to price options. New positions need it to be fresh.">Volatility data</Term>}
             value={
