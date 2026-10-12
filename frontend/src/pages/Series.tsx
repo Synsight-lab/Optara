@@ -1542,6 +1542,19 @@ export function WritePanel({
   const writerBe = keptNum !== undefined && keptNum > 0 && qtyNum ? breakeven(leg, keptNum / qtyNum) : undefined;
   const isCall = s.optionType === 0;
   const saleAvailable = !!market && bid !== undefined;
+  // Why the Write button is off, in words (the preview is computed on fresh prices, as the transaction will be).
+  const writeBlockedReason =
+    !qty
+      ? "Enter how many options to write."
+      : preview.isError
+        ? `Couldn't check this trade: ${(preview.error as Error).message.split("\n")[0]}`
+        : !preview.data
+          ? "Checking your margin…"
+          : ok === false
+            ? equityAfter !== undefined && imAfter !== undefined && equityAfter < BigInt(imAfter)
+              ? `Not enough margin: writing ${amount} needs ${fmtWad(BigInt(imAfter), 2)} ${s.assetSymbol} of account value, and yours would be ${fmtWad(equityAfter > 0n ? equityAfter : 0n, 2)}. Add cash in Portfolio or write fewer.`
+              : "Writing isn't possible right now: the account's cash doesn't cover the fee, the option is too close to expiry, or this market is closing-only."
+            : undefined;
 
   if (!ctx.hasAccount && ctx.connected) return <AccountSetup s={s} />;
   if (!a.enabled && ctx.connected) return <Blocked reason={a.reason} />;
@@ -1700,7 +1713,7 @@ export function WritePanel({
         tone="accent"
         steps={ok ? steps : undefined}
         disabled={!a.enabled || !steps || ok === false || capBlocked}
-        disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : undefined)}
+        disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : writeBlockedReason)}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
         successMessage={sellable ? "Written and sold. Cash is in your wallet; the short remains open." : "Written. Tokens are in your wallet; the short remains open."}
       />

@@ -24,7 +24,7 @@ import {
 import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
 import { INDEXER_URL, IS_LOCAL, PUBLISHER_URL } from "../../config/network.ts";
-import { fetchOracleUpdate, readAfterUpdate } from "./oracle.ts";
+import { fetchOracleUpdate, readAfterUpdate, type ContractRead } from "./oracle.ts";
 import { ADDR, DEPLOYED_AT_BLOCK, KURU_VENUE, publicClient as c } from "./client.ts";
 import { WAD } from "./format.ts";
 import { GROUP_STATES, HEALTH_STATES, SURFACE_STATUS, type GroupState, type Health, type Position, type Quote, type Series, type SurfaceStatus } from "./types.ts";
@@ -611,12 +611,44 @@ export const getAllowance = (token: Address, owner: Address, spender: Address) =
 
 // ------------------------------------------------------------------ previews
 
-export const previewMint = (accountId: bigint, seriesId: Hex, qty: bigint) =>
+/**
+ * A risk preview as the next transaction will see it. The contracts only call an account healthy on fresh oracle data,
+ * and every risk-increasing transaction brings its own (publisher /oracle-update), while the stored spot and surface can
+ * be minutes old between keeper pushes. So the preview runs after that same fresh update, in a simulated call (nothing
+ * is sent); without a publisher, or if that fails, it reads the stored data.
+ */
+async function previewFresh<T>(accountId: bigint, seriesIds: Hex[], read: ContractRead, stored: () => Promise<T>): Promise<T> {
+  if (PUBLISHER_URL) {
+    try {
+      const u = await fetchOracleUpdate(accountId, seriesIds, (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(8_000) }));
+      const [r] = await readAfterUpdate(u, [read]);
+      if (r !== undefined) return r as T;
+    } catch {
+      // fall back to the stored data
+    }
+  }
+  return stored();
+}
+
+const previewMintStored = (accountId: bigint, seriesId: Hex, qty: bigint) =>
   c.readContract({ address: ADDR.clearing, abi: optionClearingAbi, functionName: "previewMint", args: [accountId, seriesId, qty] });
-export const previewWithdraw = (accountId: bigint, amount: bigint) =>
+const previewWithdrawStored = (accountId: bigint, amount: bigint) =>
   c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "previewWithdraw", args: [accountId, amount] });
-export const previewWrap = (accountId: bigint, seriesId: Hex, qty: bigint) =>
+const previewWrapStored = (accountId: bigint, seriesId: Hex, qty: bigint) =>
   c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "previewWrap", args: [accountId, seriesId, qty] });
+
+export const previewMint = (accountId: bigint, seriesId: Hex, qty: bigint) =>
+  previewFresh(accountId, [seriesId], { address: ADDR.clearing, abi: optionClearingAbi, functionName: "previewMint", args: [accountId, seriesId, qty] }, () =>
+    previewMintStored(accountId, seriesId, qty),
+  );
+export const previewWithdraw = (accountId: bigint, amount: bigint) =>
+  previewFresh(accountId, [], { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "previewWithdraw", args: [accountId, amount] }, () =>
+    previewWithdrawStored(accountId, amount),
+  );
+export const previewWrap = (accountId: bigint, seriesId: Hex, qty: bigint) =>
+  previewFresh(accountId, [seriesId], { address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "previewWrap", args: [accountId, seriesId, qty] }, () =>
+    previewWrapStored(accountId, seriesId, qty),
+  );
 export const previewBuyerFee = (premium: bigint) => c.readContract({ address: ADDR.fees, abi: feeControllerAbi, functionName: "previewBuyerFee", args: [premium] });
 export const previewSellerFee = (seriesId: Hex, qty: bigint) => c.readContract({ address: ADDR.fees, abi: feeControllerAbi, functionName: "previewSellerFee", args: [seriesId, qty] });
 export const previewRedeem = (seriesId: Hex, qty: bigint) => c.readContract({ address: ADDR.settlement, abi: settlementWindowAbi, functionName: "previewRedeem", args: [seriesId, qty] });
