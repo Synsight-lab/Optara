@@ -8,12 +8,9 @@ import {
   estimateLiquidationSpots,
   getAccount,
   getAccounts,
-  getLiveProduct,
   getProductMarket,
   getSeriesList,
   getSeriesMarket,
-  withLiveMarks,
-  withLiveProduct,
   getTokenBalance,
   getWalletWrappers,
 } from "./reads.ts";
@@ -34,25 +31,11 @@ export const useSeries = (id: Hex | undefined) => {
   return id ? map.get(id.toLowerCase() as Hex) ?? [...map.values()].find((s) => s.id.toLowerCase() === id.toLowerCase()) : undefined;
 };
 
-/** The publisher's current spot, surface and marks for a product (simulated; see reads.liveProduct). */
-const useLiveProduct = (productId: Hex | undefined) =>
-  useQuery({ queryKey: ["liveProduct", productId], queryFn: () => getLiveProduct(productId!).then((x) => x ?? null), enabled: !!productId, refetchInterval: FAST });
+export const useProductMarket = (productId: Hex | undefined) =>
+  useQuery({ queryKey: ["product", productId], queryFn: () => getProductMarket(productId!), enabled: !!productId, refetchInterval: FAST });
 
-/** On-chain oracle state at once, replaced by the publisher's current data as soon as it arrives. */
-export function useProductMarket(productId: Hex | undefined) {
-  const chain = useQuery({ queryKey: ["product", productId], queryFn: () => getProductMarket(productId!), enabled: !!productId, refetchInterval: FAST });
-  const live = useLiveProduct(productId);
-  const data = useMemo(() => chain.data && withLiveProduct(chain.data, live.data ?? undefined), [chain.data, live.data]);
-  return { ...chain, data };
-}
-
-/** On-chain fair value and IV at once, replaced by the publisher-current ones as soon as they arrive. */
-export function useSeriesMarket(s: Series | undefined) {
-  const chain = useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!, false), enabled: !!s, refetchInterval: FAST });
-  const live = useLiveProduct(s?.productId);
-  const data = useMemo(() => chain.data && s && withLiveMarks(s, chain.data, live.data ?? undefined), [chain.data, live.data, s]);
-  return { ...chain, data };
-}
+export const useSeriesMarket = (s: Series | undefined) =>
+  useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!), enabled: !!s, refetchInterval: FAST });
 
 export const useAccounts = (owner: Address | undefined) =>
   useQuery({ queryKey: ["accounts", owner], queryFn: () => getAccounts(owner!), enabled: !!owner, staleTime: 10_000 });

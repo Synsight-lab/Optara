@@ -112,7 +112,7 @@ export interface ProductMarket {
   chainSpotPublishTime: bigint;
 }
 
-export interface LiveProduct {
+interface LiveProduct {
   spot?: readonly [bigint, bigint];
   spotFresh?: boolean;
   surface?: readonly [number, bigint];
@@ -120,7 +120,6 @@ export interface LiveProduct {
 }
 
 const LIVE_TTL_MS = 8_000;
-const LIVE_TIMEOUT_MS = 6_000;
 const liveCache = new Map<string, { at: number; p: Promise<LiveProduct | undefined> }>();
 
 /**
@@ -137,7 +136,7 @@ function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
     if (!PUBLISHER_URL) return undefined;
     const now = BigInt(Math.floor(Date.now() / 1000));
     const series = (await listedSeries()).filter((s) => s.productId.toLowerCase() === key && s.expiry > now);
-    const u = await fetchOracleUpdate(undefined, series.map((s) => s.seriesId), (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) }));
+    const u = await fetchOracleUpdate(undefined, series.map((s) => s.seriesId));
     const r = await readAfterUpdate(u, [
       { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] },
       { address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] },
@@ -156,47 +155,25 @@ function liveProduct(productId: Hex): Promise<LiveProduct | undefined> {
     const spot = r[0] as readonly [bigint, bigint | number] | undefined;
     const surface = r[2] as readonly [number, bigint] | undefined;
     return { spot: spot && [spot[0], BigInt(spot[1])], spotFresh: r[1] as boolean | undefined, surface, marks };
-  })().catch((e) => {
-    console.warn("Live oracle data unavailable; showing on-chain values.", e);
-    return undefined;
-  });
+  })().catch(() => undefined);
   liveCache.set(key, { at: Date.now(), p });
   return p;
 }
 
-/** On-chain oracle state only (fast); `withLiveProduct` overlays the publisher's current data when it arrives. */
 export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
-  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly] = await Promise.all([
+  const [[spotWad, publishTime], spotFresh, [status, stale], closeOnly, live] = await Promise.all([
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [productId] }),
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "isSpotFresh", args: [productId] }),
     c.readContract({ address: ADDR.surface, abi: volSurfaceOracleAbi, functionName: "surfaceStatus", args: [productId] }),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "isProductCloseOnly", args: [productId] }),
+    liveProduct(productId),
   ]);
-  const t = BigInt(publishTime);
-  return { productId, spotWad, spotPublishTime: t, spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale), closeOnly, live: false, chainSpotPublishTime: t };
-}
-
-/** The publisher's current data for a product (see liveProduct), or undefined. Safe to call often: cached. */
-export const getLiveProduct = liveProduct;
-
-/** `m` with spot and surface replaced by the publisher's current data, when there is any. */
-export function withLiveProduct(m: ProductMarket, live: LiveProduct | undefined): ProductMarket {
-  if (!live?.spot || !live.surface) return m;
-  return {
-    ...m,
-    spotWad: live.spot[0],
-    spotPublishTime: live.spot[1],
-    spotFresh: live.spotFresh ?? false,
-    surface: SURFACE_STATUS[live.surface[0]] ?? "NONE",
-    surfaceStaleSeconds: live.surface[1],
-    live: true,
-  };
-}
-
-/** `m` with fair value and IV replaced by the publisher-current ones, when there are any. */
-export function withLiveMarks(s: Series, m: SeriesMarket, live: LiveProduct | undefined): SeriesMarket {
-  const f = live?.marks.get(s.id.toLowerCase());
-  return f ? { ...m, mark: f.mark ?? m.mark, iv: f.iv ?? m.iv } : m;
+  const chain = { spotWad, spotPublishTime: BigInt(publishTime), spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale) };
+  const fresh =
+    live?.spot && live.surface
+      ? { spotWad: live.spot[0], spotPublishTime: live.spot[1], spotFresh: live.spotFresh ?? false, surface: SURFACE_STATUS[live.surface[0]] ?? "NONE", surfaceStaleSeconds: live.surface[1] }
+      : undefined;
+  return { productId, ...(fresh ?? chain), closeOnly, live: !!fresh, chainSpotPublishTime: chain.spotPublishTime };
 }
 
 export interface SeriesMarket {
@@ -522,20 +499,16 @@ export async function getKuruLimitMarket(s: Series, owner?: Address): Promise<Ku
   };
 }
 
-/**
- * Series market data. With `live` (default), fair value and IV use the publisher's current data when it arrives
- * within a few seconds; the hooks pass false and overlay it separately so the on-chain values show at once.
- */
-export async function getSeriesMarket(s: Series, live = true): Promise<SeriesMarket> {
-  const [price, iv, quotes, state, capacity, current] = await Promise.all([
+export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
+  const [price, iv, quotes, state, capacity, live] = await Promise.all([
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.id] }).catch(() => undefined),
     c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.id] }).catch(() => undefined),
     getQuotes(s.id),
     getGroupState(s.groupId),
     getWriteCapacity(s),
-    live ? Promise.race([liveProduct(s.productId), new Promise<undefined>((r) => setTimeout(r, 3_000))]) : undefined,
+    liveProduct(s.productId),
   ]);
-  const fresh = current?.marks.get(s.id.toLowerCase());
+  const fresh = live?.marks.get(s.id.toLowerCase());
   const quote = [...quotes].sort((a, b) => {
     if (a.ask !== undefined && b.ask !== undefined && a.ask !== b.ask) return a.ask < b.ask ? -1 : 1;
     if (a.ask !== undefined) return -1;
