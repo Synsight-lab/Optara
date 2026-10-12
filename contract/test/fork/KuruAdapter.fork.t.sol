@@ -39,8 +39,10 @@ interface IKuruMarginAccount {
 /// @dev Run: FOUNDRY_PROFILE=fork forge test --match-contract KuruAdapterForkTest (RPC: FORK_RPC_URL, default
 ///      https://rpc.monad.xyz). Market deployment on Kuru is owner-gated, so the test impersonates Kuru's router owner.
 contract KuruAdapterForkTest is VenueFixture {
-    address internal constant KURU_ROUTER = 0xd651346d7c789536ebf06dc72aE3C8502cd695CC;
-    address internal constant KURU_MARGIN_ACCOUNT = 0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5;
+    // Mainnet by default; KURU_ROUTER / KURU_MARGIN_ACCOUNT run it against another Kuru deployment (e.g. testnet:
+    // Router 0x7EFb…4630, MarginAccount 0xd029…CE02, FORK_RPC_URL=https://testnet-rpc.monad.xyz).
+    address internal KURU_ROUTER = vm.envOr("KURU_ROUTER", 0xd651346d7c789536ebf06dc72aE3C8502cd695CC);
+    address internal KURU_MARGIN_ACCOUNT = vm.envOr("KURU_MARGIN_ACCOUNT", 0x2A68ba1833cDf93fa9Da1EEbd7F46242aD8E90c5);
     uint32 internal constant PRICE_PRECISION = 1e4;
     uint96 internal constant SIZE_PRECISION = 1e16;
 

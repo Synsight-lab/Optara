@@ -73,7 +73,7 @@ import { getKuruLimitMarket, getKuruOrderBook, getKuruUserOrders, previewBuyerFe
 import { breakeven, legOf, payoutPerOption, priceLevel, profitAt, usd } from "../lib/optara/payoff.ts";
 import type { Quote, Series } from "../lib/optara/types.ts";
 import { fillFromAsks } from "../lib/optara/depth.ts";
-import { useAccountState, useQuickGuide } from "../state.tsx";
+import { useAccountState, useQuickGuide, useShowMarket } from "../state.tsx";
 import { HealthBar } from "../components/HealthBar.tsx";
 
 type Tab = "trade" | "write" | "manage" | "redeem" | "buy" | "sell";
@@ -93,6 +93,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
   const series = useSeries(id as Hex | undefined);
+  useShowMarket(series?.productId);
   const { data: market } = useSeriesMarket(series);
   const { data: product } = useProductMarket(series?.productId);
   const { address } = useConnection();
@@ -411,6 +412,7 @@ export function SeriesPage({ initialTab }: { initialTab?: Tab }) {
 export function KuruBookPage() {
   const { id } = useParams();
   const series = useSeries(id as Hex | undefined);
+  useShowMarket(series?.productId);
   const { address } = useConnection();
   const { selected } = useAccountState();
   const { data: market } = useSeriesMarket(series);

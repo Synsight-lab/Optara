@@ -12,7 +12,7 @@ import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSerie
 import { getSeriesMarket } from "../lib/optara/reads.ts";
 import { breakeven, chartRange, legOf, moveNeeded, moveText, priceLevel, profitAt } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
-import { useAccountState, useQuickGuide } from "../state.tsx";
+import { useAccountState, useQuickGuide, useSelectedMarket, useShowMarket } from "../state.tsx";
 import { tradeMap } from "../lib/optara/activity.ts";
 
 type Intent = "call" | "put" | "earn";
@@ -29,7 +29,9 @@ export function MarketsPage() {
 
   const products = useMemo(() => [...new Map((series ?? []).map((s) => [s.productId, s])).values()], [series]);
   const [productId, setProductId] = useState<Hex | undefined>();
-  const product = products.find((p) => p.productId === productId) ?? products[0];
+  const lastMarket = useSelectedMarket();
+  const product = products.find((p) => p.productId === productId) ?? products.find((p) => p.productId === lastMarket) ?? products[0];
+  useShowMarket(product?.productId);
 
   const all = (series ?? []).filter((s) => s.productId === product?.productId);
   const open = all.filter((s) => now === undefined || s.expiry > now);
@@ -37,13 +39,13 @@ export function MarketsPage() {
   const [intent, setIntent] = useState<Intent>("call");
   const [query, setQuery] = useState("");
 
-  if (error) return <Card><EmptyState title="Couldn't load markets" body={(error as Error).message} /></Card>;
+  if (error) return <Card><EmptyState title="Couldn't load markets" body={(error as { shortMessage?: string }).shortMessage ?? (error as Error).message} /></Card>;
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-32 w-full rounded-3xl" /><Skeleton className="h-64 w-full rounded-3xl" /></div>;
   if (!product) return <Card><EmptyState title="No markets listed yet" body="Be the first to list one." action={<Link to="/app/new" className="btn-primary mt-3 text-xs">New market</Link>} /></Card>;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-3 lg:sticky lg:top-[84px]">
           <MarketHero product={product} />
           <MarketStats assetCount={products.length} openCount={open.length} nextExpiry={nextExpiry} now={now} />

@@ -1,5 +1,6 @@
 /**
- * Keepers. `tsx src/main.ts <oracle|settle|liquidate>...` runs the named loops. Environment:
+ * Keepers. `tsx src/main.ts <oracle|settle|liquidate|feeds>...` runs the named loops (or KEEPER_MODES, space or comma
+ * separated, when none are given: the network's profile sets it, so the start command is the same everywhere). Environment:
  *   RPC_URL, CHAIN_ID, MANIFEST, KEEPER_PRIVATE_KEY            required
  *   SPOT_SOURCE = hermes | restamp; HERMES_URL, HERMES_API_KEY, HERMES_API_KEY_HEADER
  *   PUBLISHER_URL          a surface publisher (/surface, /oracle-update); used by oracle and liquidate
@@ -7,6 +8,7 @@
  *   ORACLE_ALWAYS=1        push spot without open interest (testnets)
  *   ORACLE_REFRESH_SECONDS without open interest, refresh a product's stored surface once it is this old (e.g. 7200)
  *   ORACLE_ACTIVE_SECONDS  with open interest, push at most this often instead of every maxSpotAge / 2 (e.g. 300)
+ *   FEED_INTERVAL_SECONDS  feeds (testnet): push each manifest.extra.testnetFeeds feed from Pyth this often (300)
  *   INDEXER_URL            participant and candidate lists from the indexer API (default: the ledger's events)
  *   LIQUIDATOR_ACCOUNT_ID  the bot's funded subaccount; MIN_PROFIT (native units), SLICE_BPS
  *   SETTLE_BATCH (50), INTERVAL_SECONDS (oracle: maxSpotAge / 2 = 30; settle 60; liquidate 15), GAS_BUFFER_BPS (1000)
@@ -15,6 +17,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
 import { connect, HermesSource, LedgerLogDirectory, RestampMockPythSource, SeriesCatalog, type AccountDirectory, type SpotSource } from "@optara/sdk";
 import { loadManifest } from "@optara/sdk/node";
+import { FeedPusher, type PushFeedSpec } from "./feedPusher.ts";
 import { IndexerDirectory } from "./indexerDirectory.ts";
 import { LiquidationBot } from "./liquidationBot.ts";
 import { OraclePusher } from "./oraclePusher.ts";
@@ -29,9 +32,9 @@ const env = (k: string, d?: string) => {
 };
 
 async function main() {
-  const modes = process.argv.slice(2);
-  if (modes.length === 0 || modes.some((x) => !["oracle", "settle", "liquidate"].includes(x))) {
-    throw new Error("usage: main.ts <oracle|settle|liquidate>...");
+  const modes = process.argv.length > 2 ? process.argv.slice(2) : (process.env.KEEPER_MODES ?? "").split(/[\s,]+/).filter(Boolean);
+  if (modes.length === 0 || modes.some((x) => !["oracle", "settle", "liquidate", "feeds"].includes(x))) {
+    throw new Error("usage: main.ts <oracle|settle|liquidate|feeds>...");
   }
   const manifest = loadManifest(env("MANIFEST"));
   const account = privateKeyToAccount(env("KEEPER_PRIVATE_KEY") as Hex);
@@ -73,6 +76,15 @@ async function main() {
       : [...new Set(catalog.all().map((s) => s.productId))];
     const pusher = new OraclePusher(ctx, { manifest, products, spot, catalog, publisherUrl: process.env.PUBLISHER_URL, always: process.env.ORACLE_ALWAYS === "1", refreshSeconds: process.env.ORACLE_REFRESH_SECONDS ? Number(process.env.ORACLE_REFRESH_SECONDS) : undefined, activeSeconds: process.env.ORACLE_ACTIVE_SECONDS ? Number(process.env.ORACLE_ACTIVE_SECONDS) : undefined });
     every("oracle", Number(process.env.INTERVAL_SECONDS ?? 30), () => pusher.tick());
+  }
+  if (modes.includes("feeds")) {
+    const feeds = ((manifest.extra as { testnetFeeds?: PushFeedSpec[] }).testnetFeeds ?? []) as PushFeedSpec[];
+    if (feeds.length === 0) throw new Error("feeds: the manifest lists no testnetFeeds");
+    if (manifest.chainId === 143) throw new Error("feeds: testnet push feeds are refused on Monad mainnet (settlement must use Chainlink)");
+    const hermes = new HermesSource({ endpoint: env("HERMES_URL", "https://pyth.dourolabs.app/hermes"), apiKey: process.env.HERMES_API_KEY, apiKeyHeader: process.env.HERMES_API_KEY_HEADER });
+    const intervalSeconds = Number(process.env.FEED_INTERVAL_SECONDS ?? 300);
+    const pusher = new FeedPusher(ctx, { feeds, hermes, intervalSeconds });
+    every("feeds", 30, () => pusher.tick());
   }
   if (modes.includes("settle")) {
     const keeper = new SettlementKeeper(ctx, { manifest, catalog, directory, batchSize: Number(process.env.SETTLE_BATCH ?? 50) });

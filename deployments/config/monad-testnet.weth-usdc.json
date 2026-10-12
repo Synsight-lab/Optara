@@ -1,0 +1,50 @@
+{
+  "_comment": "TESTNET short-dated listing written for scripts/testnet-markets.sh, which fills settlement.primary.feed with the TestnetPushFeed it deploys (a Chainlink-compatible feed the keeper updates from Pyth every 5 minutes; testnet Chainlink has no MON/USD feed and updates ETH/USD too rarely for 1-6 h expiries). Settlement through it trusts the keeper: testnet only. asset = Kuru's testnet USDC 0x3bA3...1570 (6 decimals; docs.kuru.io), so every option can have a Kuru book. strikeStepWad and contractSizeWad are read by script/testnet/RollShortSeries.s.sol. underlying = WETH 0x4547...A2D7 (symbol WETH on Monad testnet) (monad-crypto testnet token list), an identifier only: options are cash-settled in USDC.",
+  "underlying": "0x45477f4709771331db81944A5E20eF95Bc7BA2D7",
+  "asset": "0x3bA3d39AFcf8bb994f7964B3e0171Ea2Ba361570",
+  "underlyingSymbol": "WETH",
+  "assetSymbol": "USDC",
+  "minStrikeWad": 100000000000000000000,
+  "maxStrikeWad": 1000000000000000000000000,
+  "maxReportLifetime": 900,
+  "riskSet": "WETH/USDC testnet",
+  "shortCapUnderlyingWad": 1000000000000000000000,
+  "pythBaseFeed": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+  "pythQuoteFeed": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
+  "settlement": {
+    "primary": {
+      "kind": "DIRECT",
+      "feed": "0x0b8d7059D9C86F3030af1e9b45ed4174Fa2e120F",
+      "feedDecimals": 8
+    },
+    "fallback": {
+      "kind": "NONE"
+    },
+    "observationStartOffset": -3600,
+    "observationEndOffset": 0,
+    "minFinalizationDelay": 300,
+    "maxFinalizationDelay": 604800,
+    "maxLegSkew": 0
+  },
+  "publishers": [
+    "0x38fc32Ce424d9cCEEC06e72DEA43bEe94d0a9c8c",
+    "0x3D0ECfd79227aA750d5226820FCb5b5888F34320",
+    "0xAb45B0080FD23Bb189e57a54a695b6b437DCCbdC"
+  ],
+  "independent": [
+    true,
+    false,
+    false
+  ],
+  "minSellerFee": 100000,
+  "insuranceSeed": 0,
+  "keeperReserveMin": 0,
+  "bootstrapFromFees": true,
+  "finalizeReward": 2000000,
+  "settleReward": 500000,
+  "maxInsurancePerLiquidation": 0,
+  "approveAsset": true,
+  "enableKuru": true,
+  "strikeStepWad": 25000000000000000000,
+  "contractSizeWad": 1000000000000000000
+}

@@ -116,7 +116,10 @@ export class OraclePusher {
     if (report.surfaceSeq <= h.surfaceSeq || report.expiresAt <= now) return undefined;
     const series = this.o.catalog.all().filter((s) => s.productId === productId && s.expiry > now).map((s) => s.seriesId);
     const nodesRes = await f(`${this.o.publisherUrl}/surface/${productId}/${report.surfaceSeq}/nodes?series=${series.join(",")}`);
-    const nodes = nodesRes.ok ? ((await nodesRes.json()) as unknown[]).map(nodeProofFromJson) : [];
+    // Without its leaves the report is useless on-chain (MissingSurfaceNode); retry next tick (e.g. the publisher
+    // signed a newer report between the two requests).
+    if (!nodesRes.ok) return undefined;
+    const nodes = ((await nodesRes.json()) as unknown[]).map(nodeProofFromJson);
     return { report, signatures: body.signatures, nodes };
   }
 }

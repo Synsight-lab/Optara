@@ -1,0 +1,53 @@
+{
+  "_comment": "How scripts/markets.sh and the services run on Monad testnet. Everything that differs between networks lives here (and in config/<network>.json and config/<network>.<product>.json), so switching networks is NETWORK=monad-mainnet, not a code change. settlementFeeds: push = deploy a TestnetPushFeed per product that the keeper fills from Pyth (testnet Chainlink has no MON/USD and updates ETH/USD too rarely for hour-long options; refused on mainnet). kuruBooks: deploy = the script deploys each option's Kuru book (Kuru's testnet factory is permissionless). execution: direct = the admin key holds every role and sends. vol: synthetic smiles, because Deribit's daily expiries cannot be stretched to 1-6 h without arbitrage. expiries: +Nh from now, or daily@HH:MM / weekly@<day>@HH:MM (UTC).",
+  "settlementFeeds": "push",
+  "kuruBooks": "deploy",
+  "execution": "direct",
+  "products": {
+    "weth-usdc": {
+      "vol": "synthetic:0.55"
+    },
+    "mon-usdc": {
+      "vol": "synthetic:1.1"
+    }
+  },
+  "defaultProducts": [
+    "weth-usdc",
+    "mon-usdc"
+  ],
+  "expiries": [
+    "+1h",
+    "+2h",
+    "+4h",
+    "+6h"
+  ],
+  "strikeOffsetsBps": [
+    -500,
+    0,
+    500
+  ],
+  "services": {
+    "rpcUrl": "https://testnet-rpc.monad.xyz",
+    "hermesUrl": "https://pyth.dourolabs.app/hermes",
+    "keepers": {
+      "KEEPER_MODES": "oracle settle feeds",
+      "ORACLE_ALWAYS": "0",
+      "ORACLE_REFRESH_SECONDS": "7200",
+      "ORACLE_ACTIVE_SECONDS": "600",
+      "FEED_INTERVAL_SECONDS": "300"
+    },
+    "publisher": {
+      "SPOT_SOURCE": "hermes"
+    },
+    "railway": {
+      "publisher": "@optara/publisher",
+      "keepers": "@optara/keepers",
+      "indexer": "@optara/indexer",
+      "indexerApi": "indexer-api"
+    },
+    "frontend": {
+      "VITE_NETWORK": "monad-testnet",
+      "VITE_RPC_URL": "https://testnet-rpc.monad.xyz"
+    }
+  }
+}

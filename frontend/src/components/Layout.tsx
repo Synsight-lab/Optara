@@ -23,7 +23,7 @@ import {
 import { fmtLevel, fmtWad } from "../lib/optara/format.ts";
 import { useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
 import { hasAnyTrustedRole, roleNames } from "../lib/optara/roles.ts";
-import { useQuickGuide, useTheme } from "../state.tsx";
+import { selectMarket, useQuickGuide, useSelectedMarket, useTheme } from "../state.tsx";
 import { ConnectButton } from "./ConnectButton.tsx";
 import { OnboardingModal } from "./OnboardingModal.tsx";
 import { Toaster } from "./Toaster.tsx";
@@ -297,16 +297,57 @@ function MobileTab({ to, label, icon: Icon }: { to: string; label: string; icon:
   );
 }
 
+/** Spot of the selected market (the one the user last opened or picked); a menu switches between markets. */
 function SpotPill() {
   const { data: series } = useSeriesList();
-  const first = series?.[0];
-  const { data: m } = useProductMarket(first?.productId);
-  if (!first || !m) return null;
+  const selected = useSelectedMarket();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const products = [...new Map((series ?? []).map((s) => [s.productId.toLowerCase(), s])).values()];
+  const current = products.find((p) => p.productId.toLowerCase() === selected?.toLowerCase()) ?? products[0];
+  const { data: m } = useProductMarket(current?.productId);
+  if (!current || !m) return null;
   return (
-    <div className="flex h-9 items-center gap-1.5 rounded-xl bg-surface-2/70 px-2.5" title={`${first.underlyingSymbol} spot · ${m.spotFresh ? "live" : "delayed"}`}>
-      <TokenIcon symbol={first.underlyingSymbol} className="h-4 w-4" />
-      <span className="num font-display text-[13px] font-semibold">${fmtLevel(m.spotWad)}</span>
-      <span className={cx("h-1.5 w-1.5 rounded-full", m.spotFresh ? "live-dot bg-good" : "bg-warn")} />
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => products.length > 1 && setOpen((o) => !o)}
+        className={cx("flex h-9 items-center gap-1.5 rounded-xl bg-surface-2/70 px-2.5", products.length > 1 && "cursor-pointer")}
+        title={`${current.underlyingSymbol}/${current.assetSymbol} spot · ${m.spotFresh ? "live" : "delayed"}`}
+        aria-haspopup={products.length > 1 ? "listbox" : undefined}
+        aria-expanded={open}
+      >
+        <TokenIcon symbol={current.underlyingSymbol} className="h-4 w-4" />
+        <span className="num font-display text-[13px] font-semibold">${fmtLevel(m.spotWad)}</span>
+        <span className={cx("h-1.5 w-1.5 rounded-full", m.spotFresh ? "live-dot bg-good" : "bg-warn")} />
+        {products.length > 1 && <ChevronDown className="h-3.5 w-3.5 text-muted" />}
+      </button>
+      {open && (
+        <div role="listbox" className="absolute right-0 top-11 z-50 min-w-[170px] rounded-2xl border border-line bg-surface p-1.5 shadow-lg">
+          {products.map((p) => (
+            <button
+              key={p.productId}
+              type="button"
+              role="option"
+              aria-selected={p.productId === current.productId}
+              onClick={() => (selectMarket(p.productId), setOpen(false))}
+              className={cx(
+                "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] font-semibold cursor-pointer",
+                p.productId === current.productId ? "bg-primary-soft text-primary" : "hover:bg-surface-2",
+              )}
+            >
+              <TokenIcon symbol={p.underlyingSymbol} className="h-4 w-4" />
+              {p.underlyingSymbol}/{p.assetSymbol}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

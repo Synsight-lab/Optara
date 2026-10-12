@@ -1,5 +1,5 @@
-/** App-wide state: the selected subaccount per wallet, toasts, theme. */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+/** App-wide state: the selected subaccount per wallet, the selected market, toasts, theme. */
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useConnection } from "wagmi";
 import type { Address, Hex } from "viem";
 import { useAccounts } from "./lib/optara/hooks.ts";
@@ -108,6 +108,47 @@ export function GuideProvider({ children }: { children: ReactNode }) {
 }
 
 export const useQuickGuide = () => useContext(GuideCtx);
+
+// ------------------------------------------------------------------ selected market
+
+/**
+ * The market (product) the user is looking at, shown in the header's price pill. Pages set it when the user opens
+ * a series or picks a market (`useShowMarket`); the pill can switch it too. Remembered per browser.
+ */
+const MARKET_KEY = "optara.market";
+const marketListeners = new Set<() => void>();
+let selectedMarket: Hex | undefined = (() => {
+  try {
+    return (localStorage.getItem(MARKET_KEY) as Hex | null) ?? undefined;
+  } catch {
+    return undefined;
+  }
+})();
+
+export function selectMarket(productId: Hex) {
+  if (selectedMarket?.toLowerCase() === productId.toLowerCase()) return;
+  selectedMarket = productId;
+  try {
+    localStorage.setItem(MARKET_KEY, productId);
+  } catch {
+    // storage unavailable
+  }
+  for (const l of marketListeners) l();
+}
+
+export function useSelectedMarket(): Hex | undefined {
+  return useSyncExternalStore(
+    (l) => (marketListeners.add(l), () => marketListeners.delete(l)),
+    () => selectedMarket,
+  );
+}
+
+/** Makes `productId` (when known) the header's market while this page shows it. */
+export function useShowMarket(productId: Hex | undefined) {
+  useEffect(() => {
+    if (productId) selectMarket(productId);
+  }, [productId]);
+}
 
 // ------------------------------------------------------------------ theme
 

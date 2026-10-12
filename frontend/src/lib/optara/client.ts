@@ -1,9 +1,11 @@
 /** The read client and contract addresses for the active network. */
-import { createPublicClient, http, keccak256, toHex, type Address, type Hex } from "viem";
+import { createPublicClient, keccak256, toHex, type Address, type Hex } from "viem";
+import { patientHttp } from "@optara/sdk";
 import { CHAIN, MANIFEST, RPC_URL } from "../../config/network.ts";
 
 // cacheTime 0: log scans right after a transaction (e.g. a new account) must see the new head, not a cached one.
-export const publicClient = createPublicClient({ chain: CHAIN, transport: http(RPC_URL, { batch: true }), cacheTime: 0 });
+// patientHttp: waits and retries when a public RPC rate-limits (Monad's: "requests limited to N/sec").
+export const publicClient = createPublicClient({ chain: CHAIN, transport: patientHttp(RPC_URL, 5, 250, { batch: true }), cacheTime: 0 });
 export type Client = typeof publicClient;
 
 const P = MANIFEST.proxies;

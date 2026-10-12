@@ -49,16 +49,34 @@ export class HermesSource implements SpotSource {
   async updates(feedIds: readonly Hex[]): Promise<Hex[]> {
     if (feedIds.length === 0) return [];
     const q = feedIds.map((id) => `ids[]=${id}`).join("&");
+    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&encoding=hex`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Hermes ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const body = (await res.json()) as { binary: { encoding: string; data: string[] } };
+    if (body.binary.encoding !== "hex") throw new Error(`Hermes encoding ${body.binary.encoding}`);
+    return body.binary.data.map((d) => (d.startsWith("0x") ? d : `0x${d}`) as Hex);
+  }
+
+  /** Latest parsed prices: `price × 10^expo` per feed id (lower-case, 0x-prefixed), with their publish times. */
+  async prices(feedIds: readonly Hex[]): Promise<Map<string, { price: bigint; expo: number; publishTime: bigint }>> {
+    const out = new Map<string, { price: bigint; expo: number; publishTime: bigint }>();
+    if (feedIds.length === 0) return out;
+    const q = feedIds.map((id) => `ids[]=${id}`).join("&");
+    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&parsed=true`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Hermes ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const body = (await res.json()) as { parsed: { id: string; price: { price: string; expo: number; publish_time: number } }[] };
+    for (const p of body.parsed) {
+      out.set(`0x${p.id.replace(/^0x/, "").toLowerCase()}`, { price: BigInt(p.price.price), expo: p.price.expo, publishTime: BigInt(p.price.publish_time) });
+    }
+    return out;
+  }
+
+  private headers(): Record<string, string> {
     const headers: Record<string, string> = {};
     if (this.o.apiKey) {
       const h = this.o.apiKeyHeader ?? "Authorization";
       headers[h] = h.toLowerCase() === "authorization" ? `Bearer ${this.o.apiKey}` : this.o.apiKey;
     }
-    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&encoding=hex`, { headers });
-    if (!res.ok) throw new Error(`Hermes ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const body = (await res.json()) as { binary: { encoding: string; data: string[] } };
-    if (body.binary.encoding !== "hex") throw new Error(`Hermes encoding ${body.binary.encoding}`);
-    return body.binary.data.map((d) => (d.startsWith("0x") ? d : `0x${d}`) as Hex);
+    return headers;
   }
 }
 

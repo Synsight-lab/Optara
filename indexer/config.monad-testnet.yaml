@@ -111,39 +111,39 @@ contracts:
       - event: OrdersCanceled
 chains:
   - id: 10143
-    start_block: 70216680
+    start_block: 70367756
     rpc:
       - url: ${ENVIO_RPC_URL:-https://testnet-rpc.monad.xyz}
         for: fallback
         interval_ceiling: 100 # public Monad RPC: eth_getLogs over at most 100 blocks
     contracts:
       - name: ProtocolControl
-        address: "0xD4f274160bE988920A8605ab949Ad7b10307B491"
+        address: "0x426366f2ca6591A4D5D31F8aa173d4FAD4Cb7837"
       - name: OptionSeriesRegistry
-        address: "0x9EA49027F518706bE3fa62D85bf3e0740243ee02"
+        address: "0xD468F0C6280bA25aB997d5E4eC677509DD8AEbF3"
       - name: SubAccounts
-        address: "0xf5ED8E0dEBA6aBe0EAF3FB11c3C8654C2e077Da1"
+        address: "0x2f8EF74734cc166BB865a54E2602084bfB0b1C20"
       - name: OptionClearing
-        address: "0x6fe9A734DC66A147fCA911b2e3a81D99c57d059F"
+        address: "0xa552c0c365153A74aF5F6c78Eef8C06aB0A5d184"
       - name: LiveSpotOracle
-        address: "0xcE84cBaCe30ab04e4a55189522286f370c541Dec"
+        address: "0x0545502a4f24Fd9bF36B30E4d5f1Ebd49F7378C8"
       - name: VolSurfaceOracle
-        address: "0xbE20AcFDEf10FA225933c39E167aAae8781d2904"
+        address: "0x9F641cCB85713D502CEBCE2e33f5e505BB4A0881"
       - name: PortfolioRiskManager
-        address: "0x0451aa6e58485C24a916De1b8387FD7C46B3408d"
+        address: "0x20f463bDe991D0Dd90fc6c455Ba494d6908A924E"
       - name: InsuranceFund
-        address: "0x9E4E1aCB01B51cC483F25f9CDa6FbA806EB948ac"
+        address: "0x5bca890084e2dF55ADcDaFb2713d44f87cD58009"
       - name: FeeController
-        address: "0x2277eE16E766A2b750E92AF1900a1365a5191c4F"
+        address: "0x0311EF637F9F90f5a5ad715a86B07B1eD758cc83"
       - name: LiquidationModule
-        address: "0x4c317CD9c6E1F1Ce4D1DaBf93fFa97eC87475078"
+        address: "0x0dfBB45495521E7480188Ba6c917C83dA253a39c"
       - name: SettlementWindow
-        address: "0x4B0AaBfaA36Ca99F1dC2927b43f102bd5ce67C76"
+        address: "0xcC700e551A40A365d6E03d7a8078793f67c73220"
       - name: VenueRegistry
-        address: "0x2FD1166Df458e430c123A40b9944951002de4e28"
+        address: "0x06D5C0b02BeAc1aD46e31d651C73f85D886CD375"
       - name: VenueRouter
-        address: "0x39418f4F08367eD8998c19b923f2809E3FD6e97F"
+        address: "0x4c375B89026c71277d1adA939672a398b8B86a8f"
       - name: ExternalOptionWrapper # registered from SeriesCreated
       - name: UpgradeAdmin
-        address: "0xCb38332B51cb714CD9e42300Ba9A6e1dDbbDd559"
+        address: "0x6684bE3bF43B72De029EBB2aC394955288eE265f"
       - name: KuruOrderBook # registered from VenueRegistry.MarketRegistered (Kuru venue)

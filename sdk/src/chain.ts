@@ -5,6 +5,7 @@ import {
   http,
   type Account,
   type Chain,
+  type HttpTransportConfig,
   type PublicClient,
   type Transport,
   type WalletClient,
@@ -65,8 +66,8 @@ export function isRateLimited(e: unknown): boolean {
  * `http(rpcUrl)` that waits and retries requests refused for rate limiting (viem does not retry Monad's -32011), so
  * a long log scan on a shared public RPC slows down instead of failing. Other errors are thrown at once.
  */
-export function patientHttp(rpcUrl: string, maxRetries = 8, baseDelayMs = 250): Transport {
-  const base = http(rpcUrl);
+export function patientHttp(rpcUrl: string, maxRetries = 8, baseDelayMs = 250, config?: HttpTransportConfig): Transport {
+  const base = http(rpcUrl, config);
   return ((opts: Parameters<Transport>[0]) => {
     const t = base(opts);
     const request: typeof t.request = async (args, options) => {

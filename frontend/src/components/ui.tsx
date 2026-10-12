@@ -99,7 +99,7 @@ export function EmptyState({ icon = "◇", title, body, action }: { icon?: React
     <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
       <div className="font-display grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-xl text-primary">{icon}</div>
       <div className="font-display text-[16px] font-semibold tracking-tight">{title}</div>
-      {body && <div className="max-w-sm text-sm leading-relaxed text-muted">{body}</div>}
+      {body && <div className="max-w-full text-sm leading-relaxed text-muted [overflow-wrap:anywhere] sm:max-w-sm">{body}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

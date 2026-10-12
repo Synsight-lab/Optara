@@ -33,7 +33,7 @@ import {
 import { kuruTakerFee, previewBuyerFee } from "../lib/optara/reads.ts";
 import { legOf, moveNeeded, moveText, priceLevel } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
-import { useQuickGuide } from "../state.tsx";
+import { useQuickGuide, useSelectedMarket, useShowMarket } from "../state.tsx";
 
 const toWadFromNative = (native: bigint, decimals: number) => native * 10n ** BigInt(18 - decimals);
 
@@ -61,9 +61,11 @@ export function TradePage() {
   );
 
   const [selectedProductId, setSelectedProductId] = useState<Hex | undefined>();
+  const lastMarket = useSelectedMarket();
   const product =
     products.find((p) => p.productId === selectedProductId) ??
-    (urlSeries ? products.find((p) => p.productId === urlSeries.productId) : products[0]);
+    (urlSeries ? products.find((p) => p.productId === urlSeries.productId) : products.find((p) => p.productId === lastMarket) ?? products[0]);
+  useShowMarket(product?.productId);
 
   const { data: productMarket } = useProductMarket(product?.productId);
 

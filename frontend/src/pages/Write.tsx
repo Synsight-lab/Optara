@@ -17,7 +17,7 @@ import { fmtDuration, fmtExpiryShort, fmtLevel, fmtNative, fmtPrice } from "../l
 import { useAccountView, useChainTime, useProductMarket, useSeries, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
 import { legOf, moveNeeded, moveText, usd } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
-import { useAccountState, useQuickGuide } from "../state.tsx";
+import { useAccountState, useQuickGuide, useSelectedMarket, useShowMarket } from "../state.tsx";
 import { WritePanel } from "./Series.tsx";
 
 const WRITE_EXPIRING_WINDOW = 7n * 86_400n;
@@ -47,7 +47,9 @@ export function WritePage() {
     setType(fromUrl.optionType === 0 ? 0 : 1);
   }, [fromUrl]);
 
-  const product = products.find((p) => p.productId === productId) ?? products[0];
+  const lastMarket = useSelectedMarket();
+  const product = products.find((p) => p.productId === productId) ?? products.find((p) => p.productId === lastMarket) ?? products[0];
+  useShowMarket(product?.productId);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const digits = q.replace(/[^0-9.]/g, "");

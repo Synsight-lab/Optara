@@ -9,7 +9,7 @@
   "seriesCreator": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
   "venueAdmin": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
   "pyth": "0x2880aB155794e7179c9eE2e38200202908C17B43",
-  "kuruRouter": "0x0000000000000000000000000000000000000000",
+  "kuruRouter": "0x7EFbE105Ca7415dE98F96622173458ac1c054630",
   "upgradeDelay": 604800,
   "emergencyDelay": 86400,
   "surfaceQuorum": 2,

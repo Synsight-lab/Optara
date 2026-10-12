@@ -1,0 +1,51 @@
+{
+  "_comment": "How scripts/markets.sh and the services run on Monad mainnet. settlementFeeds: listing = the Chainlink feeds in config/monad-mainnet.<product>.json (push feeds are refused here). kuruBooks: none = Kuru's mainnet factory is owner-gated, so roll lists the options and writes their option-token addresses; Kuru deploys the books; `markets.sh register` registers them. execution: propose = roles are multisigs: the script writes every role call to deployments/monad-mainnet.*.proposals.json and sends nothing. vol: market-derived (Deribit) for WETH; MON has no listed options to calibrate to, so its vol source must be decided before listing (null = the script refuses). expiries: Deribit-aligned daily and weekly (08:00 UTC), which the publisher can calibrate without arbitrage. Before mainnet: fill the publisher addresses in the product configs, set multisig roles in config/monad-mainnet.json, and use a Pyth plan that covers every product's feeds.",
+  "settlementFeeds": "listing",
+  "kuruBooks": "none",
+  "execution": "propose",
+  "products": {
+    "weth-usdc": {
+      "vol": "deribit:ETH"
+    },
+    "mon-usdc": {
+      "vol": null
+    }
+  },
+  "defaultProducts": [
+    "weth-usdc"
+  ],
+  "expiries": [
+    "daily@08:00",
+    "weekly@fri@08:00"
+  ],
+  "strikeOffsetsBps": [
+    -1000,
+    -500,
+    0,
+    500,
+    1000
+  ],
+  "services": {
+    "rpcUrl": "https://rpc.monad.xyz",
+    "hermesUrl": "https://pyth.dourolabs.app/hermes",
+    "keepers": {
+      "KEEPER_MODES": "oracle settle",
+      "ORACLE_ALWAYS": "0",
+      "ORACLE_REFRESH_SECONDS": "7200",
+      "ORACLE_ACTIVE_SECONDS": "600"
+    },
+    "publisher": {
+      "SPOT_SOURCE": "hermes"
+    },
+    "railway": {
+      "publisher": "@optara/publisher",
+      "keepers": "@optara/keepers",
+      "indexer": "@optara/indexer",
+      "indexerApi": "indexer-api"
+    },
+    "frontend": {
+      "VITE_NETWORK": "monad-mainnet",
+      "VITE_RPC_URL": "https://rpc.monad.xyz"
+    }
+  }
+}
