@@ -15,8 +15,10 @@
  *   GET /series/:id/positions               (every account's non-zero position in one series: who wrote it)
  *   GET /auctions/active                    (liquidation auctions not yet ended)
  *   GET /upgrades                           (UpgradeScheduled events; the caller reads each one's state on-chain)
+ *   GET /visits/:page, POST /visits/:page   (page visit counts; POST body = the browser's random visitor id)
  */
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { createHash } from "node:crypto";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isAddress, type PublicClient } from "viem";
 import { portfolioRiskManagerAbi, toJson } from "@optara/sdk";
 import type { Manifest } from "@optara/sdk";
@@ -29,14 +31,39 @@ const send = (res: ServerResponse, code: number, body: unknown) => {
 };
 const isId = (s: string) => /^\d+$/.test(s);
 const isHex32 = (s: string) => /^0x[0-9a-fA-F]{64}$/.test(s);
+/** Pages whose visits are counted. */
+const COUNTED_PAGES = new Set(["system"]);
+
+/** A short request body (the visitor id); undefined if it is too long. */
+const readBody = (req: IncomingMessage, max = 256) =>
+  new Promise<string | undefined>((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString();
+      if (body.length > max) {
+        resolve(undefined);
+        req.destroy();
+      }
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
 
 export function startApi(deps: { db: Db; monitor: Monitor; client: PublicClient; manifest: Manifest }, port: number): Promise<Server> {
   const { db, monitor, client, manifest } = deps;
   const server = createServer(async (req, res) => {
     try {
-      if (req.method !== "GET") return send(res, 405, { error: "GET only" });
       const url = new URL(req.url ?? "/", "http://x");
       const [a, b, c] = url.pathname.split("/").filter(Boolean);
+      // Sent as text/plain, so browsers make no CORS preflight.
+      if (req.method === "POST" && a === "visits" && b && COUNTED_PAGES.has(b) && !c) {
+        const visitor = (await readBody(req))?.trim();
+        if (!visitor || !/^[A-Za-z0-9-]{8,64}$/.test(visitor)) return send(res, 400, { error: "visitor id required" });
+        await db.recordVisit(b, createHash("sha256").update(visitor).digest("hex"));
+        return send(res, 200, await db.visitStats(b));
+      }
+      if (req.method !== "GET") return send(res, 405, { error: "GET only" });
+      if (a === "visits" && b && COUNTED_PAGES.has(b) && !c) return send(res, 200, await db.visitStats(b));
 
       if (a === "series" && !b) return send(res, 200, await db.rows("Series", "TRUE", [], "ORDER BY expiry, \"strikeWad\""));
       if (a === "series" && b && isHex32(b) && c === "positions") {

@@ -50,6 +50,40 @@ export class Db {
     return r[0] ? Number(r[0].progress_block) : 0;
   }
 
+  /**
+   * Page visits, in their own schema `optara_app` so re-indexing (a new ENVIO_PG_SCHEMA) never drops them. A visitor is
+   * a random id the browser keeps, stored hashed; one visitor counts at most once per page per 30 minutes.
+   */
+  private visitsReady?: Promise<unknown>;
+  private ensureVisits() {
+    this.visitsReady ??= this.sql.unsafe(`
+      CREATE SCHEMA IF NOT EXISTS optara_app;
+      CREATE TABLE IF NOT EXISTS optara_app.page_visits (
+        id bigserial PRIMARY KEY, page text NOT NULL, visitor text NOT NULL, at timestamptz NOT NULL DEFAULT now());
+      CREATE INDEX IF NOT EXISTS page_visits_page_visitor_at ON optara_app.page_visits (page, visitor, at)`).simple();
+    return this.visitsReady;
+  }
+
+  /** Records a visit unless this visitor was counted on this page in the last 30 minutes. */
+  async recordVisit(page: string, visitorHash: string): Promise<void> {
+    await this.ensureVisits();
+    await this.sql`
+      INSERT INTO optara_app.page_visits (page, visitor)
+      SELECT ${page}, ${visitorHash}
+      WHERE NOT EXISTS (SELECT 1 FROM optara_app.page_visits
+                        WHERE page = ${page} AND visitor = ${visitorHash} AND at > now() - interval '30 minutes')`;
+  }
+
+  async visitStats(page: string): Promise<{ page: string; visits: number; visitors: number; visits24h: number; visitors24h: number }> {
+    await this.ensureVisits();
+    const [r] = await this.sql`
+      SELECT count(*)::int AS visits, count(DISTINCT visitor)::int AS visitors,
+             count(*) FILTER (WHERE at > now() - interval '24 hours')::int AS visits24h,
+             count(DISTINCT visitor) FILTER (WHERE at > now() - interval '24 hours')::int AS visitors24h
+      FROM optara_app.page_visits WHERE page = ${page}`;
+    return { page, visits: r!.visits, visitors: r!.visitors, visits24h: r!.visits24h, visitors24h: r!.visitors24h };
+  }
+
   close() {
     return this.sql.end();
   }

@@ -1217,3 +1217,49 @@ export async function getKuruBalances(owner: Address, series: Series[]) {
       .map((r) => ({ label: r.label, amount: (Number(r.raw) / 10 ** r.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 }), series: r.series, token: r.token, raw: r.raw })),
   };
 }
+
+// ------------------------------------------------------------------ Page visits (indexer API)
+
+export interface VisitStats {
+  visits: number;
+  visitors: number;
+  visits24h: number;
+  visitors24h: number;
+}
+
+/** This browser's random visitor id (no personal data); a fresh one per call if storage is unavailable. */
+function visitorId(): string {
+  const fresh = () => crypto.randomUUID();
+  try {
+    let id = localStorage.getItem("optara.visitor");
+    if (!id) localStorage.setItem("optara.visitor", (id = fresh()));
+    return id;
+  } catch {
+    return fresh();
+  }
+}
+
+/**
+ * Counts this visit to `page` (once per browser session; the API also ignores repeats within 30 minutes) and returns the
+ * page's totals. Undefined without an indexer.
+ */
+export async function recordPageVisit(page: string): Promise<VisitStats | undefined> {
+  if (!INDEXER_URL) return undefined;
+  const key = `optara.visited.${page}`;
+  let counted = false;
+  try {
+    counted = sessionStorage.getItem(key) === "1";
+  } catch {
+    // storage blocked: count it (the API deduplicates)
+  }
+  const res = counted
+    ? await fetch(`${INDEXER_URL}/visits/${page}`)
+    : await fetch(`${INDEXER_URL}/visits/${page}`, { method: "POST", headers: { "content-type": "text/plain" }, body: visitorId() });
+  if (!res.ok) return undefined;
+  try {
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // ignore
+  }
+  return (await res.json()) as VisitStats;
+}

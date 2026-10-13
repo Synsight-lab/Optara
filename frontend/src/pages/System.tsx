@@ -1,6 +1,7 @@
 /** `/system`: oracle freshness, close-only flags, reserves, services and contract addresses (FRONTEND.md §2). */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useConnection } from "wagmi";
 import {
   Activity,
   CheckCircle2,
@@ -17,14 +18,27 @@ import { Card, CopyButton, Pill, Row, Skeleton, Term } from "../components/ui.ts
 import { TokenIcon } from "../components/Icons.tsx";
 import { INDEXER_URL, MANIFEST, PUBLISHER_URL, RPC_URL } from "../config/network.ts";
 import { fmtDuration, fmtLevel, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
-import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
-import { getInsurance, getUpgrades } from "../lib/optara/reads.ts";
+import { useChainTime, useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
+import { hasAnyTrustedRole } from "../lib/optara/roles.ts";
+import { getInsurance, getUpgrades, recordPageVisit } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 export function SystemPage() {
   const { data: series } = useSeriesList();
   const products = useMemo(() => [...new Map((series ?? []).map((s) => [s.productId, s])).values()], [series]);
   const assets = useMemo(() => [...new Map((series ?? []).map((s) => [s.settlementAsset, s])).values()], [series]);
+  // Counts every visit once (the query never refetches); only wallets holding a trusted role see the totals.
+  const { address } = useConnection();
+  const { data: roleMap } = useTrustedRoles(address);
+  const isAdmin = hasAnyTrustedRole(roleMap);
+  const { data: visits } = useQuery({
+    queryKey: ["visits", "system"],
+    queryFn: () => recordPageVisit("system").then((v) => v ?? null),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -33,6 +47,13 @@ export function SystemPage() {
         <p className="mt-0.5 text-[13px] text-muted">
           Oracles, reserves and contracts — live from chain.
         </p>
+        {isAdmin && visits && (
+          <p className="mt-1 text-[11px] text-muted">
+            <span className="num">{visits.visits.toLocaleString()}</span> visits by{" "}
+            <span className="num">{visits.visitors.toLocaleString()}</span> visitors ·{" "}
+            <span className="num">{visits.visits24h.toLocaleString()}</span> in the last 24 h (admin only)
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
