@@ -143,9 +143,11 @@ function FrameCard({ title, headline, label, tone, product, className }: { title
       </div>
       <div className={cx("font-display mt-6 text-3xl font-bold", tone === "good" ? "text-good" : "text-bad")}>{headline}</div>
       <div className="mt-1 text-sm text-muted">{label}</div>
+      {/* A buyer's payoff at expiry (price rises to the right): a call is flat until the strike, then rises; a put is
+          its mirror image, highest when the price is lowest and flat above the strike. The dot marks the strike. */}
       <svg viewBox="0 0 260 80" className="mt-5 h-20 w-full">
-        <path d={tone === "good" ? "M0 62 L115 62 L238 14" : "M0 15 L110 15 L238 64"} fill="none" stroke={tone === "good" ? "var(--good)" : "var(--bad)"} strokeWidth="7" strokeLinecap="round" />
-        <circle cx="115" cy={tone === "good" ? "62" : "15"} r="6" fill="var(--warn)" />
+        <path d={tone === "good" ? "M0 62 L115 62 L238 14" : "M0 14 L123 62 L238 62"} fill="none" stroke={tone === "good" ? "var(--good)" : "var(--bad)"} strokeWidth="7" strokeLinecap="round" />
+        <circle cx={tone === "good" ? "115" : "123"} cy="62" r="6" fill="var(--warn)" />
       </svg>
     </div>
   );
