@@ -263,9 +263,9 @@ cmd_roll() {
     [ -n "$prev" ] && echo "$prev" > "$series"
     die "the roll was not broadcast (no option token on-chain); nothing changed, run it again"
   fi
-  if [ -n "$prev" ]; then # keep the entries of products not rolled this time
-    echo "$prev" | jq --slurpfile new "$series" --arg rolled "$PRODUCTS" \
-      '($rolled | split(",")) as $r | $new[0] + {series: ([.series[] | select(.listing as $l | $r | index($l) | not)] + $new[0].series)}' \
+  if [ -n "$prev" ]; then # add the new options to the list: every earlier option (of any product) is kept
+    echo "$prev" | jq --slurpfile new "$series" \
+      '$new[0] + {series: ((.series + $new[0].series) | unique_by(.seriesId) | sort_by(.expiry, .listing, .type, (.strikeWad | tonumber)))}' \
       > "$series.tmp" && mv "$series.tmp" "$series"
   fi
   [ "$EXECUTION" = propose ] && run_calls "$DEPLOY_DIR/$NETWORK.roll.proposals.json"
