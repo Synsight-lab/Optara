@@ -1,6 +1,6 @@
 {
   "network": "monad-testnet",
-  "createdAt": 1791812903,
+  "createdAt": 1791890521,
   "series": [
     {
       "listing": "weth-usdc",
@@ -8,15 +8,6 @@
       "wrapper": "0x804085fF34b572D83505e9513676572BeaC019E8",
       "kuruMarket": "0x89bcfcDE1526af9732c0186d41da206F2418cf3a",
       "type": "CALL",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791816469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0xd64c02330be7bc426d8abd89974886b92ffb89fe65cdaf143995d0ff6c096162",
-      "wrapper": "0xd42b8C367650f5f6Bf31245843641442A0e95dF8",
-      "kuruMarket": "0x3777DbE4c8E2194A346C88cd7F00292344cE22c0",
-      "type": "PUT",
       "strikeWad": "2400000000000000000000",
       "expiry": 1791816469
     },
@@ -31,20 +22,29 @@
     },
     {
       "listing": "weth-usdc",
-      "seriesId": "0x54c38ace77eb28880dbc74d6cb58a750099aa931b266a246886191852829b835",
-      "wrapper": "0x693E31432FC6EFdbC7b257F08121d4De088d823C",
-      "kuruMarket": "0x7638b5a4fff0aea14b147E8AAaD7028C882febC6",
-      "type": "PUT",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791816469
-    },
-    {
-      "listing": "weth-usdc",
       "seriesId": "0xe49ca9f6fe7d713b7e51f4b1e4358eab775e21e9479c5f0bc46ca2b2a39de771",
       "wrapper": "0x0E6Ce71bfa6E256257fD89deC4b85DE25AC08a5D",
       "kuruMarket": "0x6489Cb350FBAc13d142aF59e2881439a0831728a",
       "type": "CALL",
       "strikeWad": "2650000000000000000000",
+      "expiry": 1791816469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xd64c02330be7bc426d8abd89974886b92ffb89fe65cdaf143995d0ff6c096162",
+      "wrapper": "0xd42b8C367650f5f6Bf31245843641442A0e95dF8",
+      "kuruMarket": "0x3777DbE4c8E2194A346C88cd7F00292344cE22c0",
+      "type": "PUT",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791816469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x54c38ace77eb28880dbc74d6cb58a750099aa931b266a246886191852829b835",
+      "wrapper": "0x693E31432FC6EFdbC7b257F08121d4De088d823C",
+      "kuruMarket": "0x7638b5a4fff0aea14b147E8AAaD7028C882febC6",
+      "type": "PUT",
+      "strikeWad": "2525000000000000000000",
       "expiry": 1791816469
     },
     {
@@ -57,182 +57,11 @@
       "expiry": 1791816469
     },
     {
-      "listing": "weth-usdc",
-      "seriesId": "0x587dcb6113aa23f91480569baecec5b0118d9f9a9f38889a612338d36c0e9dcf",
-      "wrapper": "0xd5d32d5Fa192b22e9E1aF645896c2eE122e174Ce",
-      "kuruMarket": "0x3fCDc9669d168f1182b4d99bbDD928DFc5415bdB",
-      "type": "CALL",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x3bc003514442533a83f19c450471f373cc421f375bc38e5251477a219591dbe2",
-      "wrapper": "0x8893D95650094ad9730fe0ea052573e548e7355E",
-      "kuruMarket": "0xC7816633D8128669451c75D24A88Bd7CA17BA4A0",
-      "type": "PUT",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x1355fce183eb14f91a6bd8504ef5cd41c78f3cdb7e265091cb469c381d2c2655",
-      "wrapper": "0x4b773153984cC31742b59d36528663F1082D958D",
-      "kuruMarket": "0x8F85ca3Ca91ACaaF6399C7D17f6f3815D6701042",
-      "type": "CALL",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x4847815c0fc955ba32e9278385dc63dd1032707761a1f7630a0289a9a0ae5dd8",
-      "wrapper": "0x12E5f174C57Ca2FD68F96bF0bd09db9056945b76",
-      "kuruMarket": "0x7419dF542665Be2E4184374F224524C4bD83C770",
-      "type": "PUT",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0xdcd41a9845f35b61491f885d02c74e47b04a9e9b76f9ee2976439d44f1c799a3",
-      "wrapper": "0x63197F81EbAE9a876517F29c42C36ECC131520bF",
-      "kuruMarket": "0x5954D16202b42Cd5678F171E728e781df48064D9",
-      "type": "CALL",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x5fad4ab31e0be5fd28df4569a7e9d066e6a1e47130fe7ffa050503f7e0726d92",
-      "wrapper": "0x611F2700E01E010008F438Ba0dF6c7683ae33761",
-      "kuruMarket": "0x209Fd4B5C2683986Ec2a8327d3FDcCd7f059024d",
-      "type": "PUT",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791820069
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x4fe414f4940c0e3f81afc1fd44b8775adf4639e8bd89c318fea6311cb6393357",
-      "wrapper": "0x03d735d8CF590d2f00d3A21e3324b4e132108863",
-      "kuruMarket": "0x0E806c9Ed31C87ebDf9D3033848008612CAa9651",
-      "type": "CALL",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0xbcfaff163eaa93c7c6caf0ebcc83c5eb5b355b36330ee8bdab04ada6e444252e",
-      "wrapper": "0xaab6a49DaD5E7B7F2c5E5617ff260dd4803949cF",
-      "kuruMarket": "0x58C9f85bD5a4aB5B2dCa32c6E1686Ee3Be0e8ddc",
-      "type": "PUT",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x3d86cc162dd4aac9c857aca7191f131f407b3dc0971bc7a3f406dec38c496c83",
-      "wrapper": "0xD10B5aB24f3a611FE90130ae71A2a04EAEf0De49",
-      "kuruMarket": "0xB65edFe5988e96ccc9B74e8a416490e13712e371",
-      "type": "CALL",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0xc1795fb3a34e2eec472cbe84852cd78b7c8134a95fca313c307ee12bfec5a6f1",
-      "wrapper": "0x5827a594693B73da6e9B27E3557f3e9F414523b6",
-      "kuruMarket": "0xD80eEd09FCaB880EEB88298ba41b2d3F2dC3CECe",
-      "type": "PUT",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x4de8bd34a45f9f59ef37e783d2ba53b4f01d45847fa00f9c6508f415e5b7d74e",
-      "wrapper": "0x54A85a2992923B557c0BA470E00Db0Be2d794A43",
-      "kuruMarket": "0x6a92B94F2Cd3e63Dd6A73f9AA8a3818E918d9683",
-      "type": "CALL",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x63c5a7dc9ae436a3b0710f3121c1f1035c3fd80ca3f6ec9d31366a151739ec59",
-      "wrapper": "0x6caD3c1031725a68158824baC1237B7Cb9342709",
-      "kuruMarket": "0xCAef2Fe32161BD191FF137A2D68286Fa367395c3",
-      "type": "PUT",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791827269
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x991dc44d86b97549bc75378ae288eb940c645ac8d4c49754b19eaccb5331db58",
-      "wrapper": "0xC9fa03D708FF9775dCf4d0fBEd1aF18C1Df27465",
-      "kuruMarket": "0xA7600760872754d3E5631FFBFd6cC45282920C8D",
-      "type": "CALL",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791834469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0xbbf832a4cd520443cdaf3bb4979b2c69ba4e9b85daa6d6d0d9769c8d0f47d580",
-      "wrapper": "0xc0E3B7920BdE14D79B6feDCE587870C10EB5b1Cf",
-      "kuruMarket": "0x2879371cECa7Ea36D45C19497dc3530BE65ed2a5",
-      "type": "PUT",
-      "strikeWad": "2400000000000000000000",
-      "expiry": 1791834469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x42f32dd32c026a419580a4bcb8bfa7d07e2f61f7958b75e2cd50509d8c3b9fe8",
-      "wrapper": "0xE52278Bd51213d843c1551C947dc4CD9283eA42B",
-      "kuruMarket": "0x6eAEaCF79478755629838Cf26cDc0154FF2D2A4f",
-      "type": "CALL",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791834469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x1bb195d764139de8bcb0b3560db07f250c43f0197fc87e895da133d1299b4819",
-      "wrapper": "0x28b8E2ef0A7b918A43b41CF57808CF12a9df6f28",
-      "kuruMarket": "0xD730AB648535DcAd6C70Ab8D9DA22339bE9a0A8d",
-      "type": "PUT",
-      "strikeWad": "2525000000000000000000",
-      "expiry": 1791834469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x66f9ad60c35a01f2162dadbf72c6d1d40138ff7cdff9b502458436867f474b7c",
-      "wrapper": "0xF60C2f6551e7C67b786E9b7b5a47C2FFAB2aaAc0",
-      "kuruMarket": "0x30d7336Af124ca49096a50ac4e4daE1F57d78EEF",
-      "type": "CALL",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791834469
-    },
-    {
-      "listing": "weth-usdc",
-      "seriesId": "0x6e3c9be9af3513990d68d3f7fe3e39d69d6929e17250f89e60ff0808862f810a",
-      "wrapper": "0xefdb8F85DbDA46E50B02032Fe15f514e287372b3",
-      "kuruMarket": "0x4566d3bbc10ADD31ADC862aDbD30cc40A38A8fCF",
-      "type": "PUT",
-      "strikeWad": "2650000000000000000000",
-      "expiry": 1791834469
-    },
-    {
       "listing": "mon-usdc",
       "seriesId": "0xad3d08b65503171184d0a8d1e4510c1c465ac91011aa3fe2e0efcd50a995252c",
       "wrapper": "0xC816eF120D7017Ea7dd1f4c2DA48b09396b993d0",
       "kuruMarket": "0x2CC1404e573DfA612091F45Cdf6bcaC739796457",
       "type": "CALL",
-      "strikeWad": "24500000000000000",
-      "expiry": 1791816799
-    },
-    {
-      "listing": "mon-usdc",
-      "seriesId": "0x4797982f5dc655501a70cc295cad20583669188c8a477616349b866db3be2b04",
-      "wrapper": "0x82B3fc3553a7a646274229075e59cC6b9BF64f75",
-      "kuruMarket": "0x886435e1319B37B6de0FdC648e4c87B1de9468Ff",
-      "type": "PUT",
       "strikeWad": "24500000000000000",
       "expiry": 1791816799
     },
@@ -247,20 +76,29 @@
     },
     {
       "listing": "mon-usdc",
-      "seriesId": "0x4dec6ffdbbcfa209a470285c99df98ef9e8c4ec161daba5b03cfe19096ab996a",
-      "wrapper": "0x70c792F6d67628bB90A6E9b278f4d205f1Ce00C6",
-      "kuruMarket": "0xA22bf23CE53630795cb36f5ac8D31Ec8443A087d",
-      "type": "PUT",
-      "strikeWad": "26000000000000000",
-      "expiry": 1791816799
-    },
-    {
-      "listing": "mon-usdc",
       "seriesId": "0x2b4528bc4bbf114d036db378b87edf0757cd6af75f0d88f45e3da4e3850c167a",
       "wrapper": "0xe4dDbd4c76645e4a18C83F3a33f7f38155A452C8",
       "kuruMarket": "0x7B73bb2b7690dEc38151c2147f02cEef2B97Efb3",
       "type": "CALL",
       "strikeWad": "27000000000000000",
+      "expiry": 1791816799
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x4797982f5dc655501a70cc295cad20583669188c8a477616349b866db3be2b04",
+      "wrapper": "0x82B3fc3553a7a646274229075e59cC6b9BF64f75",
+      "kuruMarket": "0x886435e1319B37B6de0FdC648e4c87B1de9468Ff",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791816799
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x4dec6ffdbbcfa209a470285c99df98ef9e8c4ec161daba5b03cfe19096ab996a",
+      "wrapper": "0x70c792F6d67628bB90A6E9b278f4d205f1Ce00C6",
+      "kuruMarket": "0xA22bf23CE53630795cb36f5ac8D31Ec8443A087d",
+      "type": "PUT",
+      "strikeWad": "26000000000000000",
       "expiry": 1791816799
     },
     {
@@ -273,20 +111,65 @@
       "expiry": 1791816799
     },
     {
+      "listing": "weth-usdc",
+      "seriesId": "0x587dcb6113aa23f91480569baecec5b0118d9f9a9f38889a612338d36c0e9dcf",
+      "wrapper": "0xd5d32d5Fa192b22e9E1aF645896c2eE122e174Ce",
+      "kuruMarket": "0x3fCDc9669d168f1182b4d99bbDD928DFc5415bdB",
+      "type": "CALL",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791820069
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x1355fce183eb14f91a6bd8504ef5cd41c78f3cdb7e265091cb469c381d2c2655",
+      "wrapper": "0x4b773153984cC31742b59d36528663F1082D958D",
+      "kuruMarket": "0x8F85ca3Ca91ACaaF6399C7D17f6f3815D6701042",
+      "type": "CALL",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791820069
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xdcd41a9845f35b61491f885d02c74e47b04a9e9b76f9ee2976439d44f1c799a3",
+      "wrapper": "0x63197F81EbAE9a876517F29c42C36ECC131520bF",
+      "kuruMarket": "0x5954D16202b42Cd5678F171E728e781df48064D9",
+      "type": "CALL",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791820069
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x3bc003514442533a83f19c450471f373cc421f375bc38e5251477a219591dbe2",
+      "wrapper": "0x8893D95650094ad9730fe0ea052573e548e7355E",
+      "kuruMarket": "0xC7816633D8128669451c75D24A88Bd7CA17BA4A0",
+      "type": "PUT",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791820069
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x4847815c0fc955ba32e9278385dc63dd1032707761a1f7630a0289a9a0ae5dd8",
+      "wrapper": "0x12E5f174C57Ca2FD68F96bF0bd09db9056945b76",
+      "kuruMarket": "0x7419dF542665Be2E4184374F224524C4bD83C770",
+      "type": "PUT",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791820069
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x5fad4ab31e0be5fd28df4569a7e9d066e6a1e47130fe7ffa050503f7e0726d92",
+      "wrapper": "0x611F2700E01E010008F438Ba0dF6c7683ae33761",
+      "kuruMarket": "0x209Fd4B5C2683986Ec2a8327d3FDcCd7f059024d",
+      "type": "PUT",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791820069
+    },
+    {
       "listing": "mon-usdc",
       "seriesId": "0xd002c364ac7c91a443025b3e91d88e47086d924feca7dd0626abb4ccb895a577",
       "wrapper": "0x9Ea84546D060Db1a419d7c223aB3836C4f5332C2",
       "kuruMarket": "0xbEcf8c53D1ddCE14214eDD2a12e481E94fB0d55e",
       "type": "CALL",
-      "strikeWad": "24500000000000000",
-      "expiry": 1791820399
-    },
-    {
-      "listing": "mon-usdc",
-      "seriesId": "0x29c474f027d4ba26d1587843ed9aba1c7c836e1b48face0249a2830cdec85237",
-      "wrapper": "0xeffa6a535EC1CfBa441caBB6E61e186a3a6bE0d5",
-      "kuruMarket": "0x8A17eaaDd471c9FB7eCDa4b1B7eB40e26De6e557",
-      "type": "PUT",
       "strikeWad": "24500000000000000",
       "expiry": 1791820399
     },
@@ -301,20 +184,29 @@
     },
     {
       "listing": "mon-usdc",
-      "seriesId": "0xf5d12d1604cba1e0407f6daf5f9067f17b52b2cfbf5c3563816231f5bb925e0d",
-      "wrapper": "0x86c14D92173BCeB37894327d90E2c180661C8a18",
-      "kuruMarket": "0xaDC1f9a706DD2779Fe5d16c4Eac73c08F7EFAF46",
-      "type": "PUT",
-      "strikeWad": "26000000000000000",
-      "expiry": 1791820399
-    },
-    {
-      "listing": "mon-usdc",
       "seriesId": "0x7838077839679442fbce7078858afecb4e00c74d52402290e239691b3401c61c",
       "wrapper": "0x02934986C074927aAF6F260Fd48eE496E41DF550",
       "kuruMarket": "0x24D658497271cdBD5cf6aba5416287D0C894338C",
       "type": "CALL",
       "strikeWad": "27000000000000000",
+      "expiry": 1791820399
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x29c474f027d4ba26d1587843ed9aba1c7c836e1b48face0249a2830cdec85237",
+      "wrapper": "0xeffa6a535EC1CfBa441caBB6E61e186a3a6bE0d5",
+      "kuruMarket": "0x8A17eaaDd471c9FB7eCDa4b1B7eB40e26De6e557",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791820399
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xf5d12d1604cba1e0407f6daf5f9067f17b52b2cfbf5c3563816231f5bb925e0d",
+      "wrapper": "0x86c14D92173BCeB37894327d90E2c180661C8a18",
+      "kuruMarket": "0xaDC1f9a706DD2779Fe5d16c4Eac73c08F7EFAF46",
+      "type": "PUT",
+      "strikeWad": "26000000000000000",
       "expiry": 1791820399
     },
     {
@@ -327,20 +219,65 @@
       "expiry": 1791820399
     },
     {
+      "listing": "weth-usdc",
+      "seriesId": "0x4fe414f4940c0e3f81afc1fd44b8775adf4639e8bd89c318fea6311cb6393357",
+      "wrapper": "0x03d735d8CF590d2f00d3A21e3324b4e132108863",
+      "kuruMarket": "0x0E806c9Ed31C87ebDf9D3033848008612CAa9651",
+      "type": "CALL",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791827269
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x3d86cc162dd4aac9c857aca7191f131f407b3dc0971bc7a3f406dec38c496c83",
+      "wrapper": "0xD10B5aB24f3a611FE90130ae71A2a04EAEf0De49",
+      "kuruMarket": "0xB65edFe5988e96ccc9B74e8a416490e13712e371",
+      "type": "CALL",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791827269
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x4de8bd34a45f9f59ef37e783d2ba53b4f01d45847fa00f9c6508f415e5b7d74e",
+      "wrapper": "0x54A85a2992923B557c0BA470E00Db0Be2d794A43",
+      "kuruMarket": "0x6a92B94F2Cd3e63Dd6A73f9AA8a3818E918d9683",
+      "type": "CALL",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791827269
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xbcfaff163eaa93c7c6caf0ebcc83c5eb5b355b36330ee8bdab04ada6e444252e",
+      "wrapper": "0xaab6a49DaD5E7B7F2c5E5617ff260dd4803949cF",
+      "kuruMarket": "0x58C9f85bD5a4aB5B2dCa32c6E1686Ee3Be0e8ddc",
+      "type": "PUT",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791827269
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xc1795fb3a34e2eec472cbe84852cd78b7c8134a95fca313c307ee12bfec5a6f1",
+      "wrapper": "0x5827a594693B73da6e9B27E3557f3e9F414523b6",
+      "kuruMarket": "0xD80eEd09FCaB880EEB88298ba41b2d3F2dC3CECe",
+      "type": "PUT",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791827269
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x63c5a7dc9ae436a3b0710f3121c1f1035c3fd80ca3f6ec9d31366a151739ec59",
+      "wrapper": "0x6caD3c1031725a68158824baC1237B7Cb9342709",
+      "kuruMarket": "0xCAef2Fe32161BD191FF137A2D68286Fa367395c3",
+      "type": "PUT",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791827269
+    },
+    {
       "listing": "mon-usdc",
       "seriesId": "0x3ef1d08043d1077603029867b93fc30f0131bd5e39f68efcb30280252a76ef3e",
       "wrapper": "0xE3705805D4E6D0FEf3f9B6D1953c447a32423D4D",
       "kuruMarket": "0xE4e0D0002FfE6b705b65657657319068A81bD87e",
       "type": "CALL",
-      "strikeWad": "24500000000000000",
-      "expiry": 1791827599
-    },
-    {
-      "listing": "mon-usdc",
-      "seriesId": "0xfb90d89dd393d935d84da1e6ce88eef3264214979710c8af26b4916b3f522808",
-      "wrapper": "0x5dBabd57B4cFb7e4eac7C5e1d5c4FA03B7Aa96B8",
-      "kuruMarket": "0x7b1da52Ace8C5dE8a6ebA9075Da38e5FbD05Cc22",
-      "type": "PUT",
       "strikeWad": "24500000000000000",
       "expiry": 1791827599
     },
@@ -355,20 +292,29 @@
     },
     {
       "listing": "mon-usdc",
-      "seriesId": "0x11bbe636dda24bd50ed7c6c1d03e49050b5b7b1e1a6b836407052db9e418b3ba",
-      "wrapper": "0x79D3e5eDA516B31503B1b0B0c3a6271aF9BF0D42",
-      "kuruMarket": "0x9646E7abF1A42d342EDAD5642C94c852ECb35Cfd",
-      "type": "PUT",
-      "strikeWad": "26000000000000000",
-      "expiry": 1791827599
-    },
-    {
-      "listing": "mon-usdc",
       "seriesId": "0xf10d4d2c9d00154c67199cfe94b3a6cc18216eb9f7bfef21427b444ffe93ef43",
       "wrapper": "0x9d7FfC62dA8c2178B520cdF78B78C179cb3d83f5",
       "kuruMarket": "0x60cb0d0b68F66843986baB05eF760dd26a6a49fC",
       "type": "CALL",
       "strikeWad": "27000000000000000",
+      "expiry": 1791827599
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xfb90d89dd393d935d84da1e6ce88eef3264214979710c8af26b4916b3f522808",
+      "wrapper": "0x5dBabd57B4cFb7e4eac7C5e1d5c4FA03B7Aa96B8",
+      "kuruMarket": "0x7b1da52Ace8C5dE8a6ebA9075Da38e5FbD05Cc22",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791827599
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x11bbe636dda24bd50ed7c6c1d03e49050b5b7b1e1a6b836407052db9e418b3ba",
+      "wrapper": "0x79D3e5eDA516B31503B1b0B0c3a6271aF9BF0D42",
+      "kuruMarket": "0x9646E7abF1A42d342EDAD5642C94c852ECb35Cfd",
+      "type": "PUT",
+      "strikeWad": "26000000000000000",
       "expiry": 1791827599
     },
     {
@@ -381,20 +327,65 @@
       "expiry": 1791827599
     },
     {
+      "listing": "weth-usdc",
+      "seriesId": "0x991dc44d86b97549bc75378ae288eb940c645ac8d4c49754b19eaccb5331db58",
+      "wrapper": "0xC9fa03D708FF9775dCf4d0fBEd1aF18C1Df27465",
+      "kuruMarket": "0xA7600760872754d3E5631FFBFd6cC45282920C8D",
+      "type": "CALL",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791834469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x42f32dd32c026a419580a4bcb8bfa7d07e2f61f7958b75e2cd50509d8c3b9fe8",
+      "wrapper": "0xE52278Bd51213d843c1551C947dc4CD9283eA42B",
+      "kuruMarket": "0x6eAEaCF79478755629838Cf26cDc0154FF2D2A4f",
+      "type": "CALL",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791834469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x66f9ad60c35a01f2162dadbf72c6d1d40138ff7cdff9b502458436867f474b7c",
+      "wrapper": "0xF60C2f6551e7C67b786E9b7b5a47C2FFAB2aaAc0",
+      "kuruMarket": "0x30d7336Af124ca49096a50ac4e4daE1F57d78EEF",
+      "type": "CALL",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791834469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xbbf832a4cd520443cdaf3bb4979b2c69ba4e9b85daa6d6d0d9769c8d0f47d580",
+      "wrapper": "0xc0E3B7920BdE14D79B6feDCE587870C10EB5b1Cf",
+      "kuruMarket": "0x2879371cECa7Ea36D45C19497dc3530BE65ed2a5",
+      "type": "PUT",
+      "strikeWad": "2400000000000000000000",
+      "expiry": 1791834469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x1bb195d764139de8bcb0b3560db07f250c43f0197fc87e895da133d1299b4819",
+      "wrapper": "0x28b8E2ef0A7b918A43b41CF57808CF12a9df6f28",
+      "kuruMarket": "0xD730AB648535DcAd6C70Ab8D9DA22339bE9a0A8d",
+      "type": "PUT",
+      "strikeWad": "2525000000000000000000",
+      "expiry": 1791834469
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x6e3c9be9af3513990d68d3f7fe3e39d69d6929e17250f89e60ff0808862f810a",
+      "wrapper": "0xefdb8F85DbDA46E50B02032Fe15f514e287372b3",
+      "kuruMarket": "0x4566d3bbc10ADD31ADC862aDbD30cc40A38A8fCF",
+      "type": "PUT",
+      "strikeWad": "2650000000000000000000",
+      "expiry": 1791834469
+    },
+    {
       "listing": "mon-usdc",
       "seriesId": "0xd863b6d73c62a53142bc2cf7aa13fb97e31d7b091908518c5d2295f465ddd40d",
       "wrapper": "0x13392dA42E9617c9DC77cBE8924e58707b2b8A64",
       "kuruMarket": "0x87A79cCd6a4d3fCf6f5c1A13ab2d121032e37BeA",
       "type": "CALL",
-      "strikeWad": "24500000000000000",
-      "expiry": 1791834799
-    },
-    {
-      "listing": "mon-usdc",
-      "seriesId": "0x868b45109ff1cd983b4bc86d1347804b12714c549eed8e7f5b5edf16c8ef2040",
-      "wrapper": "0xe7ef053721D7161e136e6d944BacB19880f2E35e",
-      "kuruMarket": "0x7aB9B470961920bE49f305203C867c72fAB1d446",
-      "type": "PUT",
       "strikeWad": "24500000000000000",
       "expiry": 1791834799
     },
@@ -409,20 +400,29 @@
     },
     {
       "listing": "mon-usdc",
-      "seriesId": "0x9289c96ec63b3a6949f872eba2d8e5b0a05235b9c6ec0e1b378763d79002119d",
-      "wrapper": "0x3180CDfB85915023eB0D72F73Df950322E29f8B1",
-      "kuruMarket": "0x53265c27458c5d3Aa3BcAE84312f707dceB7097c",
-      "type": "PUT",
-      "strikeWad": "26000000000000000",
-      "expiry": 1791834799
-    },
-    {
-      "listing": "mon-usdc",
       "seriesId": "0x61e1bb8ed768c5f9a05bc5ad7aabc7b2229849231d5eaabb37a7a4c8e48d9b79",
       "wrapper": "0xEa39Fb7CB47Df32A3d335D474BD1b76Da05dCc8D",
       "kuruMarket": "0xf0992b1De6D29242071251C57b6C50ffB6048eCe",
       "type": "CALL",
       "strikeWad": "27000000000000000",
+      "expiry": 1791834799
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x868b45109ff1cd983b4bc86d1347804b12714c549eed8e7f5b5edf16c8ef2040",
+      "wrapper": "0xe7ef053721D7161e136e6d944BacB19880f2E35e",
+      "kuruMarket": "0x7aB9B470961920bE49f305203C867c72fAB1d446",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791834799
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x9289c96ec63b3a6949f872eba2d8e5b0a05235b9c6ec0e1b378763d79002119d",
+      "wrapper": "0x3180CDfB85915023eB0D72F73Df950322E29f8B1",
+      "kuruMarket": "0x53265c27458c5d3Aa3BcAE84312f707dceB7097c",
+      "type": "PUT",
+      "strikeWad": "26000000000000000",
       "expiry": 1791834799
     },
     {
@@ -433,6 +433,654 @@
       "type": "PUT",
       "strikeWad": "27000000000000000",
       "expiry": 1791834799
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xeb116596b6a04110414f21a25a73cf6a6dc7c8b19e25577fdcd6c78b7e6394ca",
+      "wrapper": "0x757b2A39DD9202FdFbF9970823282A9D9Cd8f1B8",
+      "kuruMarket": "0xF3001992bF2576Ca20084cA351E6F50281E52947",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xffb207e986baaf6f07659eed92a28466d9c8ee1810787171bc282fded898cdb6",
+      "wrapper": "0x445b03e5dCcbb43E10800cEBAAf9916C547fd222",
+      "kuruMarket": "0xbdE989E05Fdc18e9015334Bb4bf37e70aD5cB5f6",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x36964d2c1c8a1d0a2ec5459ebf1c7f5b006485df6d57b64526266dad56f9f498",
+      "wrapper": "0x54abD3B151a020bd9cd8603711B5f724c4f7BD1c",
+      "kuruMarket": "0x6b9007df4F43E90cb54D2623D91cc1CEFb565Fec",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xc7a62c605da440d80774ea9198c7c5fe86bab9e8bb5f9caedb88a8e45d501bd1",
+      "wrapper": "0xeBC3684f7d0fc287a341451256F61b7a99dAc1a7",
+      "kuruMarket": "0x5064c9D5FCDAd0Db907C04E731D161493b50e1a6",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x7126b53b84262bf913f5669c4b53212a6642f27e338a9ac0addf37083d65a904",
+      "wrapper": "0x8ab758Dd040145bc5DA44b4a311A43D4D7a7e355",
+      "kuruMarket": "0xc82d179969c6f9A18AF962D4503A01717A724E56",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x8a0ff0555c87fb5070b45101d164b91e377a73c18624a1f1781eae23c43d5e15",
+      "wrapper": "0x20bc5e5A135219609cF6641a6098d7D439fE1d21",
+      "kuruMarket": "0x74F49864c84621aF3d408269b84f7dEF5EDa13A8",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1791904789
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xa6aa479db0910922163fd48e0d4f5b61be8509dbf4c04638ad578b0003a003c2",
+      "wrapper": "0x66646f713A78f7F67A783628baa594143bf38442",
+      "kuruMarket": "0x00FA874B97eb537819aFF2AE0d09BaC1163C9d83",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xaa8ade64b01403715226ec9c1c7202a1a3a7945cdc0226b4e207a69d896ed279",
+      "wrapper": "0x6232f5eef20B132fc3d17163e0c4e69A6B304390",
+      "kuruMarket": "0x9c897aEC90f0bde5F026C4cCE664199eFa64e488",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xa566fc20ab5b43c5b0c4b8f5dd6e17f047c46ff036223f6509e00082d8c25c63",
+      "wrapper": "0x3E9cD1771c7C61005CC0f720Ea05cd1cB8b9a039",
+      "kuruMarket": "0x8ebF14539649139fb2870E433aCaBd593c320A13",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x1f322d21d615f7c1f755a08cf13c9b2025c2bd7d8099390ff52fa8aae571e69a",
+      "wrapper": "0x1f7AEc551dBA3019179B8E86663D08682BFcF2c3",
+      "kuruMarket": "0xC34eeCaB4FEf96298B2f3A60deFC988753C1D15f",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xfe04cf05e27714c274f80a373f110e63310a735eaaa1a13d510f519450b33b07",
+      "wrapper": "0x68C19E089b63906A4269FBDb2b62bB28804528f7",
+      "kuruMarket": "0x71A3Afa2E9C55B957ed94E054081485fa8eC1eEc",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x4f09c085485f2c2778c9ae2d20efd5f82d107fe7ec5961297fdb31c9c0c8b445",
+      "wrapper": "0x9C62639331e6222c8dB2b390f5089A1790B1A6e1",
+      "kuruMarket": "0x74f04dC9860572E056c7C491A112fBfd9603508D",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1791905217
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x59336192e333b649ead72eaab270ce4f4e1502c4df61d5e245dea8cd9ee072fd",
+      "wrapper": "0x1dfc45F8BA909aeD922347F10F717255C7988cE6",
+      "kuruMarket": "0xDAd7FFA5Aaf01711644fDE28Ec86e7d20043c2f3",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x8f324f7b2201e416bd42f8b1bd47084b3b1c9872b8090ec67ba6da768e292851",
+      "wrapper": "0x32528a2991312bB215e1e7D51Fb6B53DEaDF9fEC",
+      "kuruMarket": "0x5bd98F7Dc724db2629502945aEA80663cebFA341",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xd4d832f1202652c3cd5e11c3539ec4b4fae03150caf9c70aefb47a9cca83b1fb",
+      "wrapper": "0xaEd30C4C7F5E85831c164f41F2e22a863793eC6C",
+      "kuruMarket": "0x394b67856FA3A7c57daD0017caD90e00dc87Daf3",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x5a34f849f49df336576240881c3b4f6c912b0951123aaca0c4b3f6e1237b26c3",
+      "wrapper": "0x97E9c32D0E4A55dE23695094EbE54fc5C7dE482C",
+      "kuruMarket": "0x14Da70539A224Eee6125534825c52577C55c6c8B",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xe5092f8ff8e84efdcb6b0fa6156d85402f379947fded58f8697f3c07f627a739",
+      "wrapper": "0x8361f730227f7b9619A5Ce5E2EeADa9f151fe779",
+      "kuruMarket": "0x36821Cff19dD5791d678a6e25524CCdEe4C234Fa",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x42f99c712586cb6374f16a4a68302e9b902013ee8925807b0973c59bd0000924",
+      "wrapper": "0xE42C01e621A188e7067E1DFB3AEE81ED1781eA3D",
+      "kuruMarket": "0xB1FC8d20c3d1dFe775DfAcB7E4Ab2f345Be2A76f",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792063189
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x140d875523531798e3c6292c96dd64560b526aabf3ff0366b417d217d6a8a11e",
+      "wrapper": "0x0Fa8cAcA16329530545858C2f92C280AE17E677f",
+      "kuruMarket": "0xB4DeAf498926CB3561A035c536B9Fb889D2F368C",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xe5042e89ba1bf15557c658bca65209fa69d1b62dadfaf69bedee55a17549adf9",
+      "wrapper": "0x79F16424De2D79B4209ac6ECA7e2041306A1a019",
+      "kuruMarket": "0x0b9D182D8A39fC2E1d1639CbFCbAb96b40304dF5",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xbb9482ecd1ad23223493028026573edf7fa7b12396e1821f413e0564c90e74db",
+      "wrapper": "0xDAD9e840e74B2426AA4e56794BA0037652ce19dA",
+      "kuruMarket": "0x77B566df2F7E8890BAbbaD637464b82eEEae3327",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x68740a5135dcfb8bd4a6891018a6d328a803d500f7f22d3fa950ff131b9617d1",
+      "wrapper": "0xe3234B5dF56B3AA30329345aFe14F758500f3E38",
+      "kuruMarket": "0x148836B5a9aE3e68D0508c45247da74d96Ba9652",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x2ba7378ef505f097ba0725e4787bb22742cf77609a42f8590548736ea59a1919",
+      "wrapper": "0x1Eac6E7343F2F2904ED5B38893e5E23e33585Bd5",
+      "kuruMarket": "0xF9113425d1471a113C26bd35042f45900c4DaB6C",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x52776dbf55c4d44663988fed91fdc693da4f2723530ce1c514d941dfa9f7c643",
+      "wrapper": "0xa1e965CC050b6e1C847E765ee28CA5Ee2f42c9fc",
+      "kuruMarket": "0x5b42F44C81B9f365D31BC30a9A398b8B1c3d70Fb",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792063617
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xb4d280032ddb0f07427ec42ad4961d77a21b46eff75c90dbfd47c6bd592959f6",
+      "wrapper": "0xc66E02d067879631bA859569b10277928136Fd5e",
+      "kuruMarket": "0x43F9850ee02e733dB6e5175499E638Ad56BF3eD6",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x36fcf83dd39f663f4567062821d05e9cd0b92ceed221c61a041645f9abac9fbb",
+      "wrapper": "0xFE7FAF56Df3fDDeEC48762cACCbC6aa2deB0A8f9",
+      "kuruMarket": "0xD34CB1Ea122A2310AbceCd8dE2EEB7f948719bF6",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x5195584edecae0d0346ae6cae2292dde7cf85ae08e7161cb3ee2f2e4861e2401",
+      "wrapper": "0x68E96f721842853df907DC76E8ab6976aD9C9056",
+      "kuruMarket": "0xa7Ebf6fA15a8b90D682B039Baa0e4aDBd22Aa1fe",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x335c725abf88b12f7d6d175ae76cad1a56a73785db95ef35c4b5e23e818fa8e4",
+      "wrapper": "0x5e3eE7870c3D82Ea054B9265a134Db3b650Ec3b4",
+      "kuruMarket": "0xE0ca418ABAFCEc4309a79EB10e42F9bE876f4EF7",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x4b6045aed35dd7f1d8a73e21f49fd461bfc447a70453fb1232c9ac1e90fdc4cd",
+      "wrapper": "0x9f156929f006F8860dF99C79D36BaCfEb45230f2",
+      "kuruMarket": "0x4B69D85536Acb1c1CcfddCD6b67a797Fa46F12E9",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x26ff83539346ca5a418333d874fc5fc150bebeca8f3668b14ef7ac429a224eef",
+      "wrapper": "0x937c7deaCc2c9BA124E6Af7d2461524c6709d8FA",
+      "kuruMarket": "0x7c169974497814f727aBD9FA2E35e1D56d5D1865",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792322389
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x887f6d55cec64be55e3724eaec61a89308bd7d091112f8a7c4357ab8669c3998",
+      "wrapper": "0x82216Ba30Be6782fefEf53bCe07A73330357DEA6",
+      "kuruMarket": "0xb56f42674aB688967f9705ACA04939785c8fa14C",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xa9be5657959c8c41e798d156ab8ae489ae39345f82f8ddf260e1e3dd881538b0",
+      "wrapper": "0xC96524569F124c4dCb45842D63c868591ebA782B",
+      "kuruMarket": "0x3657b54E88e2eC25fa1c66ae7d8FE9D9Db0d8303",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x49c74d6c02920b2954093dd7a859a5f72766d37e6f733bcbd7c3b9cadbf176f5",
+      "wrapper": "0x699345721F26842a6B3140eE8d9d7E1a4146126c",
+      "kuruMarket": "0x6547337e275F3305261ad59B4c838ee512442c80",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xe8811fcb3dfe505408411d5beff5f044f4172c992b6c84bbd773d7e502025d2e",
+      "wrapper": "0x0e6d144Cc5d40673076EE6d0caFA386391D54Ed0",
+      "kuruMarket": "0x545d2B14e789f2a5dC67D70F1e996fAAfce94c55",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x6875c902d7a9f106b5a92713d454a13669c98a7c567ad19717c03ce845391688",
+      "wrapper": "0x4a6D47b9CD3046D25fF41d5E6fE4E4B6a7635A57",
+      "kuruMarket": "0x11cA02374D9db376edfb85Ec99f343BE4653A52e",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x36d9e64d6908c543765ea36d9220d42ca8509ac248bdf0340f15fb0b691edb54",
+      "wrapper": "0x4E1c2fAF8AEC80F47E027a58657D5193cCe88558",
+      "kuruMarket": "0x4f70BC9BbF811E2a667565439406e3AA68ad8c95",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792322817
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x5450b1f4e15d4d1b46341f0a1ad818db870e4205cd0455ca8a0b2eb9eaea4963",
+      "wrapper": "0xB8A627EF391E7CCfA991e1E8581502a3A3aa9b1D",
+      "kuruMarket": "0xf5d89AFecb3d387b9c595985E792C28b314E8bdE",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x6ff8320cba610711d33c81946a79fdb3d3ee58a5a89cd3c39367a3294565f512",
+      "wrapper": "0x3a7C53abC3FF7aD08F09baCa993fBb68F53c51C3",
+      "kuruMarket": "0xF5b8fE8C3D620D67909660dbE383F982797B51D9",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x1609fb1451a73b00bd5d5514eed0f917601c5f46f6eb81ad1ce919f24b582aaa",
+      "wrapper": "0x15B44b7806ac17Cb998930ea7C029a91A4F67721",
+      "kuruMarket": "0x4E2167B61f3523e560F92AE2390FDe2F1b88cAE6",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xfeb678bd2a8b729072903470bf54590ed125445ad620d83c0ba700536e5344ed",
+      "wrapper": "0x53d15225c97fC8B5C60db0d786E7A22F8bca3e0b",
+      "kuruMarket": "0x96266C7B0BAd79ca8e5c2c52C46789BDE7e88EDc",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xd32a848f4ed26d12a3086e390a1189a51b0b88ea1d521a6e4c9289ea71f7f5d6",
+      "wrapper": "0xB42733514cB7c31891832629320FaFA105e90E49",
+      "kuruMarket": "0x4AB74a2278B6Db91475fc42e9A497c60EA07dAe7",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x60cec135fcb78324347a66b4ea40054315f30284abfa9b445fad90936d93fd4d",
+      "wrapper": "0x75d833bc2CcD0E48ca4731a168533a7c7DF555e8",
+      "kuruMarket": "0x0c53451378562E95638301a5a0EdA6ADA076e0a8",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1792495189
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x07ed80601d5b224c02894f3355a7fa7f79e55c70a8854986781cf28bcd6f9a94",
+      "wrapper": "0x5e6c2F07FB7F4D61dbd12708b7e4E70C855BCA43",
+      "kuruMarket": "0x80d7667E8e33Dc5ca2357f2a67d56348307aE65c",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xd455e7431d0b62f0958b1fec0c510da2f9dd3c34b2f39d51e9e1faf7b415ff13",
+      "wrapper": "0x52A5B6852C10f3f51FD930cA7ec4BBA666411bd5",
+      "kuruMarket": "0xBA4a24107148017DB4968547268AF56de94E7783",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xb3ece20671d929d657709f9ea738a140bdca937e0eb9bcee7b9723a4e3fae16c",
+      "wrapper": "0x07A67e1084458152F4a55bEBB8c55027F8AB7162",
+      "kuruMarket": "0x6711D8459a5CF999Fc564101771Ff098Ca108A97",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x816a22a9fd9c056e60544056112f436e3dfe7187e25e9f51c7600792af33acb6",
+      "wrapper": "0x43c1cA4d159093684e8d0c5E38982c4D51F5cbBA",
+      "kuruMarket": "0x9DF9fE825Ea6893EaA6F1b8F15f0818CBA2d93F9",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xed5409eded5df8ab0996d223c39eca3a97179ea631389d519de930c5701ad023",
+      "wrapper": "0xc03680327Ece1A43E255E9E72D7337e4B588A3FD",
+      "kuruMarket": "0xa12Ca40Aa3172eEde1d6B07894E944088b0ecce4",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x8d7bd7a598e5b208ae91cc3f3fa299da94b562b2b0fc3e0c596284b028551bf3",
+      "wrapper": "0x54501D2e4513D9eF3532F216f13A687f28327e32",
+      "kuruMarket": "0x98c940c90df29003f64268Bf510271f4672Df636",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1792495617
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xa9ef35fb9f079199db04efa6ba58fcb4bfe0e141306e3c68e28775663f6d24f9",
+      "wrapper": "0x3778eDF87EDb56B8F326078cc167831862c4D211",
+      "kuruMarket": "0x9E1326722451A022Daa7a330053A486E2Cc0aBCe",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xa32d784f829cad6c419867aab4d525d71e4921ed6946e3dc30a7f9579314ff26",
+      "wrapper": "0x7C054a68A043D64a6E7F96BB224525Ef67678F23",
+      "kuruMarket": "0xe3511d918399b6995635D76F898D9F52332Df2ab",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xe6cef63d7f9791af60136b75ad441d9d5c23c4f9a5ab18cea2ab76f0238ce8a3",
+      "wrapper": "0xd7e26d03b468079fB4CdAC160808e169e8ef2c27",
+      "kuruMarket": "0xc522ebFbb246a81d0Bc3fDF9c692319586d9Fa0e",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x6f1e747c5751e5146478030c403c9eac5e0bd4b3ee7d9293f68dcc6a446b24f7",
+      "wrapper": "0x73aA81487DC778594098a77872F50d6469870aC0",
+      "kuruMarket": "0x25f64da9F88AC083A6024FBb89C188124069f7C7",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x3bd3c4ca7e44e1c7e7d3d454a20318aeab11fe47d082f558f2063f254c17c07e",
+      "wrapper": "0x188B8570677e6BbEB22f718EEDeF1725632639b0",
+      "kuruMarket": "0xfA3002e7FCe865B2a5791e712539d5F1d6A94044",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x7bfa8c0405194ab98fa076243042f68f47e792d028735258e274e5397403f343",
+      "wrapper": "0x600CA3F61704DF6899e9869Fe4d7D6e033E2B160",
+      "kuruMarket": "0x8315b9991aEE310ADC01C9bDF23e1073FbA8346e",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1793099989
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xd81263447e321c2d5ff900e76db1335f49fb2ee5ff36ae87817a6dfcfbc29d03",
+      "wrapper": "0x1b9D5d76CDDb81Ad285c5E945F98e7255566E061",
+      "kuruMarket": "0x358d076c964e64A3D1fc6f8E3bd8006157c5A6A2",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xcb4ce345799581ee1d406e9fd22a40e7840d2f4c22817a79c986d450d8422641",
+      "wrapper": "0x9808cbB993606587185aFBf424dc93eFEa94d6c1",
+      "kuruMarket": "0xcdBDFED9A877F07A4Dbf65CB5e0483e869199cA7",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x7f531c02f9901bc3123258ad1e350d354938b275251caa9a65375d64cd8faa08",
+      "wrapper": "0xC9886ef9e50b09ab7a123EB4577D65Be43bCe280",
+      "kuruMarket": "0x987d420A63b6dDE3c6C44E3810a7Dc5c7251553B",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xd2adb9d8931bb86121ea33ce558504d283ab015be2bcba0dbd7a106d87dea845",
+      "wrapper": "0x56945cfEc02847D63BAa5D94a27699acC6e3405F",
+      "kuruMarket": "0x43d02C4f4f4393C982CA454842F5e6763FdDD19A",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xc9a56894ba3b4fe373fbb6540c8f973af09f5c3687e307de076775a0a2c676d7",
+      "wrapper": "0xD22B6a769B83168E28996B418E416efff94655e2",
+      "kuruMarket": "0x76692d5db27108de344547f2f42d8b76453dACCA",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xb4e30b0631b3c5758b0607d05c197ec865139d15092e5c970c1e41c39d6ec93d",
+      "wrapper": "0x996447b39dDC514Fc095e43666Cc45266665b8a7",
+      "kuruMarket": "0x59fcc7b68Ea47739cf515356968A2a19B8A7aeca",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1793100417
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x6eb1d8c01ae6bde8b88691309f51d0cecdefd35fdbd9de200ecff447f724f3ca",
+      "wrapper": "0x4c98B20834f9A3352dCB450efFCd3402869e1480",
+      "kuruMarket": "0xf8Ba18B5Cc65142f5c7f77AfCF6e20F25EF1da97",
+      "type": "CALL",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0xb23e05474a512eabbbc285a94f69a42e0ea8a3ea483a02b6b3141d74d4b5e665",
+      "wrapper": "0x081970e629677829cef809920Dfb15F69B4C53C0",
+      "kuruMarket": "0x33Bca644A075214919fe92fF00ce048a01F13D1a",
+      "type": "CALL",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x488e4ae7aae141588231d79bdfaad29bc4aab537ad6b065ac8d99c18b79f8299",
+      "wrapper": "0x6a5ba2C0ff18bfab574109b10B264397B7e02e2e",
+      "kuruMarket": "0x6C2aA4b360d1Ee1b9DF75559A10626314dD7977c",
+      "type": "CALL",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x4c901d2e2b07a85b5e5d3e3c1be668fba4062ece9b120c1f1d8c6ef7509c2d14",
+      "wrapper": "0x46e28aa79a418420767f4c80471D60c62a9Ecbd6",
+      "kuruMarket": "0xcBBAb5530837A164F842C9FB20251a2613C7C636",
+      "type": "PUT",
+      "strikeWad": "2375000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x51bf158a347113ab7b52017f7746e215bbe8732b391cbea11ad62903702ad27b",
+      "wrapper": "0x5a50963F5e7FA43b27cE517E2fac9b08e2E02334",
+      "kuruMarket": "0xd8bDA9E225F66DE6d5Bf7F08793A705d9421034b",
+      "type": "PUT",
+      "strikeWad": "2500000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "weth-usdc",
+      "seriesId": "0x06bb316505801faadba295e43b9c28969b058c85175a71c96702648fde6b047b",
+      "wrapper": "0xA77bA8498Cb1a48d582557C2e13B1Cd76Be78bd4",
+      "kuruMarket": "0xC096A39C1E0d4C2b179D9d90be09799f50062c5f",
+      "type": "PUT",
+      "strikeWad": "2625000000000000000000",
+      "expiry": 1794482389
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x9012a58e2699fac2a56fec88eab9fac1533f8b28a832b01d2f469aa7fb7e835b",
+      "wrapper": "0x0e3DcE91eBBbf680b31d28967074e53872c00fc8",
+      "kuruMarket": "0x91C74623A66b2B15336B8A1514ce94078C86B25E",
+      "type": "CALL",
+      "strikeWad": "23000000000000000",
+      "expiry": 1794482817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xe7d4e4034cfdec2f512cdbac142d25ec14357795e786a9bc26302913c631ee40",
+      "wrapper": "0xddC4441dF9E2478Fd6AB843E36748a655921fc5B",
+      "kuruMarket": "0x847Ab89fB0939d6Bbd00229C359633FbB40D3d2C",
+      "type": "CALL",
+      "strikeWad": "24500000000000000",
+      "expiry": 1794482817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xeb6d1a5496f50eb8a207a18fb2d40092f2f626f0c8bbc7bdf28d1587c2990b29",
+      "wrapper": "0xe236173A760aF77f291E1d97cFE6ac72d9eE501c",
+      "kuruMarket": "0x34871662BFbE257c5B2481FD5d9d69ee3a611260",
+      "type": "CALL",
+      "strikeWad": "25500000000000000",
+      "expiry": 1794482817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x552ba2d33d644fbb624df5fd20dd7e194251b8b91db4c1f54218f4c3ef18ba1e",
+      "wrapper": "0xe65102F19dC2FBb27ffF14113543385fa38Bf924",
+      "kuruMarket": "0x5E1AE9EF71b3Ad960BC8C92013064Bd520BE729c",
+      "type": "PUT",
+      "strikeWad": "23000000000000000",
+      "expiry": 1794482817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0x0848fbb5ce005af0919cfae7f6105bff4d3311c24edef80a32edf5ab56868168",
+      "wrapper": "0x1ac36a6fCc6D1d44a61ce5260F4d8A1C7B43A27f",
+      "kuruMarket": "0x11967041ca951b37a87D069961c4EA1F9AE124f2",
+      "type": "PUT",
+      "strikeWad": "24500000000000000",
+      "expiry": 1794482817
+    },
+    {
+      "listing": "mon-usdc",
+      "seriesId": "0xc7e76fc5ab14e0f91cef4a37c1414d56950fd1c54ce66c14cd7f0732b1642eb4",
+      "wrapper": "0x798Ef3f2f5b3c14D726836A8bc5c1925E36390a0",
+      "kuruMarket": "0x40c290b24121fad52435E17EAd64A328B76cdf20",
+      "type": "PUT",
+      "strikeWad": "25500000000000000",
+      "expiry": 1794482817
     }
   ]
 }
