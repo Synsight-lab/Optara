@@ -1,5 +1,5 @@
 {
-  "_comment": "Optara deployment config for monad-testnet (DEPLOYMENT.md \u00a72-\u00a73). Role addresses are the multisigs/timelock and MUST be filled in before deploying; Deploy.s.sol refuses zero addresses. pyth: verified on-chain 2026-10-07 (getUpdateFee, MON/USD feed). kuruRouter: Kuru's own testnet Router (owned by Kuru; deployProxy is permissionless here), checked by test/fork/KuruAdapter.fork.t.sol against testnet.",
+  "_comment": "Optara deployment config for monad-testnet (DEPLOYMENT.md \u00a72-\u00a73). Role addresses are the multisigs/timelock and MUST be filled in before deploying; Deploy.s.sol refuses zero addresses. pyth: verified on-chain 2026-10-07 (getUpdateFee, MON/USD feed). kuruRouter: Kuru's mainnet Router (verified on a mainnet fork, test/fork/KuruAdapter.fork.t.sol); zero on testnet, whose Kuru 'Spot V2' needs its own adapter.",
   "chainId": 10143,
   "governance": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
   "guardian": "0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd",
@@ -27,10 +27,5 @@
       "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de"
     ],
     "threshold": 3
-  },
-  "fees": {
-    "_comment": "Protocol fee rates every listing applies (FeeController.setFeeRates, governance): the writer's open fee is a share of the minted mark, the buyer's a share of the premium spent through the router. 30 bps = 0.3%, as the docs state; the contract's built-in default is 300 bps (3%).",
-    "sellerBps": 30,
-    "buyerBps": 30
   }
 }

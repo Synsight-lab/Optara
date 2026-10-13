@@ -263,31 +263,30 @@ function MarketList({
   }, [enriched, sort]);
 
   const shown = sorted.slice(0, visible);
-  // Infinite scroll: nearing the end appends the next page with a brief shimmer.
+  // Infinite scroll: nearing the end appends the next page with a brief shimmer. The observer only raises
+  // `loadingMore`; the page is appended by the effect below, so re-observing never cancels a pending page.
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || loadingMore) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]!.isIntersecting && visibleRef.current < sorted.length) {
-          setLoadingMore(true);
-          timer = setTimeout(() => {
-            setVisible((v) => Math.min(v + PAGE_SIZE, sorted.length));
-            setLoadingMore(false);
-          }, 450);
-        }
+        if (entries[0]!.isIntersecting && visibleRef.current < sorted.length) setLoadingMore(true);
       },
       { rootMargin: "320px" }
     );
     io.observe(el);
-    return () => {
-      io.disconnect();
-      if (timer) clearTimeout(timer);
-    };
+    return () => io.disconnect();
   }, [sorted.length, loadingMore, shown.length]);
+  useEffect(() => {
+    if (!loadingMore) return;
+    const timer = setTimeout(() => {
+      setVisible((v) => Math.min(v + PAGE_SIZE, sorted.length));
+      setLoadingMore(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [loadingMore, sorted.length]);
   const grouped = sort === "closest" || sort === "easiest" || sort === "cheapest" || sort === "strikeAsc" || sort === "strikeDesc";
   const needsQuotes = sort === "easiest" || sort === "cheapest";
 
