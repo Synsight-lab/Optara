@@ -5,7 +5,7 @@
  */
 import { RedstonePayload, SignedDataPackage } from "@redstone-finance/protocol";
 import { hexToString, stringToHex, type Hex } from "viem";
-import type { SpotSource } from "./pyth.ts";
+import { isRedstoneFeedId, PROVIDER_TIMEOUT_MS, type SpotSource } from "./pyth.ts";
 
 export interface RedstoneOptions {
   /** e.g. redstone-primary-prod */
@@ -16,6 +16,8 @@ export interface RedstoneOptions {
   signersPerFeed: number;
   /** Gateways tried in order. Default: RedStone's public ones. */
   gateways?: readonly string[];
+  /** Limit per gateway request (default PROVIDER_TIMEOUT_MS). */
+  timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -29,13 +31,7 @@ type GatewayPackage = {
   dataPackageId: string;
 };
 
-/** True for a RedStone feed id: a short ASCII name, zero-padded (Pyth ids are 32 random-looking bytes). */
-export function isRedstoneFeedId(id: Hex): boolean {
-  const b = id.toLowerCase().replace(/^0x/, "");
-  if (b.length !== 64 || !/0{32}$/.test(b)) return false;
-  const name = hexToString(id, { size: 32 }).replace(/\0+$/, "");
-  return /^[A-Za-z0-9_./-]{1,31}$/.test(name);
-}
+export { isRedstoneFeedId };
 
 export const redstoneFeedId = (name: string): Hex => stringToHex(name, { size: 32 });
 const feedName = (id: Hex) => hexToString(id, { size: 32 }).replace(/\0+$/, "");
@@ -98,7 +94,9 @@ export class RedstoneSource implements SpotSource {
     let last: unknown;
     for (const g of this.o.gateways ?? DEFAULT_GATEWAYS) {
       try {
-        const res = await (this.o.fetchImpl ?? fetch)(`${g}/data-packages/latest/${this.o.dataServiceId}`);
+        const res = await (this.o.fetchImpl ?? fetch)(`${g}/data-packages/latest/${this.o.dataServiceId}`, {
+          signal: AbortSignal.timeout(this.o.timeoutMs ?? PROVIDER_TIMEOUT_MS),
+        });
         if (!res.ok) throw new Error(`RedStone gateway ${g}: ${res.status}`);
         return (await res.json()) as Record<string, GatewayPackage[]>;
       } catch (e) {

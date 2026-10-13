@@ -1,4 +1,4 @@
-import { encodeAbiParameters, type Hex } from "viem";
+import { encodeAbiParameters, hexToString, type Hex } from "viem";
 
 /** A source of provider spot blobs for `OracleUpdate.spotUpdates` (ORACLES.md §2, INDEXER_AND_KEEPERS.md §2). */
 export interface SpotSource {
@@ -39,6 +39,8 @@ export interface HermesOptions {
   apiKey?: string;
   /** How the key is sent; Pyth's documentation for the keyed endpoint decides. Default `Authorization: Bearer`. */
   apiKeyHeader?: string;
+  /** Limit per request (default PROVIDER_TIMEOUT_MS). */
+  timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -49,7 +51,7 @@ export class HermesSource implements SpotSource {
   async updates(feedIds: readonly Hex[]): Promise<Hex[]> {
     if (feedIds.length === 0) return [];
     const q = feedIds.map((id) => `ids[]=${id}`).join("&");
-    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&encoding=hex`, { headers: this.headers() });
+    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&encoding=hex`, { headers: this.headers(), signal: AbortSignal.timeout(this.o.timeoutMs ?? PROVIDER_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`Hermes ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const body = (await res.json()) as { binary: { encoding: string; data: string[] } };
     if (body.binary.encoding !== "hex") throw new Error(`Hermes encoding ${body.binary.encoding}`);
@@ -61,7 +63,7 @@ export class HermesSource implements SpotSource {
     const out = new Map<string, { price: bigint; expo: number; publishTime: bigint }>();
     if (feedIds.length === 0) return out;
     const q = feedIds.map((id) => `ids[]=${id}`).join("&");
-    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&parsed=true`, { headers: this.headers() });
+    const res = await (this.o.fetchImpl ?? fetch)(`${this.o.endpoint}/v2/updates/price/latest?${q}&parsed=true`, { headers: this.headers(), signal: AbortSignal.timeout(this.o.timeoutMs ?? PROVIDER_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`Hermes ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const body = (await res.json()) as { parsed: { id: string; price: { price: string; expo: number; publish_time: number } }[] };
     for (const p of body.parsed) {
@@ -120,4 +122,56 @@ export class RestampMockPythSource implements SpotSource {
       }),
     );
   }
+}
+
+/** Default limit for one price-provider request, so a hanging provider can't hold up anything else. */
+export const PROVIDER_TIMEOUT_MS = 8_000;
+
+/** True for a RedStone feed id: a short ASCII name, zero-padded (Pyth ids are 32 random-looking bytes). */
+export function isRedstoneFeedId(id: Hex): boolean {
+  const b = id.toLowerCase().replace(/^0x/, "");
+  if (b.length !== 64 || !/0{32}$/.test(b)) return false;
+  const name = hexToString(id, { size: 32 }).replace(/\0+$/, "");
+  return /^[A-Za-z0-9_./-]{1,31}$/.test(name);
+}
+
+/**
+ * Spot updates for several products, so that one failing provider never blocks the others. Products are grouped by
+ * the providers their feeds use (Pyth, RedStone, or both); the groups are fetched at the same time, each group's
+ * shared feeds once (e.g. USDC/USD for every Pyth product). A group that fails (a provider outage) loses only its own
+ * products. Returns the blobs and the products they cover, plus the products that could not be updated and why.
+ */
+export async function spotUpdatesByProduct(
+  spot: SpotSource,
+  products: readonly { productId: Hex; feedIds: readonly Hex[] }[],
+): Promise<{ updates: Hex[]; productIds: Hex[]; failed: { productId: Hex; error: string }[] }> {
+  const groups = new Map<string, { productIds: Hex[]; feeds: Set<string>; feedIds: Hex[] }>();
+  for (const p of products) {
+    const key = [...new Set(p.feedIds.map((f) => (isRedstoneFeedId(f) ? "redstone" : "pyth")))].sort().join("+");
+    const g = groups.get(key) ?? { productIds: [], feeds: new Set<string>(), feedIds: [] };
+    g.productIds.push(p.productId);
+    for (const f of p.feedIds) {
+      if (!g.feeds.has(f.toLowerCase())) {
+        g.feeds.add(f.toLowerCase());
+        g.feedIds.push(f);
+      }
+    }
+    groups.set(key, g);
+  }
+  const list = [...groups.values()];
+  const results = await Promise.allSettled(list.map((g) => spot.updates(g.feedIds)));
+  const updates: Hex[] = [];
+  const productIds: Hex[] = [];
+  const failed: { productId: Hex; error: string }[] = [];
+  results.forEach((r, i) => {
+    const g = list[i]!;
+    if (r.status === "fulfilled") {
+      updates.push(...r.value);
+      productIds.push(...g.productIds);
+    } else {
+      const error = ((r.reason as Error)?.message ?? String(r.reason)).split("\n")[0] ?? "";
+      for (const productId of g.productIds) failed.push({ productId, error });
+    }
+  });
+  return { updates, productIds, failed };
 }

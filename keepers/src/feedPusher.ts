@@ -44,15 +44,21 @@ export class FeedPusher {
         .catch(() => 0n); // no round yet
       if (now - updatedAt >= BigInt(this.o.intervalSeconds)) due.push(f);
     }
-    if (due.length === 0) return [];
-    const ids = [...new Set(due.flatMap((f) => (f.quote ? [f.base, f.quote] : [f.base])))];
-    const px = await this.o.prices.prices(ids);
     const pushed: Address[] = [];
-    for (const f of due) {
+    // Each feed's price is fetched separately and all at once, so a provider that fails or hangs for one feed (e.g. a
+    // RedStone gateway outage) never stops or delays the others. The pushes then go out one by one (one keeper nonce).
+    const fetched = await Promise.allSettled(due.map((f) => this.o.prices.prices(f.quote ? [f.base, f.quote] : [f.base])));
+    for (const [i, f] of due.entries()) {
+      const got = fetched[i]!;
+      if (got.status === "rejected") {
+        this.ctx.log(`feeds: no price for ${f.label ?? f.feed}: ${((got.reason as Error)?.message ?? String(got.reason)).split("\n")[0]}`);
+        continue;
+      }
+      const px = got.value;
       const decimals = await client.readContract({ address: f.feed, abi: testnetPushFeedAbi, functionName: "decimals" });
       const answer = ratio(px.get(f.base.toLowerCase()), f.quote ? px.get(f.quote.toLowerCase()) : undefined, decimals);
       if (answer === undefined || answer <= 0n) {
-        this.ctx.log(`feeds: no Pyth price for ${f.label ?? f.feed}`);
+        this.ctx.log(`feeds: no price for ${f.label ?? f.feed}`);
         continue;
       }
       const r = await sendTx(this.ctx, { address: f.feed, abi: testnetPushFeedAbi, functionName: "push", args: [answer] });

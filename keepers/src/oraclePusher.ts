@@ -16,6 +16,7 @@ import {
   type OracleUpdate,
   type SeriesCatalog,
   type SpotSource,
+  spotUpdatesByProduct,
 } from "@optara/sdk";
 import { feeFor } from "./oracleFeed.ts";
 import { sendTx, type Ctx } from "./tx.ts";
@@ -82,13 +83,17 @@ export class OraclePusher {
       }
     }
     if (spotProducts.length === 0) return { spot: [], reports };
-    const feeds = new Set<Hex>();
+    const wanted: { productId: Hex; feedIds: Hex[] }[] = [];
     for (const p of spotProducts) {
       const src = await client.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [p] });
-      feeds.add(src.baseFeedId);
-      if (BigInt(src.quoteFeedId) !== 0n) feeds.add(src.quoteFeedId);
+      wanted.push({ productId: p, feedIds: BigInt(src.quoteFeedId) !== 0n ? [src.baseFeedId, src.quoteFeedId] : [src.baseFeedId] });
     }
-    u.spotUpdates = await this.o.spot.updates([...feeds]);
+    // Per product: a provider outage for one product (e.g. RedStone for MON) must not stop the others' pushes.
+    const fetched = await spotUpdatesByProduct(this.o.spot, wanted);
+    for (const f of fetched.failed) this.ctx.log(`oracle: no spot update for ${f.productId}: ${f.error}`);
+    spotProducts.splice(0, spotProducts.length, ...fetched.productIds);
+    if (spotProducts.length === 0 && u.reports.length === 0) return { spot: [], reports: [], error: "no spot update could be fetched" };
+    u.spotUpdates = fetched.updates;
     u.spotProductIds = spotProducts;
     const res = await sendTx(this.ctx, {
       address: m.proxies.OptionClearing.proxy,

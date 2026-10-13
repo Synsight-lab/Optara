@@ -25,7 +25,7 @@ import {
 import { recoverTypedDataAddress } from "viem";
 import { SURFACE_REPORT_TYPES, surfaceDomain } from "@optara/sdk";
 import { calibrate, confidenceBps, totalVarianceAt, type Calibration } from "./calibrate.ts";
-import { chooseTenors, type SeriesCatalog } from "@optara/sdk";
+import { chooseTenors, spotUpdatesByProduct, type SeriesCatalog } from "@optara/sdk";
 import type { VolInputs } from "./inputs.ts";
 import { validateReport, type ValidationContext, type Violation } from "./validate.ts";
 
@@ -285,14 +285,17 @@ export class Publisher {
     const products = [...new Set(series.map((s) => s.productId))];
     const u = emptyOracleUpdate() as { -readonly [K in keyof OracleUpdate]: any[] };
     if (this.o.spot && products.length > 0) {
-      const feeds = new Set<Hex>();
+      const wanted: { productId: Hex; feedIds: Hex[] }[] = [];
       for (const p of products) {
         const src = await c.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [p] });
-        feeds.add(src.baseFeedId);
-        if (BigInt(src.quoteFeedId) !== 0n) feeds.add(src.quoteFeedId);
+        wanted.push({ productId: p, feedIds: BigInt(src.quoteFeedId) !== 0n ? [src.baseFeedId, src.quoteFeedId] : [src.baseFeedId] });
       }
-      u.spotUpdates = await this.o.spot.updates([...feeds]);
-      u.spotProductIds = products;
+      // Per product: a provider outage for one product (e.g. RedStone for MON) must not block updates for the others.
+      // A transaction that needs the missing product then fails on-chain with a clear stale-price error.
+      const fetched = await spotUpdatesByProduct(this.o.spot, wanted);
+      if (fetched.productIds.length === 0 && fetched.failed.length > 0) throw new Error(fetched.failed[0]!.error);
+      u.spotUpdates = fetched.updates;
+      u.spotProductIds = fetched.productIds;
     }
     for (const p of products) {
       const [spotWad] = await c.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "spotPrice", args: [p] });
