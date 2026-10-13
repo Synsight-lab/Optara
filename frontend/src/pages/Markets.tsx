@@ -8,8 +8,8 @@ import { TokenIcon } from "../components/Icons.tsx";
 import { fmtDuration, fmtExpiryShort, fmtLevel, fmtPrice, seriesName } from "../lib/optara/format.ts";
 import { useQueries } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
-import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSeriesMarket, useWalletWrappers } from "../lib/optara/hooks.ts";
-import { getSeriesMarket } from "../lib/optara/reads.ts";
+import { useAccountView, useChainTime, useProductMarket, useSeriesList, useSeriesListing, useWalletWrappers } from "../lib/optara/hooks.ts";
+import { getSeriesListing } from "../lib/optara/reads.ts";
 import { breakeven, chartRange, legOf, moveNeeded, moveText, priceLevel, profitAt } from "../lib/optara/payoff.ts";
 import type { Series } from "../lib/optara/types.ts";
 import { useAccountState, useQuickGuide, useSelectedMarket, useShowMarket } from "../state.tsx";
@@ -223,8 +223,10 @@ function MarketList({
   const prefetch = base.length <= PREFETCH_CAP;
   const markets = useQueries({
     queries: (prefetch ? base : []).map((s) => ({
-      queryKey: ["seriesMarket", s.id],
-      queryFn: () => getSeriesMarket(s),
+      queryKey: ["seriesListing", s.id],
+      queryFn: () => getSeriesListing(s),
+      // settled contracts have no price to rank by
+      enabled: now === undefined || s.expiry > now,
       staleTime: 15_000,
     })),
   });
@@ -420,7 +422,7 @@ function MarketList({
 }
 
 function OptionRow({ s, spot, spotN, intent, expired, held, onOpen }: { s: Series; spot?: bigint; spotN?: number; intent: Intent; expired?: boolean; held?: boolean; onOpen(): void }) {
-  const { data: mk } = useSeriesMarket(s);
+  const { data: mk } = useSeriesListing(s, !expired);
   const leg = legOf(s);
   const quote = intent === "earn" ? mk?.quote?.bid : mk?.quote?.ask;
   // With no order on the book, show the protocol's fair value, labelled as such.

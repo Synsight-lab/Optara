@@ -51,7 +51,19 @@ function productInfo(productId: Hex, asset: Address) {
 
 const catalog = new SeriesCatalog(c, ADDR.registry, DEPLOYED_AT_BLOCK, LOG_CHUNK);
 
-async function listedSeries(): Promise<ListedSeries[]> {
+// Shared for a few seconds: the series list, the live overlays and every page read it at once.
+let listedCache: { at: number; p: Promise<ListedSeries[]> } | undefined;
+const LISTED_TTL_MS = 20_000;
+
+function listedSeries(): Promise<ListedSeries[]> {
+  if (listedCache && Date.now() - listedCache.at < LISTED_TTL_MS) return listedCache.p;
+  const p = fetchListedSeries();
+  listedCache = { at: Date.now(), p };
+  p.catch(() => (listedCache = undefined));
+  return p;
+}
+
+async function fetchListedSeries(): Promise<ListedSeries[]> {
   if (INDEXER_URL) {
     const rows = (await (await fetch(`${INDEXER_URL}/series`)).json()) as any[];
     return rows.map((r) => ({
@@ -529,6 +541,24 @@ export async function getSeriesMarket(s: Series): Promise<SeriesMarket> {
   const unit = fresh?.mark ?? price?.[0];
   const mark = unit !== undefined ? (unit * s.contractSizeWad) / WAD : undefined;
   return { mark, iv: fresh?.iv ?? iv?.[0], quote, quotes, state, ...capacity };
+}
+
+/**
+ * The light read behind market lists: fair value and volatility (from the shared live overlay, one request per
+ * product) and the best Kuru bid and ask. No write capacity or settlement state, which only the series page needs.
+ */
+export async function getSeriesListing(s: Series): Promise<Pick<SeriesMarket, "mark" | "iv" | "quote">> {
+  const [live, quotes] = await Promise.all([liveProduct(s.productId), getQuotes(s.id)]);
+  const fresh = live?.marks.get(s.id.toLowerCase());
+  const [price, iv] = fresh?.mark !== undefined
+    ? [undefined, undefined]
+    : await Promise.all([
+        c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "priceOf", args: [s.id] }).catch(() => undefined),
+        c.readContract({ address: ADDR.risk, abi: portfolioRiskManagerAbi, functionName: "ivOf", args: [s.id] }).catch(() => undefined),
+      ]);
+  const unit = fresh?.mark ?? price?.[0];
+  const quote = quotes[0]; // Kuru is the only venue
+  return { mark: unit !== undefined ? (unit * s.contractSizeWad) / WAD : undefined, iv: fresh?.iv ?? iv?.[0], quote };
 }
 
 async function getWriteCapacity(s: Series): Promise<Pick<SeriesMarket, "openInterest" | "openInterestCap" | "writeCapacity">> {

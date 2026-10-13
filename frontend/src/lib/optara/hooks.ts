@@ -12,6 +12,7 @@ import {
   getAccounts,
   getProductMarket,
   getSeriesList,
+  getSeriesListing,
   getSeriesMarket,
   getTokenBalance,
   getWalletWrappers,
@@ -21,7 +22,7 @@ import type { Series } from "./types.ts";
 const FAST = IS_LOCAL ? 3_000 : 6_000;
 const SLOW = IS_LOCAL ? 8_000 : 20_000;
 
-export const useSeriesList = () => useQuery({ queryKey: ["series"], queryFn: getSeriesList, staleTime: 15_000, refetchInterval: 30_000 });
+export const useSeriesList = () => useQuery({ queryKey: ["series"], queryFn: getSeriesList, staleTime: 30_000, refetchInterval: 60_000 });
 
 export function useSeriesMap(): Map<Hex, Series> {
   const { data } = useSeriesList();
@@ -35,6 +36,10 @@ export const useSeries = (id: Hex | undefined) => {
 
 export const useProductMarket = (productId: Hex | undefined) =>
   useQuery({ queryKey: ["product", productId], queryFn: () => getProductMarket(productId!), enabled: !!productId, refetchInterval: FAST });
+
+/** Market lists: fair value, volatility and best bid/ask, refreshed every SLOW (rows need nothing more). */
+export const useSeriesListing = (s: Series | undefined, enabled = true) =>
+  useQuery({ queryKey: ["seriesListing", s?.id], queryFn: () => getSeriesListing(s!), enabled: !!s && enabled, staleTime: 10_000, refetchInterval: SLOW });
 
 export const useSeriesMarket = (s: Series | undefined) =>
   useQuery({ queryKey: ["seriesMarket", s?.id], queryFn: () => getSeriesMarket(s!), enabled: !!s, refetchInterval: FAST });

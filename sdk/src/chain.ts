@@ -11,11 +11,15 @@ import {
   type WalletClient,
 } from "viem";
 
+/** Multicall3: the canonical deployment, live on Monad mainnet and testnet (lets viem merge reads into one eth_call). */
+const multicall3 = { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } as const;
+
 export const monadMainnet = defineChain({
   id: 143,
   name: "Monad",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: ["https://rpc.monad.xyz"] } },
+  contracts: { multicall3 },
 });
 
 export const monadTestnet = defineChain({
@@ -23,6 +27,7 @@ export const monadTestnet = defineChain({
   name: "Monad Testnet",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: ["https://testnet-rpc.monad.xyz"] } },
+  contracts: { multicall3 },
   testnet: true,
 });
 

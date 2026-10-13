@@ -5,7 +5,14 @@ import { CHAIN, MANIFEST, RPC_URL } from "../../config/network.ts";
 
 // cacheTime 0: log scans right after a transaction (e.g. a new account) must see the new head, not a cached one.
 // patientHttp: waits and retries when a public RPC rate-limits (Monad's: "requests limited to N/sec").
-export const publicClient = createPublicClient({ chain: CHAIN, transport: patientHttp(RPC_URL, 5, 250, { batch: true }), cacheTime: 0 });
+// batch.multicall: reads issued in the same tick go out as one Multicall3 eth_call, so a page of markets costs a handful
+// of RPC requests instead of hundreds (public RPCs count every call in a JSON-RPC batch against the rate limit).
+export const publicClient = createPublicClient({
+  chain: CHAIN,
+  transport: patientHttp(RPC_URL, 5, 250, { batch: true }),
+  cacheTime: 0,
+  batch: CHAIN.contracts?.multicall3 ? { multicall: { wait: 16, batchSize: 2048 } } : undefined,
+});
 export type Client = typeof publicClient;
 
 const P = MANIFEST.proxies;
