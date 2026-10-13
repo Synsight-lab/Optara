@@ -46,6 +46,14 @@ async function main() {
   const chunk = BigInt(process.env.LOG_CHUNK ?? "100");
   const from = BigInt(manifest.deployedAtBlock);
   const catalog = new SeriesCatalog(client, manifest.proxies.OptionSeriesRegistry.proxy, from, chunk);
+  // Seeding from the indexer avoids rescanning every block since deployment on each restart.
+  if (process.env.INDEXER_URL) {
+    try {
+      log(`catalog: ${await catalog.seedFromIndexer(process.env.INDEXER_URL)} series from the indexer`);
+    } catch (e) {
+      log(`catalog: indexer unavailable (${(e as Error).message}); scanning logs from the deployment block`);
+    }
+  }
   const directory: AccountDirectory = process.env.INDEXER_URL
     ? new IndexerDirectory(process.env.INDEXER_URL)
     : new LedgerLogDirectory(client, manifest.proxies.SubAccounts.proxy, from, chunk);

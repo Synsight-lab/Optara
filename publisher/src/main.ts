@@ -10,6 +10,8 @@
  *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs: hermes = Pyth (Hermes) and RedStone
  *                                                             per feed (RedStone signers from config/<network>.json); restamp: local MockPyth
  *   HERMES_URL, HERMES_API_KEY, HERMES_API_KEY_HEADER         for hermes
+ *   INDEXER_URL                                               optional: load listed series from the indexer API at
+ *                                                             start instead of scanning logs from the deployment block
  *   INTERVAL_SECONDS (60; MON products: 30), PORT (8790), HOST (0.0.0.0; "::" for IPv6 private networks), LOG_FILE
  */
 import { readFileSync } from "node:fs";
@@ -87,6 +89,13 @@ async function main() {
 
   const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
   const catalog = new SeriesCatalog(client, registry, BigInt(manifest.deployedAtBlock), BigInt(process.env.LOG_CHUNK ?? "100"));
+  if (process.env.INDEXER_URL) {
+    try {
+      log(`catalog: ${await catalog.seedFromIndexer(process.env.INDEXER_URL)} series from the indexer`);
+    } catch (e) {
+      log(`catalog: indexer unavailable (${(e as Error).message}); scanning logs from the deployment block`);
+    }
+  }
   const publisher = new Publisher({
     client,
     manifest,

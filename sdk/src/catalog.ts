@@ -32,6 +32,40 @@ export class SeriesCatalog {
     this.next = fromBlock;
   }
 
+  /**
+   * Loads every series from the indexer API (`/series`) and continues the log scan from the indexer's progress block,
+   * so a restart does not rescan from the deployment block (hundreds of thousands of blocks, 100 per request, on a
+   * rate-limited public RPC: tens of minutes with no series known). Returns how many series were loaded.
+   */
+  async seedFromIndexer(indexerUrl: string, fetchImpl: typeof fetch = fetch): Promise<number> {
+    const get = async (path: string) => {
+      const res = await fetchImpl(`${indexerUrl.replace(/\/$/, "")}${path}`, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) throw new Error(`indexer ${path}: ${res.status}`);
+      return res.json();
+    };
+    const [rows, system] = (await Promise.all([get("/series"), get("/system")])) as [any[], { indexer?: { progressBlock?: number | string } }];
+    const progress = BigInt(system.indexer?.progressBlock ?? 0);
+    if (progress === 0n) throw new Error("indexer has not processed any block yet");
+    for (const r of rows) {
+      this.series.set(r.id as Hex, {
+        seriesId: r.id,
+        groupId: r.group_id,
+        productId: r.productId,
+        underlying: r.underlying,
+        settlementAsset: r.settlementAsset,
+        settlementOracleConfigId: r.settlementOracleConfigId,
+        wrapper: r.wrapper,
+        optionType: Number(r.optionType),
+        strikeWad: BigInt(r.strikeWad),
+        contractSizeWad: BigInt(r.contractSizeWad),
+        expiry: BigInt(r.expiry),
+      });
+    }
+    // Series created after the indexer's progress block are picked up by the next sync().
+    if (progress + 1n > this.next) this.next = progress + 1n;
+    return rows.length;
+  }
+
   async sync(): Promise<void> {
     const head = await this.client.getBlockNumber();
     while (this.next <= head) {
