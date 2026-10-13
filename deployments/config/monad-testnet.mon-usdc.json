@@ -36,7 +36,7 @@
     false,
     false
   ],
-  "minSellerFee": 100000,
+  "minSellerFee": 1000,
   "insuranceSeed": 0,
   "keeperReserveMin": 0,
   "bootstrapFromFees": true,

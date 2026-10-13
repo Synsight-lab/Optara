@@ -9,7 +9,7 @@ import { cx } from "./ui.tsx";
 import { useTheme } from "../state.tsx";
 
 export const SOCIALS = {
-  x: { label: "X (Twitter)", handle: "@0Xoptara", href: "https://x.com/0Xoptara" },
+  x: { label: "X (Twitter)", handle: "@Oxoptara", href: "https://x.com/Oxoptara" },
 };
 
 export function XIcon(props: SVGProps<SVGSVGElement>) {

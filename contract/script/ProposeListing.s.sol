@@ -90,6 +90,14 @@ contract ProposeListing is Script, ListingCalls {
         p.maxReportLifetime = uint32(vm.parseJsonUint(json, ".maxReportLifetime")); // seconds; the oracle bounds it
         p.riskSetId = keccak256(bytes(vm.parseJsonString(json, ".riskSet")));
         p.shortCapUnderlyingWad = vm.parseJsonUint(json, ".shortCapUnderlyingWad");
+        // fees {sellerBps, buyerBps} in the network config: the protocol fee rates every listing (re)applies
+        p.setFeeRates = vm.keyExistsJson(networkConfig, ".fees");
+        if (p.setFeeRates) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            p.sellerFeeBps = uint16(vm.parseJsonUint(networkConfig, ".fees.sellerBps"));
+            // forge-lint: disable-next-line(unsafe-typecast)
+            p.buyerFeeBps = uint16(vm.parseJsonUint(networkConfig, ".fees.buyerBps"));
+        }
         // spotSource "redstone": RedStone pull feeds (names, e.g. "MON") verified against the network's RedStone signers
         p.redstoneSpot = vm.keyExistsJson(json, ".spotSource") && _is(vm.parseJsonString(json, ".spotSource"), "redstone");
         if (p.redstoneSpot) {

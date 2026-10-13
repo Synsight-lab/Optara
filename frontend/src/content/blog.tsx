@@ -236,7 +236,7 @@ export const POSTS: BlogPost[] = [
           starting with <A to="/docs/introduction">the introduction</A>.
         </P>
         <P>
-          Follow <A to="https://x.com/0Xoptara">@0Xoptara</A> on X for new markets and updates.
+          Follow <A to="https://x.com/Oxoptara">@Oxoptara</A> on X for new markets and updates.
         </P>
       </>
     ),

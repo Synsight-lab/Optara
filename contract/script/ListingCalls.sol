@@ -43,6 +43,9 @@ abstract contract ListingCalls is OptaraDeploy {
         uint256 shortCapUnderlyingWad; // product short cap in underlying units (PARAMETERS.md §4)
         bytes32 pythBaseFeed; // DIRECT: underlying/asset; DERIVED: underlying/USD (RedStone: bytes32 of its feed name)
         bytes32 pythQuoteFeed; // DERIVED: asset/USD; zero for DIRECT (RedStone: bytes32 of its feed name)
+        bool setFeeRates; // network config sets the protocol fee rates (else the deployment's stay)
+        uint16 sellerFeeBps; // writer's open fee, of the minted mark
+        uint16 buyerFeeBps; // buyer's fee, of the premium spent through the router
         bool redstoneSpot; // spot from RedStone pull feeds instead of Pyth
         address[] redstoneSigners; // RedStone signers the oracle accepts (redstoneSpot only)
         uint8 redstoneThreshold; // distinct signers a feed needs (redstoneSpot only)
@@ -62,7 +65,7 @@ abstract contract ListingCalls is OptaraDeploy {
     function _listingCalls(Deployment memory d, ListingParams memory p) internal view returns (Call[] memory calls) {
         bytes32 productId = d.registry.computeProductId(p.underlying, p.asset);
         bytes32 cfgId = d.settlementOracle.computeConfigId(p.settlement);
-        calls = new Call[](16 + p.publishers.length);
+        calls = new Call[](17 + p.publishers.length);
         uint256 n;
         if (p.approveAsset) {
             calls[n++] = Call(
@@ -139,6 +142,14 @@ abstract contract ListingCalls is OptaraDeploy {
             abi.encodeCall(SettlementOracle.setConfigApproved, (cfgId, true)),
             "approve settlement config"
         );
+        if (p.setFeeRates) {
+            calls[n++] = Call(
+                "governance",
+                address(d.fees),
+                abi.encodeCall(FeeController.setFeeRates, (p.sellerFeeBps, p.buyerFeeBps)),
+                "fee rates"
+            );
+        }
         calls[n++] = Call(
             "governance",
             address(d.fees),
