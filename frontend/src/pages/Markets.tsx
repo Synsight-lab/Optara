@@ -125,13 +125,15 @@ function MarketHero({ product }: { product: Series }) {
   const { data: m } = useProductMarket(product.productId);
   return (
     <section className="card rise overflow-hidden p-4">
-      <div className="flex items-center gap-2.5">
-        <TokenIcon symbol={product.underlyingSymbol} className="h-10 w-10" />
+      {/* Phones: name, spot and the + button on one row. In the 300px desktop sidebar the spot moves to its own row,
+          so the name is never cut off. */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-3">
+        <TokenIcon symbol={product.underlyingSymbol} className="h-10 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h1 className="font-display truncate text-lg font-bold tracking-tight">{product.underlyingSymbol} options</h1>
-          <p className="truncate text-xs text-muted">Cash-settled in {product.assetSymbol}</p>
+          <h1 className="font-display truncate text-lg font-bold tracking-tight lg:whitespace-normal">{product.underlyingSymbol} options</h1>
+          <p className="truncate text-xs text-muted lg:whitespace-normal">Cash-settled in {product.assetSymbol}</p>
         </div>
-        <div className="text-right">
+        <div className="text-right lg:order-last lg:basis-full lg:text-left">
           <div className="text-[11px] text-muted">Spot</div>
           <div className="num font-display whitespace-nowrap text-xl font-bold leading-none tracking-tight">{m ? `$${fmtLevel(m.spotWad)}` : <Skeleton className="h-7 w-20" />}</div>
         </div>

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Card, CopyButton, Pill, Row, Skeleton, Term } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
-import { INDEXER_URL, MANIFEST, PUBLISHER_URL, RPC_URL } from "../config/network.ts";
+import { INDEXER_URL, MANIFEST, PUBLISHER_URL } from "../config/network.ts";
 import { fmtDuration, fmtLevel, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
 import { hasAnyTrustedRole } from "../lib/optara/roles.ts";
@@ -211,7 +211,6 @@ function Services() {
       }
     >
       <div className="space-y-2 text-xs">
-        <Row label="Network RPC" value={<span className="num text-muted truncate max-w-[200px]">{RPC_URL}</span>} />
         <Row
           label="Volatility publisher"
           value={<Pill tone={tone(publisher.data)}>{publisher.data ?? "verifying…"}</Pill>}
