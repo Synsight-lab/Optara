@@ -150,7 +150,10 @@ export function SellValueNotice({
 }) {
   const { under } = sellCheck(qty, proceeds, decimals, mark);
   if (!qty || qty === 0n || proceeds === undefined || under === undefined) return null;
-  const received = Number(proceeds) / 10 ** decimals / (Number(qty) / 1e18);
+  const qtyN = Number(qty) / 1e18;
+  const totalReceived = Number(proceeds) / 10 ** decimals;
+  const received = totalReceived / qtyN;
+  const totalFair = (Number(mark) / 1e18) * qtyN;
   const tone = under > OVERPAY_CONFIRM ? "border-bad/40 bg-bad/8" : under > OVERPAY_WARN ? "border-warn/40 bg-warn/8" : "border-line bg-surface-2/60";
 
   return (
@@ -167,7 +170,7 @@ export function SellValueNotice({
         {under <= 0
           ? `You receive ${Math.abs(under * 100).toFixed(under < -0.1 ? 0 : 1)}% above fair value.`
           : under > OVERPAY_WARN
-          ? `You receive ${(under * 100).toFixed(0)}% below fair value. This sale fills the current bids, and buyers are bidding below Optara's mark right now. A smaller amount, or a different strike or expiry, may price better.`
+          ? `The best bid is ${(under * 100).toFixed(0)}% below fair value. Selling ${fmtQty(qty)} option${qtyN === 1 ? "" : "s"} now gets you ${usd(totalReceived)} in total, while ${qtyN === 1 ? "it is" : "they are"} worth about ${usd(totalFair)} at fair value. To get a fairer price, place an ask near fair value on the order book instead.`
           : `${(under * 100).toFixed(1)}% below fair value: order-book spread plus fees.`}
       </p>
     </div>

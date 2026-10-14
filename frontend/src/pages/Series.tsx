@@ -976,6 +976,22 @@ function KuruLimitPanel({
   const roundedQty = sizeUnits !== undefined && m ? (sizeUnits * WAD) / m.sizePrecision : undefined;
   const quoteNeeded = roundedQty !== undefined && priceUnits !== undefined && m ? (priceUnits * roundedQty * 10n ** BigInt(s.assetDecimals)) / m.pricePrecision / WAD + 1n : undefined;
   const grossValue = quoteNeeded !== undefined && quoteNeeded > 0n ? quoteNeeded - 1n : undefined;
+  // How far the limit price is from Optara's fair value. Kuru prices are per option, so a price far below fair value
+  // is usually a total typed as a per-option price; say so with the totals before the order is placed.
+  const markN = mark !== undefined && mark > 0n ? Number(mark) / 1e18 : undefined;
+  const priceN = price !== undefined ? Number(price) / 1e18 : undefined;
+  const qtyN = qty !== undefined ? Number(qty) / 1e18 : undefined;
+  const offFair = markN !== undefined && priceN !== undefined && priceN > 0 ? priceN / markN - 1 : undefined;
+  const fairWarning =
+    offFair === undefined || markN === undefined || priceN === undefined || Math.abs(offFair) < 0.25
+      ? undefined
+      : side === "buy"
+      ? offFair < 0
+        ? `Your bid is ${Math.round(-offFair * 100)}% below fair value (${fmtPrice(mark!)} per option), so it may never fill. Prices are per option: ${qtyN !== undefined ? `${fmtQty(qty!)} options at fair value cost about ${usd(qtyN * markN)} in total, not ${usd(qtyN * priceN)}.` : "enter the price of one option, not the total."}`
+        : `Your bid is ${Math.round(offFair * 100)}% above fair value (${fmtPrice(mark!)} per option). You would pay ${qtyN !== undefined ? usd(qtyN * priceN) : "more"} for options worth about ${qtyN !== undefined ? usd(qtyN * markN) : "less"}.`
+      : offFair < 0
+      ? `Your ask is ${Math.round(-offFair * 100)}% below fair value (${fmtPrice(mark!)} per option). Prices are per option: ${qtyN !== undefined ? `${fmtQty(qty!)} options would sell for ${usd(qtyN * priceN)} in total, while they are worth about ${usd(qtyN * markN)}.` : "enter the price of one option, not the total."}`
+      : `Your ask is ${Math.round(offFair * 100)}% above fair value (${fmtPrice(mark!)} per option), so it may take a while to fill.`;
   const missingQuote = side === "buy" && quoteNeeded !== undefined && m ? (quoteNeeded > m.quoteBalance ? quoteNeeded - m.quoteBalance : 0n) : 0n;
   const missingOptions = side === "sell" && qty !== undefined && m ? (qty > m.optionBalance ? qty - m.optionBalance : 0n) : 0n;
   const tooMuchCash = missingQuote > 0n && walletCash !== undefined && missingQuote > walletCash;
@@ -1078,9 +1094,12 @@ function KuruLimitPanel({
                   : priceBad
                     ? "Price is outside Kuru's supported range."
                     : mark !== undefined
-                      ? `Fair value ${fmtPrice(mark)} ${s.assetSymbol}${priceStep !== undefined ? ` (price step ${fmtPrice(priceStep)})` : ""}.`
+                      ? `Price of one option. Fair value ${fmtPrice(mark)} ${s.assetSymbol}${priceStep !== undefined ? ` (price step ${fmtPrice(priceStep)})` : ""}.`
                       : "Set the premium per option."}
               </div>
+              {fairWarning && !belowStep && !priceBad && (
+                <div className="mt-2 rounded-xl border border-warn/40 bg-warn/8 px-3 py-2 text-[13px] font-semibold text-warn">{fairWarning}</div>
+              )}
             </label>
 
             <label className="block min-w-0">
@@ -1163,7 +1182,7 @@ function KuruLimitPanel({
           </div>
           <div className="grid gap-2 md:grid-cols-3">
             <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
-              <div className="text-xs font-semibold text-muted">{side === "buy" ? "Reserve on Kuru" : "Proceeds if filled"}</div>
+              <div className="text-xs font-semibold text-muted">{side === "buy" ? "You pay in total (held on Kuru until filled)" : "You receive in total if filled"}</div>
               <div className="num mt-1 break-words text-[15px] font-semibold leading-snug text-ink">
                 {side === "buy"
                   ? quoteNeeded !== undefined
