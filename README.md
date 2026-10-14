@@ -34,13 +34,14 @@
 11. [Governance and security](#11-governance-and-security)
 12. [Capital efficiency and composability](#12-capital-efficiency-and-composability)
 13. [User guide](#13-user-guide)
-14. [Risks every user should understand](#14-risks-every-user-should-understand)
-15. [Troubleshooting and FAQ](#15-troubleshooting-and-faq)
-16. [Deployments](#16-deployments)
-17. [Repository layout](#17-repository-layout)
-18. [Developer guide](#18-developer-guide)
-19. [Operations: markets, services and hosting](#19-operations-markets-services-and-hosting)
-20. [Documentation index](#20-documentation-index)
+14. [How to test Optara from the app](#14-how-to-test-optara-from-the-app)
+15. [Risks every user should understand](#15-risks-every-user-should-understand)
+16. [Troubleshooting and FAQ](#16-troubleshooting-and-faq)
+17. [Deployments](#17-deployments)
+18. [Repository layout](#18-repository-layout)
+19. [Developer guide](#19-developer-guide)
+20. [Operations: markets, services and hosting](#20-operations-markets-services-and-hosting)
+21. [Documentation index](#21-documentation-index)
 
 ---
 
@@ -779,11 +780,179 @@ flowchart LR
 
 Keepers (`keepers/`) refresh oracles, push testnet settlement feeds, finalize groups and settle accounts; all of it
 is permissionless and rewarded from the keeper reserve. Publishers (`publisher/`) sign volatility surfaces and serve
-fresh oracle updates to the app. See [§19](#19-operations-markets-services-and-hosting).
+fresh oracle updates to the app. See [§20](#20-operations-markets-services-and-hosting).
 
 ---
 
-## 14. Risks every user should understand
+## 14. How to test Optara from the app
+
+App: **<https://optara-2et.pages.dev>** (Monad testnet). Everything below happens in the browser; no code is needed.
+Allow about 20 minutes for the main flows, plus waiting time if you also want to test an expiry.
+
+### 14.1 Before you start
+
+1. Install an EVM wallet such as MetaMask or Rabby. **Two wallets** (or two accounts in one wallet) are best: one to
+   write and sell options, one to buy them, because an order cannot trade against your own order.
+2. Get testnet MON for gas from the Monad faucet: <https://faucet.monad.xyz>. About 1 MON per wallet is plenty.
+3. Get testnet USDC from Circle's faucet: <https://faucet.circle.com>, choose **Monad Testnet**. Optara settles in this
+   token (`0x534b2f3A21130d7a60830c2Df862319e593943A3`). 20 to 50 USDC per wallet is enough.
+4. Open the app and click **Connect** in the top bar. If your wallet is on another network, the app asks it to switch
+   to Monad testnet (chain ID 10143); approve the switch.
+
+### 14.2 Step 1: Explore (no wallet needed)
+
+1. Open **Markets** (`/app/markets`). Use the market picker to switch between WETH/USDC and MON/USDC; the live spot
+   price and its source are shown next to it.
+2. Choose **Up** (buy calls), **Down** (buy puts) or **Earn** (write options). Each row shows the strike, the price per
+   option (the best Kuru ask, or the fair value when the book is empty) and how far the price must move for a buyer to
+   profit. Scroll down: more markets load automatically.
+3. Open any option. Check the price, fair value, annual volatility and status at the top.
+4. In the **Expiry simulator**, drag the chart or tap **Today**, **+5%**, **+10%** or **Breakeven**. Confirm the
+   breakeven: for a call it is the strike plus the premium divided by the contract size (1 WETH, or 100 MON per
+   option).
+5. Open **System status** (`/app/system`) to see live prices, volatility data, reserves, scheduled upgrades and every
+   contract address.
+
+### 14.3 Step 2: Open a margin account (writer wallet)
+
+1. Go to **Portfolio** (`/app/portfolio`) and find **Open your margin account**.
+2. Enter a first deposit, for example 20 USDC, and click **Create account & deposit**. Approve USDC when the wallet asks,
+   then confirm the transaction.
+3. Check that the account shows your cash and a healthy (green) status.
+
+### 14.4 Step 3: Write an option and sell it (writer wallet)
+
+1. Go to **Markets**, choose **Earn**, and open an option that expires in a few days. A WETH option is the easiest to
+   start with.
+2. On the **Earn** tab, enter **Options to write**, for example 0.1.
+3. Read the preview: the Optara fee, your margin after the trade, and whether the opening check passes. If the button
+   is disabled, the reason is shown under it (for example not enough margin).
+4. If someone is bidding, you can write and sell in one step (**Write and sell for …**). Otherwise click **Write**.
+   Confirm in the wallet.
+5. Check the result: Portfolio now shows a written (short) position, and the option tokens are in your wallet.
+
+### 14.5 Step 4: Post your option on Kuru (writer wallet)
+
+1. On the same option, open the **Trade** tab and find the **Kuru limit order** panel.
+2. Choose **Sell / Ask**, set a **Limit price** (it must sit on the book's price step, shown under the field; start
+   near the fair value) and an **Order size** up to the tokens you hold.
+3. Click **Place ask on Kuru**. The app deposits the tokens into Kuru's account and places the order; confirm each
+   wallet step.
+4. Your ask appears in the order book and under **My Kuru orders** (Active).
+
+### 14.6 Step 5: Buy the option (buyer wallet)
+
+1. Switch to the second wallet and open the same option's **Trade** tab.
+2. Choose **Buy now** and enter the **Premium to spend**, for example 5 USDC.
+3. Read the preview: options received, Optara's fee and Kuru's fee shown separately, and the price compared with fair
+   value.
+4. Click **Buy**. Approve USDC, then confirm. Any premium that is not used is refunded exactly.
+5. Check: the option tokens are in the buyer's wallet. In the writer wallet, **My Kuru orders** now shows the ask as
+   Filled, and the premium can be withdrawn from Kuru with the **Withdraw** button.
+
+Alternative: the buyer can instead place a bid with **Place bid on Kuru**, and the writer can sell into it with
+**Sell now**.
+
+### 14.7 Step 6: Use the Kuru order book
+
+Every option has its own Kuru order book, and you can use all of it without leaving Optara. Kuru's own fees apply;
+limit orders pay no Optara fee.
+
+1. **Open the book:** on an option's **Trade** tab, click **Open Kuru order book**. The page shows the live bids
+   (buyers, green) and asks (sellers, red) with their sizes, the best bid, the best ask and the spread, next to
+   Optara's fair value. Use **Both**, **Bids** or **Asks** to filter the list.
+2. **Trade at market from the book:** click **Buy best ask** or **Sell into bids**, or click any price level in the
+   book. You land on the Buy now or Sell now ticket, which trades through Optara's router with slippage and fee
+   limits.
+3. **Place a limit order:** in the **Kuru limit order** panel, choose **Buy / Bid** or **Sell / Ask**, then enter a
+   **Limit price** in USDC per option and an **Order size**. The price must sit on the book's price step, which is
+   shown under the field together with the fair value. A bid needs USDC and an ask needs option tokens in your wallet.
+4. Click **Place bid on Kuru** or **Place ask on Kuru**. The app first deposits what the order needs (USDC for a bid,
+   option tokens for an ask) into your Kuru account, then places the order; confirm each wallet step.
+5. Follow your orders under **My Kuru orders**, filtered by **Active**, **Filled** or **All**. A partly filled order
+   shows how much has filled.
+6. Cancel with **Cancel order** (or **Cancel the unfilled part** for a partly filled order), or cancel everything with
+   **Cancel all open orders**.
+7. **Take your funds back:** **Ready to withdraw from Kuru** lists what is waiting in your Kuru account: the USDC from
+   filled asks and cancelled bids, and the option tokens from filled bids or cancelled asks. Click **Withdraw … USDC**
+   or **Withdraw … options** to move them to your wallet.
+8. **Check the result:** with two wallets, place a bid from one and an ask at the same price from the other, and watch
+   them fill each other. Tokens bought this way must be withdrawn from Kuru before they can be moved into a margin
+   account or redeemed.
+
+### 14.8 Step 7: Manage positions
+
+1. **Hedge** (buyer or writer): on the **Position** tab, use **Move into account** to move wallet option tokens into a
+   margin account. A long option held there offsets shorts on the same asset; compare the margin before and after.
+2. **Close a short** (writer): buy back the same option's tokens, then use **Close written options** on the
+   **Position** tab. The short and the tokens cancel out and the margin is released.
+3. **Move a long back out:** **Move to wallet** turns an option in the account back into tokens (only if the account
+   stays healthy).
+4. **Cash:** in Portfolio, use **Add cash** or **Withdraw cash**. Withdrawals are limited to what keeps the account
+   above its required margin.
+5. **Kuru orders:** under **My Kuru orders**, cancel an open order with **Cancel order**, then withdraw the released
+   funds or tokens from Kuru.
+
+### 14.9 Step 8: Test hedging (portfolio margin)
+
+This shows the core of Optara: a hedge held in the same margin account lowers the margin a short needs. You can do it
+with one wallet and two margin accounts.
+
+1. In Portfolio, use **Create Another Account** so the wallet has two margin accounts, A and B. Deposit about 20 USDC
+   into each.
+2. Pick one WETH expiry a few days out and two call strikes on it, for example the 2,500 call and the higher 2,625 call
+   (strikes listed on testnet today: 2,375, 2,500 and 2,625). Any two calls on the same asset and expiry work; the
+   higher strike is the hedge.
+3. In account A, write 0.1 of the lower-strike call (Step 3, without selling). Note account A's required margin in
+   Portfolio.
+4. Get 0.1 of the higher-strike call into your wallet. With one wallet: in account B, write 0.1 of the higher-strike
+   call; the tokens land in your wallet. With two wallets, you can instead buy them on Kuru, or have the other wallet
+   write them and send the tokens to you, which also shows that options are plain tokens.
+5. Open the higher-strike call, go to the **Position** tab, and use **Move into account** to move the 0.1 tokens into
+   account A.
+6. Compare account A's required margin before and after. Account A now holds a call spread (short the lower strike,
+   long the higher one), so its worst loss is capped at the difference between the strikes. Its required margin drops
+   sharply, and its free margin rises. In the protocol's own example, a naked call needing about 3,418 USDC of margin
+   needs about 438 USDC once hedged.
+7. Undo it to see the opposite: use **Move to wallet** on the hedge. The margin requirement rises again, and the move is
+   refused if the account would no longer cover its margin without the hedge.
+
+Hedging outside Optara works too: if you hold WETH or MON in your wallet, buying a put on the **Down** tab protects it.
+The put pays out at expiry if the price falls below the strike. A put in your wallet does not change any margin
+account, since only options held inside an account count as hedges.
+
+### 14.10 Step 9: Expiry, settlement and payout
+
+1. Pick an option with a short expiry (or write one when short expiries are listed) and hold a position through
+   expiry.
+2. After expiry, open **Settlement** (`/app/settlement`), or the option's **Settle** tab, which shows each step and its
+   status.
+3. Keepers normally do the next steps automatically. You can also do them yourself: **Fix the settlement price**, then
+   **Settle** the accounts. The recovery ratio is then set (100% when every writer could pay).
+4. Holders click **Redeem tokens for cash** and receive the payout in USDC. Accounts that are owed money use **Claim**.
+   Writers see what they owed deducted from their account cash. Tokens left in Kuru's account must be withdrawn to the
+   wallet first.
+
+### 14.11 Step 10: Liquidations (optional)
+
+Open **Liquidations** (`/app/liquidations`) to see accounts below their maintenance margin and running auctions. When
+an account is liquidatable, anyone can click **Start auction** and take a slice of its positions with their own margin
+account. To see one, a writer can write as much as the margin allows and wait for the price to move against them.
+
+### 14.12 What to expect and quick fixes
+
+| You see | What to do |
+|---|---|
+| A price shows **Delayed** | The stored price is old. Trades still work because every transaction brings a fresh price. MON prices can be delayed for short periods while its price provider rotates gateways. |
+| **Requests limited** | The public RPC is busy. Wait a few seconds; the app retries automatically. |
+| **Wrong network** | Accept the wallet's prompt to switch to Monad testnet. |
+| **Nothing to buy** | The book has no asks. Place a bid, or write and post the option yourself (steps 3 and 4). |
+| **Price below the step** | Kuru books have a minimum price step; use a price on the step shown in the panel. |
+| **Write disabled** | The reason is shown under the button, usually not enough margin. Add cash or write fewer options. |
+
+---
+
+## 15. Risks every user should understand
 
 - **Writers can be liquidated** if the market moves against them; liquidation costs a discount and a penalty.
 - **Buyers can receive less than 100%** of the payoff if bad debt exceeds the insurance fund (the recovery ratio).
@@ -795,7 +964,7 @@ fresh oracle updates to the app. See [§19](#19-operations-markets-services-and-
 
 ---
 
-## 15. Troubleshooting and FAQ
+## 16. Troubleshooting and FAQ
 
 | You see | Meaning | What to do |
 |---|---|---|
@@ -817,9 +986,9 @@ work without any venue.
 
 ---
 
-## 16. Deployments
+## 17. Deployments
 
-### 16.1 Monad testnet (live)
+### 17.1 Monad testnet (live)
 
 | | |
 |---|---|
@@ -855,7 +1024,7 @@ Core proxies (use these addresses):
 Testnet settlement feeds (`TestnetPushFeed`): WETH/USDC `0x575AeAeF1A3E1670bc25cC205184b6aC7ad3075f`, MON/USDC
 `0x31FA8a075D4adAd7390a6bA8152B3F38361807A2`.
 
-### 16.2 Monad mainnet (configured, not deployed)
+### 17.2 Monad mainnet (configured, not deployed)
 
 | | |
 |---|---|
@@ -867,7 +1036,7 @@ Testnet settlement feeds (`TestnetPushFeed`): WETH/USDC `0x575AeAeF1A3E1670bc25c
 
 ---
 
-## 17. Repository layout
+## 18. Repository layout
 
 | Folder | What it is |
 |---|---|
@@ -885,13 +1054,13 @@ Testnet settlement feeds (`TestnetPushFeed`): WETH/USDC `0x575AeAeF1A3E1670bc25c
 
 ---
 
-## 18. Developer guide
+## 19. Developer guide
 
-### 18.1 Prerequisites
+### 19.1 Prerequisites
 
 Node ≥ 22.15, pnpm 10, Foundry, Python 3 (reference model), and Docker for the indexer's Postgres in local runs.
 
-### 18.2 Run everything locally
+### 19.2 Run everything locally
 
 ```bash
 pnpm install
@@ -903,7 +1072,7 @@ pnpm dev            # local devnet: anvil + full deployment + publisher + keeper
 Open <http://localhost:5173> and connect one of the funded test wallets the devnet prints. `pnpm kill:devnet` stops
 it.
 
-### 18.3 Tests
+### 19.3 Tests
 
 ```bash
 # contracts: unit, fuzz, invariant, differential, gas, e2e
@@ -927,7 +1096,7 @@ pnpm -r typecheck
 pnpm -r --workspace-concurrency=1 test
 ```
 
-### 18.4 Frontend configuration
+### 19.4 Frontend configuration
 
 | Variable | Meaning |
 |---|---|
@@ -939,7 +1108,7 @@ pnpm -r --workspace-concurrency=1 test
 Build: `pnpm --filter @optara/frontend build` (output in `frontend/dist`). The app reads contracts through Multicall3
 batching and simulates every risk-changing action with fresh oracle data before sending it.
 
-### 18.5 Service configuration
+### 19.5 Service configuration
 
 | Service | Start | Key variables |
 |---|---|---|
@@ -952,9 +1121,9 @@ Private keys are read from environment files that are git-ignored; never commit 
 
 ---
 
-## 19. Operations: markets, services and hosting
+## 20. Operations: markets, services and hosting
 
-### 19.1 `scripts/markets.sh`
+### 20.1 `scripts/markets.sh`
 
 One script runs a network end to end. Everything that differs between testnet and mainnet is configuration
 (`deployments/config/<network>*.json`), never code.
@@ -976,7 +1145,7 @@ NETWORK=monad-testnet scripts/markets.sh <command> [products] [--yes]
 On mainnet (`execution: propose`) the script broadcasts nothing; it writes every role-holder call to
 `deployments/<network>.*.proposals.json` for the multisigs.
 
-### 19.2 Hosting
+### 20.2 Hosting
 
 | Component | Where (testnet) |
 |---|---|
@@ -991,7 +1160,7 @@ Deployment order, configuration and launch gates: [docs/DEPLOYMENT.md](docs/DEPL
 
 ---
 
-## 20. Documentation index
+## 21. Documentation index
 
 | Document | Read it to learn |
 |---|---|
