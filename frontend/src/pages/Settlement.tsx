@@ -1,12 +1,12 @@
 /** `/settlement`: expired groups — finalize, settle in batches, open payouts, redeem/claim (FRONTEND.md §8, F13). */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useConnection } from "wagmi";
 import type { Hex } from "viem";
 import { buildSettlementProof, settlementOracleAbi } from "@optara/sdk";
-import { CheckCircle2, Clock, Wallet } from "lucide-react";
-import { Card, EmptyState, Pill, Skeleton, Term, cx } from "../components/ui.tsx";
+import { CheckCircle2, ChevronDown, Clock, Wallet } from "lucide-react";
+import { Card, EmptyState, Pill, Segmented, Skeleton, Term, cx } from "../components/ui.tsx";
 import { TokenIcon } from "../components/Icons.tsx";
 import { TxButton } from "../components/TxButton.tsx";
 import { finalizeSteps, ratioSteps, settleBatchSteps } from "../lib/optara/actions.ts";
@@ -20,6 +20,17 @@ import type { Series } from "../lib/optara/types.ts";
 import { SettlementTimeline, StatePill } from "./Series.tsx";
 
 const BATCH = 20;
+/** Expiries shown per page; "Show more" adds the next page. */
+const PAGE = 6;
+
+type Tab = "action" | "mine" | "done" | "all";
+
+/** What the expiry's pool took in and paid out, in the settlement asset's native units. */
+function payoutTotals(a: GroupData["accounting"]) {
+  const total = a.collected + a.insurance; // what holders and creditors are paid from
+  const left = a.pool; // still waiting to be redeemed or claimed
+  return { total, left, paid: total > left ? total - left : 0n };
+}
 
 interface Group {
   groupId: Hex;
@@ -34,6 +45,8 @@ export function SettlementPage() {
   const { data: now } = useChainTime();
   const { address } = useConnection();
   const { data: wallet } = useWalletWrappers(address);
+  const [tab, setTab] = useState<Tab | undefined>();
+  const [shown, setShown] = useState(PAGE);
 
   const groups = useMemo(() => {
     const m = new Map<Hex, Series[]>();
@@ -47,7 +60,7 @@ export function SettlementPage() {
   );
   // Same query key as each card, so the cards reuse these results.
   const states = useQueries({
-    queries: expired.map((g) => ({ queryKey: ["group", g.groupId], queryFn: () => getGroup(g.groupId), refetchInterval: 6_000 })),
+    queries: expired.map((g) => ({ queryKey: ["group", g.groupId], queryFn: () => getGroup(g.groupId), refetchInterval: 15_000 })),
   });
 
   if (isLoading || now === undefined) {
@@ -66,6 +79,11 @@ export function SettlementPage() {
   const inProgress = rows.filter((r) => !finished.includes(r));
   const readyForYou = rows.filter((r) => r.data?.state === "REDEEMABLE" && r.mine.length > 0);
   const waitingForYou = rows.filter((r) => r.data?.state !== "REDEEMABLE" && r.mine.length > 0);
+  const mineRows = rows.filter((r) => r.mine.length > 0);
+  // Open on what matters most to this visitor: their payouts, then expiries still being settled, then everything.
+  const active: Tab = tab ?? (readyForYou.length > 0 ? "mine" : inProgress.length > 0 ? "action" : "all");
+  const list = active === "action" ? inProgress : active === "mine" ? mineRows : active === "done" ? finished : rows;
+  const page = list.slice(0, shown);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -118,23 +136,50 @@ export function SettlementPage() {
         </Card>
       ) : (
         <>
-          {inProgress.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="label px-1">Being settled · {inProgress.length}</h2>
-              {inProgress.map(({ g, data, mine }) => (
-                <GroupCard key={g.groupId} group={g} g={data} mine={mine} now={now} />
-              ))}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <Segmented
+              size="sm"
+              value={active}
+              onChange={(v) => {
+                setTab(v);
+                setShown(PAGE);
+              }}
+              options={[
+                { value: "action", label: `To settle ${inProgress.length}` },
+                { value: "mine", label: `Yours ${mineRows.length}`, disabled: !address, title: address ? undefined : "Connect a wallet to see your expiries" },
+                { value: "done", label: `Paid out ${finished.length}` },
+                { value: "all", label: `All ${rows.length}` },
+              ]}
+            />
+            <span className="text-xs text-muted">
+              Showing {Math.min(shown, list.length)} of {list.length}, newest first
+            </span>
+          </div>
+          {page.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon="✓"
+                title={active === "action" ? "Nothing waiting to be settled" : active === "mine" ? "None of your options have expired" : "Nothing here yet"}
+                body={active === "action" ? "Every expired option has been settled and its payouts are open." : undefined}
+              />
+            </Card>
+          ) : (
+            <section className="space-y-2.5">
+              {page.map(({ g, data, mine }) =>
+                data?.state === "REDEEMABLE" && mine.length === 0 ? (
+                  <FinishedRow key={g.groupId} group={g} g={data} />
+                ) : (
+                  <GroupCard key={g.groupId} group={g} g={data} mine={mine} now={now} defaultOpen={mine.length > 0 || (data !== undefined && data.state !== "REDEEMABLE")} />
+                ),
+              )}
             </section>
           )}
-          {finished.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="label px-1">Paid out · {finished.length}</h2>
-              <div className="card divide-y divide-line/60 p-1.5">
-                {finished.map(({ g, data }) => (
-                  <FinishedRow key={g.groupId} group={g} g={data!} />
-                ))}
-              </div>
-            </section>
+          {list.length > shown && (
+            <div className="flex justify-center">
+              <button type="button" onClick={() => setShown((n) => n + PAGE)} className="btn-ghost text-xs">
+                Show {Math.min(PAGE, list.length - shown)} more ({list.length - shown} left)
+              </button>
+            </div>
           )}
         </>
       )}
@@ -150,14 +195,14 @@ function SettlementSummary({ expired, active, ready, paid }: { expired: number; 
     { label: "Paid", value: paid, sub: "complete", tone: paid > 0 ? ("good" as const) : ("neutral" as const) },
   ];
   return (
-    <div className="grid gap-2 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {items.map((x) => (
-        <div key={x.label} className="rounded-2xl border border-line bg-gradient-to-br from-surface to-surface-2/55 p-3 shadow-sm">
+        <div key={x.label} className="rounded-2xl border border-line bg-gradient-to-br from-surface to-surface-2/55 p-2.5 shadow-sm sm:p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] font-bold uppercase text-faint">{x.label}</div>
             <span className={cx("h-2 w-2 rounded-full", x.tone === "good" ? "bg-good" : x.tone === "primary" ? "bg-primary" : "bg-faint/40")} />
           </div>
-          <div className={cx("num mt-1 font-display text-2xl font-bold", x.tone === "good" ? "text-good" : x.tone === "primary" ? "text-primary" : "")}>{x.value}</div>
+          <div className={cx("num mt-0.5 font-display text-xl font-bold sm:mt-1 sm:text-2xl", x.tone === "good" ? "text-good" : x.tone === "primary" ? "text-primary" : "")}>{x.value}</div>
           <div className="text-[11px] text-muted">{x.sub}</div>
         </div>
       ))}
@@ -233,8 +278,22 @@ function Upcoming({ groups, now }: { groups: Group[]; now: bigint }) {
 
 const pairOf = (s: Series) => `${s.underlyingSymbol}/${s.assetSymbol}`;
 
-function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine: { series: Series; balance: bigint }[]; now: bigint }) {
+function GroupCard({
+  group,
+  g,
+  mine,
+  now,
+  defaultOpen = true,
+}: {
+  group: Group;
+  g?: GroupData;
+  mine: { series: Series; balance: bigint }[];
+  now: bigint;
+  defaultOpen?: boolean;
+}) {
   const s0 = group.series[0]!;
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => setOpen(defaultOpen), [defaultOpen]);
   const { data: ins } = useQuery({ queryKey: ["insurance", s0.settlementAsset], queryFn: () => getInsurance(s0.settlementAsset) });
   const { data: earliest } = useQuery({
     queryKey: ["earliest", group.groupId],
@@ -350,21 +409,51 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
       };
   }
 
+  const totals = payoutTotals(a);
+  const money = (x: bigint) => `${fmtNative(x, dec)} ${asset}`;
+  // One line that says where this expiry stands, shown even when the card is folded.
+  const summary =
+    g.state === "REDEEMABLE"
+      ? totals.total === 0n
+        ? "Settled · nothing was owed"
+        : `Paid out ${money(totals.paid)} of ${money(totals.total)}`
+      : g.state === "ALL_SETTLED"
+      ? `${money(totals.total)} ready to pay out`
+      : g.state === "FINALIZED"
+      ? `Price $${fmtLevel(a.priceWad)} · ${left} account${left === 1 ? "" : "s"} to settle`
+      : g.state === "ORACLE_STALLED"
+      ? "Waiting for the price feed"
+      : waitLeft > 0n
+      ? `Price can be fixed in ${fmtDuration(waitLeft)}`
+      : "Waiting for the settlement price";
+
   return (
     <article className="card overflow-hidden bg-gradient-to-br from-surface to-surface-2/45">
-      <header className="flex flex-wrap items-start justify-between gap-2 p-4 pb-2">
-        <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full flex-wrap items-center justify-between gap-2 p-4 text-left cursor-pointer"
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
           <TokenIcon symbol={s0.underlyingSymbol} className="h-8 w-8" />
-          <div>
-            <h3 className="font-display text-base font-bold tracking-tight">{pairOf(s0)}</h3>
-            <p className="text-xs text-muted">
-              Expired {fmtExpiry(s0.expiry)} · {group.series.length} option{group.series.length === 1 ? "" : "s"}
-            </p>
-          </div>
-        </div>
-        <StatePill state={g.state} />
-      </header>
+          <span className="min-w-0">
+            <span className="block font-display text-base font-bold tracking-tight">
+              {pairOf(s0)}
+              {mine.length > 0 && <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 align-middle text-[11px] font-bold text-primary">Yours</span>}
+            </span>
+            <span className="block text-xs text-muted sm:truncate">
+              Expired {fmtExpiry(s0.expiry)} · {group.series.length} option{group.series.length === 1 ? "" : "s"} · {summary}
+            </span>
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
+          <StatePill state={g.state} />
+          <ChevronDown className={cx("h-4 w-4 text-faint transition", open && "rotate-180")} />
+        </span>
+      </button>
 
+      {open && (
       <div className="space-y-2.5 px-4 pb-4">
         <SettlementTimeline state={g.state} />
 
@@ -387,17 +476,39 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
           <dl className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <Fact label="Settlement price" value={`$${fmtLevel(a.priceWad)}`} />
             <Fact
+              label={<Term tip="What writers who ended in the money paid into this expiry's payout pool from their accounts.">Writers paid in</Term>}
+              value={money(a.collected)}
+            />
+            <Fact
+              label={<Term tip="What writers owed but could not cover from their accounts. The insurance fund covers it first.">Writers could not pay</Term>}
+              value={money(a.unpaid)}
+              tone={a.unpaid > 0n ? "text-warn" : undefined}
+            />
+            <Fact
+              label={<Term tip="The total paid to option holders and to accounts that are owed money: writers' payments plus any insurance.">Total for holders</Term>}
+              value={a.ratioSet ? money(totals.total) : "Known at step 3"}
+            />
+            <Fact
+              label={<Term tip="How much holders have already redeemed or claimed from this expiry.">Paid out so far</Term>}
+              value={a.ratioSet ? money(totals.paid) : "Not open yet"}
+              tone={a.ratioSet && totals.paid > 0n ? "text-good" : undefined}
+            />
+            <Fact
+              label={<Term tip="What is still waiting for holders to redeem or claim. It stays available; there is no deadline.">Still to redeem</Term>}
+              value={a.ratioSet ? money(totals.left) : "Not open yet"}
+            />
+            <Fact
               label={<Term tip="Accounts that still have to be settled before payouts open.">Accounts left</Term>}
               value={left === 0 ? "None" : left.toString()}
             />
             <Fact
               label={<Term tip="Share of the full payout every holder receives. It is 100% unless some writers' losses were bigger than their collateral and the insurance fund together.">Payout rate</Term>}
-              value={a.ratioSet ? `${fmtWad(a.ratioWad * 100n, 2)}%` : "Set at step 4"}
+              value={a.ratioSet ? `${fmtWad(a.ratioWad * 100n, 2)}%` : "Set at step 3"}
               tone={a.ratioSet ? (a.ratioWad === 10n ** 18n ? "text-good" : "text-warn") : undefined}
             />
             <Fact
-              label={<Term tip="How much the insurance fund paid in to cover writers who couldn't pay in full.">Insurance used</Term>}
-              value={a.ratioSet ? `${fmtNative(a.insurance, dec)} ${asset}` : "Set at step 4"}
+              label={<Term tip="How much the insurance fund paid in to cover writers who couldn't pay in full.">Insurance added</Term>}
+              value={a.ratioSet ? money(a.insurance) : "Set at step 3"}
             />
           </dl>
         ) : (
@@ -407,6 +518,7 @@ function GroupCard({ group, g, mine, now }: { group: Group; g?: GroupData; mine:
           </p>
         )}
       </div>
+      )}
     </article>
   );
 }
@@ -464,21 +576,34 @@ function YourOptions({ mine, g }: { mine: { series: Series; balance: bigint }[];
   );
 }
 
-/** A group that is fully paid out and holds nothing of yours: one compact line. */
+/** A group whose payouts are open and that holds nothing of yours: one compact line with what it paid out. */
 function FinishedRow({ group, g }: { group: Group; g: GroupData }) {
   const s0 = group.series[0]!;
   const a = g.accounting;
+  const t = payoutTotals(a);
+  const money = (x: bigint) => `${fmtNative(x, s0.assetDecimals)} ${s0.assetSymbol}`;
   return (
-    <div className="flex items-center gap-2.5 px-2.5 py-2.5 text-[13px]">
+    <div className="card flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3.5 py-3 text-[13px]">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-good" />
       <TokenIcon symbol={s0.underlyingSymbol} className="h-5 w-5" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold">
-          {pairOf(s0)} · {fmtExpiry(s0.expiry)}
+        <span className="block font-semibold sm:truncate">
+          {pairOf(s0)} · {fmtExpiry(s0.expiry)} · {group.series.length} option{group.series.length === 1 ? "" : "s"}
         </span>
-        <span className="block truncate text-xs text-muted">
-          Settled at ${fmtLevel(a.priceWad)} · paid {a.ratioWad === 10n ** 18n ? "in full" : `${fmtWad(a.ratioWad * 100n, 2)}%`}
+        <span className="block text-xs text-muted sm:truncate">
+          Settled at ${fmtLevel(a.priceWad)} · {a.ratioWad === 10n ** 18n ? "paid in full" : `paid at ${fmtWad(a.ratioWad * 100n, 2)}%`}
+          {a.insurance > 0n ? ` · insurance added ${money(a.insurance)}` : ""}
         </span>
+      </span>
+      <span className="w-full pl-[52px] sm:w-auto sm:pl-0 sm:text-right">
+        {t.total === 0n ? (
+          <span className="block text-xs text-muted">Nothing was owed</span>
+        ) : (
+          <>
+            <span className="num block font-semibold text-good">{money(t.paid)} paid out</span>
+            <span className="block text-xs text-muted">{t.left > 0n ? `${money(t.left)} still to redeem` : "all redeemed"}</span>
+          </>
+        )}
       </span>
     </div>
   );
