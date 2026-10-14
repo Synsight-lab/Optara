@@ -1269,6 +1269,13 @@ function visitorId(): string {
   }
 }
 
+/** A page's visit totals without counting a visit (for the admin view). Undefined without an indexer. */
+export async function getPageVisits(page: string): Promise<VisitStats | undefined> {
+  if (!INDEXER_URL) return undefined;
+  const res = await fetch(`${INDEXER_URL}/visits/${page}`);
+  return res.ok ? ((await res.json()) as VisitStats) : undefined;
+}
+
 /**
  * Counts this visit to `page` (once per browser session; the API also ignores repeats within 30 minutes) and returns the
  * page's totals. Undefined without an indexer.

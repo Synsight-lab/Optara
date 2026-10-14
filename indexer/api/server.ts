@@ -15,7 +15,7 @@
  *   GET /series/:id/positions               (every account's non-zero position in one series: who wrote it)
  *   GET /auctions/active                    (liquidation auctions not yet ended)
  *   GET /upgrades                           (UpgradeScheduled events; the caller reads each one's state on-chain)
- *   GET /visits/:page, POST /visits/:page   (page visit counts; POST body = the browser's random visitor id)
+ *   GET /visits/home, POST /visits/home     (home page visit counts; POST body = the browser's random visitor id)
  */
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -32,7 +32,7 @@ const send = (res: ServerResponse, code: number, body: unknown) => {
 const isId = (s: string) => /^\d+$/.test(s);
 const isHex32 = (s: string) => /^0x[0-9a-fA-F]{64}$/.test(s);
 /** Pages whose visits are counted. */
-const COUNTED_PAGES = new Set(["system"]);
+const COUNTED_PAGES = new Set(["home"]);
 
 /** A short request body (the visitor id); undefined if it is too long. */
 const readBody = (req: IncomingMessage, max = 256) =>

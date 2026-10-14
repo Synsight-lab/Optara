@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router";
 import { ArrowRight, BookOpen, Coins, Compass, Layers, LineChart, Newspaper, Route, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenIcon } from "../components/Icons.tsx";
@@ -5,9 +6,14 @@ import { cx } from "../components/ui.tsx";
 import { SOCIALS, SiteFooter, SiteHeader, XIcon } from "../components/Site.tsx";
 import { fmtDuration, fmtLevel } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList } from "../lib/optara/hooks.ts";
+import { recordPageVisit } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 export function LandingPage() {
+  // Count this visit to the home page (once per browser session; the API also ignores repeats within 30 minutes).
+  useEffect(() => {
+    recordPageVisit("home").catch(() => undefined);
+  }, []);
   const { data: series } = useSeriesList();
   const { data: now } = useChainTime();
   const products = [...new Map((series ?? []).map((s) => [s.productId, s])).values()];

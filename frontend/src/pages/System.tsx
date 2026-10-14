@@ -20,24 +20,24 @@ import { INDEXER_URL, MANIFEST, PUBLISHER_URL } from "../config/network.ts";
 import { fmtDuration, fmtLevel, fmtNative, fmtWad, shortAddr } from "../lib/optara/format.ts";
 import { useChainTime, useProductMarket, useSeriesList, useTrustedRoles } from "../lib/optara/hooks.ts";
 import { hasAnyTrustedRole } from "../lib/optara/roles.ts";
-import { getInsurance, getUpgrades, recordPageVisit } from "../lib/optara/reads.ts";
+import { getInsurance, getUpgrades, getPageVisits } from "../lib/optara/reads.ts";
 import type { Series } from "../lib/optara/types.ts";
 
 export function SystemPage() {
   const { data: series } = useSeriesList();
   const products = useMemo(() => [...new Map((series ?? []).map((s) => [s.productId, s])).values()], [series]);
   const assets = useMemo(() => [...new Map((series ?? []).map((s) => [s.settlementAsset, s])).values()], [series]);
-  // Counts every visit once (the query never refetches); only wallets holding a trusted role see the totals.
+  // Home-page visit totals (counted on the home page); only wallets holding a trusted role see them.
   const { address } = useConnection();
   const { data: roleMap } = useTrustedRoles(address);
   const isAdmin = hasAnyTrustedRole(roleMap);
   const { data: visits } = useQuery({
-    queryKey: ["visits", "system"],
-    queryFn: () => recordPageVisit("system").then((v) => v ?? null),
-    staleTime: Infinity,
-    gcTime: Infinity,
+    queryKey: ["visits", "home"],
+    queryFn: () => getPageVisits("home").then((v) => v ?? null),
+    enabled: isAdmin,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     retry: false,
-    refetchOnWindowFocus: false,
   });
 
   return (
@@ -51,7 +51,7 @@ export function SystemPage() {
           <p className="mt-1 text-[11px] text-muted">
             <span className="num">{visits.visits.toLocaleString()}</span> visits by{" "}
             <span className="num">{visits.visitors.toLocaleString()}</span> visitors ·{" "}
-            <span className="num">{visits.visits24h.toLocaleString()}</span> in the last 24 h (admin only)
+            <span className="num">{visits.visits24h.toLocaleString()}</span> in the last 24 h · home page (admin only)
           </p>
         )}
       </div>
