@@ -66,7 +66,24 @@ export function parseFixed(input: string, decimals: number): bigint | undefined 
   if (f.length > decimals) return undefined;
   return BigInt(i || "0") * 10n ** BigInt(decimals) + BigInt((f + "0".repeat(decimals)).slice(0, decimals) || "0");
 }
-export const parseQty = (input: string) => parseFixed(input, 18);
+/**
+ * An option quantity. "0,03" means 0.03 here (a comma followed by one or two digits is a decimal comma, as many
+ * keyboards type it), never 3; "1,000" still reads as one thousand.
+ */
+export const parseQty = (input: string) => {
+  const t = input.trim();
+  return parseFixed(/^\d*,\d{1,2}$/.test(t) ? t.replace(",", ".") : t, 18);
+};
+
+/** Positions move in steps of 0.01 option (SubAccounts.minPositionQty). */
+export const QTY_STEP = 10n ** 16n;
+
+/** Why a quantity can't be used, or undefined when it is on the 0.01-option step. */
+export const qtyStepError = (qty: bigint | undefined): string | undefined =>
+  qty !== undefined && qty > 0n && qty % QTY_STEP !== 0n ? "Use steps of 0.01 options (for example 0.03, not 0.025)." : undefined;
+
+/** A quantity rounded down to the 0.01-option step (for "Max" buttons). */
+export const roundDownQty = (qty: bigint) => qty - (qty % QTY_STEP);
 
 export const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 export const shortHex = (h: string) => `${h.slice(0, 8)}…${h.slice(-6)}`;

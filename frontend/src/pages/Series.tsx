@@ -59,7 +59,7 @@ import {
 import { ADDR, publicClient } from "../lib/optara/client.ts";
 import { recordTrade } from "../lib/optara/activity.ts";
 import { disclosuresFor } from "../lib/optara/disclosures.ts";
-import { fmtDuration, fmtExpiry, fmtIv, fmtLevel, fmtNative, fmtPrice, fmtQty, fmtWad, optionTypeName, parseFixed, parseQty, seriesName, shortAddr, WAD } from "../lib/optara/format.ts";
+import { fmtDuration, fmtExpiry, fmtIv, fmtLevel, fmtNative, fmtPrice, fmtQty, fmtWad, optionTypeName, parseFixed, parseQty, seriesName, shortAddr, WAD, qtyStepError, roundDownQty } from "../lib/optara/format.ts";
 import {
   useAccountView,
   useChainTime,
@@ -1522,12 +1522,13 @@ export function WritePanel({
   const [sellNow, setSellNow] = useState(true);
   const [slip] = useSlippage();
   const qty = parseQty(amount);
+  const stepErr = qtyStepError(qty);
   const a = availability("write", ctx);
 
   const preview = useQuery({
     queryKey: ["previewMint", selected?.toString(), s.id, qty?.toString()],
     queryFn: () => previewMint(selected!, s.id, qty!),
-    enabled: selected !== undefined && !!qty,
+    enabled: selected !== undefined && !!qty && !stepErr,
     refetchInterval: 6_000,
   });
 
@@ -1733,8 +1734,8 @@ export function WritePanel({
         label={sellable && net !== undefined ? `Write and sell for ${fmtNative(net, s.assetDecimals)} ${s.assetSymbol}` : `Write ${amount || "0"} option${amount === "1" ? "" : "s"}`}
         tone="accent"
         steps={ok ? steps : undefined}
-        disabled={!a.enabled || !steps || ok === false || capBlocked}
-        disabledReason={a.reason ?? (capBlocked ? "This market is at its open-interest limit for that size." : writeBlockedReason)}
+        disabled={!a.enabled || !steps || ok === false || capBlocked || !!stepErr}
+        disabledReason={a.reason ?? stepErr ?? (capBlocked ? "This market is at its open-interest limit for that size." : writeBlockedReason)}
         disclosures={disclosuresFor("write", s.underlyingSymbol)}
         successMessage={
           sellable
@@ -1969,12 +1970,12 @@ function ManagePanel({
         available={maxClose > 0n}
         blocked={!c.enabled ? c.reason : maxClose === 0n ? "No closable written position. You need written options and matching wallet tokens." : undefined}
       >
-        <AmountInput label="Options to close" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(maxClose)} />
+        <AmountInput label="Options to close" value={closeAmt} onChange={setCloseAmt} unit="options" max={fmtQty(roundDownQty(maxClose))} hint="Steps of 0.01." />
         <TxButton
           label="Close written options"
           steps={selected !== undefined && cq ? closeShortSteps(selected, s, cq) : undefined}
-          disabled={!c.enabled || !cq || cq > maxClose}
-          disabledReason={c.reason ?? (cq && cq > maxClose ? `You can close up to ${fmtQty(maxClose)}.` : undefined)}
+          disabled={!c.enabled || !cq || cq > maxClose || !!qtyStepError(cq)}
+          disabledReason={c.reason ?? qtyStepError(cq) ?? (cq && cq > maxClose ? `You can close up to ${fmtQty(roundDownQty(maxClose))}.` : undefined)}
           successMessage="Closed by burning matching option tokens. Margin freed."
         />
       </ManageAction>
@@ -1986,12 +1987,12 @@ function ManagePanel({
         available={walletQty > 0n}
         blocked={!u.enabled ? u.reason : walletQty === 0n ? "No wallet tokens to move in." : undefined}
       >
-        <AmountInput label="Options to move in" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(walletQty)} />
+        <AmountInput label="Options to move in" value={unwrapAmt} onChange={setUnwrapAmt} unit="options" max={fmtQty(roundDownQty(walletQty))} hint="Steps of 0.01; any smaller remainder stays in your wallet." />
         <TxButton
           label="Move into account"
           steps={selected !== undefined && uq ? unwrapSteps(selected, s, uq) : undefined}
-          disabled={!u.enabled || !uq || uq > walletQty}
-          disabledReason={u.reason ?? (uq && uq > walletQty ? `Wallet has ${fmtQty(walletQty)}.` : undefined)}
+          disabled={!u.enabled || !uq || uq > walletQty || !!qtyStepError(uq)}
+          disabledReason={u.reason ?? qtyStepError(uq) ?? (uq && uq > walletQty ? `Wallet has ${fmtQty(walletQty)}.` : undefined)}
           successMessage="Moved into your account."
         />
       </ManageAction>
@@ -2003,12 +2004,12 @@ function ManagePanel({
         available={accountLong > 0n}
         blocked={!w.enabled ? w.reason : accountLong === 0n ? "No account longs to move out." : undefined}
       >
-        <AmountInput label="Options to move out" value={wrapAmt} onChange={setWrapAmt} unit="options" max={fmtQty(accountLong)} />
+        <AmountInput label="Options to move out" value={wrapAmt} onChange={setWrapAmt} unit="options" max={fmtQty(roundDownQty(accountLong))} hint="Steps of 0.01." />
         <TxButton
           label="Move to wallet"
           steps={selected !== undefined && wq && address ? wrapSteps(selected, s, wq, address) : undefined}
-          disabled={!w.enabled || !wq || wq > accountLong}
-          disabledReason={w.reason ?? (wq && wq > accountLong ? `Account has ${fmtQty(accountLong)} long options.` : undefined)}
+          disabled={!w.enabled || !wq || wq > accountLong || !!qtyStepError(wq)}
+          disabledReason={w.reason ?? qtyStepError(wq) ?? (wq && wq > accountLong ? `Account has ${fmtQty(accountLong)} long options.` : undefined)}
           successMessage="Sent to your wallet."
         />
       </ManageAction>
