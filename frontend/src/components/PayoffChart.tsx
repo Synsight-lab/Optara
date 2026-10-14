@@ -112,14 +112,21 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
   };
 
   // Readout for the picked price.
-  const net = pnl(price);
   const payout = payoutPerOption(leg, price) * qtySafe;
   const total = premiumPerOption * qtySafe;
+  // At the breakeven the payout equals the premium; float leftovers (±1e-12) must read as "break even", not as a
+  // $0.00 profit or loss with "more than" / "less than" the same amount.
+  const evenTol = Math.max(0.005, Math.abs(total) * 1e-9);
+  const rawNet = pnl(price);
+  const even = Math.abs(rawNet) < evenTol;
+  const net = even ? 0 : rawNet;
   const fromToday = spot ? ((price - spot) / spot) * 100 : undefined;
   const { maxGain, maxLoss } = extremes(leg, side, qtySafe, premiumPerOption);
   const isLong = side === "long";
   const costLabel = selling ? "Cash from selling now" : isLong ? "Premium paid" : "Premium kept";
-  const resultLabel = selling
+  const resultLabel = even
+    ? "Break even"
+    : selling
     ? net >= 0
       ? "Holding pays more by"
       : "Selling now is better by"
@@ -130,7 +137,11 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
     : isLong
     ? "Net loss"
     : "Writer loss";
-  const sentence = selling
+  const sentence = even && !selling && total > 0
+    ? isLong
+      ? `The option pays ${usd(payout)}, exactly what you paid, so you break even.`
+      : `You owe ${usd(payout)}, exactly the premium you kept, so you break even.`
+    : selling
     ? payout === 0
       ? `Held to expiry, these options would pay nothing. Selling now gets you ${usd(total)}.`
       : net < 0
@@ -164,7 +175,7 @@ export function PayoffChart({ optionType, strike, size = 1, spot, premium, qty, 
 
   // Top-row labels: strike drops to a second line when it would collide with "Today".
   const strikeRow = spot !== undefined && Math.abs(x(spot) - x(strike)) < 64 ? 2 : 1;
-  const tone = net >= 0 ? "text-good" : "text-bad";
+  const tone = even ? "text-muted" : net >= 0 ? "text-good" : "text-bad";
 
   return (
     <div className="space-y-3">
