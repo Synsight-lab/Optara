@@ -1047,6 +1047,7 @@ Testnet settlement feeds (`TestnetPushFeed`): WETH/USDC `0x575AeAeF1A3E1670bc25c
 | `publisher/` | Volatility-surface publisher service (calibration, quorum signing, `/oracle-update` API) |
 | `keepers/` | Oracle pusher, testnet feed pusher, settlement keeper, reference liquidation bot |
 | `pricenode/` | Optara's testnet price node (Cloudflare Worker): MON/USD and USDC/USD from six exchanges, signed in the on-chain format |
+| `watchdog/` | Testnet monitoring (Cloudflare Worker, every minute): checks every service and alerts on Telegram when one goes down or recovers; `/status` shows the checks |
 | `indexer/` | Envio HyperIndex indexer (events → Postgres/GraphQL) plus the REST API, health worker and monitor |
 | `frontend/` | The web app (React, Vite, wagmi/viem, Tailwind), including landing page, docs and blog |
 | `deployments/` | Per-network configs, deployment manifests, listing proposals, series lists, exported ABIs, contract lists |

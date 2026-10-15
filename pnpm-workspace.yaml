@@ -5,3 +5,4 @@ packages:
   - indexer
   - frontend
   - pricenode
+  - watchdog

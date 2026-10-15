@@ -1,0 +1,16 @@
+{
+  "name": "@optara/watchdog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optara testnet watchdog: checks every service each minute and alerts on Telegram (Cloudflare Worker).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "wrangler": "4.149.0"
+  }
+}

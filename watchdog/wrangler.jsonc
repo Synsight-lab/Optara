@@ -1,0 +1,21 @@
+{
+  // Optara watchdog: checks the testnet stack every minute, alerts on Telegram (@Oxoptara_bot).
+  // Secrets (wrangler secret put): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+  "name": "optara-watchdog",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "triggers": { "crons": ["* * * * *", "0 8 * * *"] },
+  "services": [{ "binding": "PRICENODE", "service": "optara-pricenode" }],
+  "kv_namespaces": [{ "binding": "STATE", "id": "eb3fa3566bff440c9395f1cc51d6d37e" }],
+  "vars": {
+    "NETWORK_LABEL": "Optara testnet",
+    "RPC_URL": "https://testnet-rpc.monad.xyz",
+    "PUBLISHER_URL": "https://optarapublisher-production.up.railway.app",
+    "INDEXER_API_URL": "https://indexer-api-production-c6b4.up.railway.app",
+    "PRICE_NODE_URL": "https://optara-pricenode.olamide-adetula-1744.workers.dev",
+    "FRONTEND_URL": "https://optara-2et.pages.dev",
+    "SETTLEMENT_FEEDS": "[{\"label\":\"WETH / USDC\",\"address\":\"0x575AeAeF1A3E1670bc25cC205184b6aC7ad3075f\"},{\"label\":\"MON / USDC\",\"address\":\"0x31FA8a075D4adAd7390a6bA8152B3F38361807A2\"}]",
+    "WALLETS": "[{\"label\":\"keeper\",\"address\":\"0xB1CdDB31d6e24d80ed42B605b5388674621aB411\",\"minMon\":20},{\"label\":\"admin\",\"address\":\"0xbCe599D231e83594F47bFA2805bb8D8dF3D578bd\",\"minMon\":0.5}]",
+    "PRODUCT_NAMES": "{\"0x3a695c26b8028aeee66271a0a02ac336050f098d8ada06e11248cd4ab8a22c86\":\"WETH\",\"0xdbbb4b3b8a6f767acb9b047f9022d255fb6af71b4a20376fc391ff48a7e53b5e\":\"MON\"}"
+  }
+}
