@@ -127,8 +127,11 @@ export class RestampMockPythSource implements SpotSource {
 /** Default limit for one price-provider request, so a hanging provider can't hold up anything else. */
 export const PROVIDER_TIMEOUT_MS = 8_000;
 
-/** True for a RedStone feed id: a short ASCII name, zero-padded (Pyth ids are 32 random-looking bytes). */
-export function isRedstoneFeedId(id: Hex): boolean {
+/**
+ * True for a named feed id (signed price packages: Optara's price node or RedStone): a short ASCII name, zero-padded.
+ * Pyth ids are 32 random-looking bytes.
+ */
+export function isNamedFeedId(id: Hex): boolean {
   const b = id.toLowerCase().replace(/^0x/, "");
   if (b.length !== 64 || !/0{32}$/.test(b)) return false;
   const name = hexToString(id, { size: 32 }).replace(/\0+$/, "");
@@ -137,7 +140,7 @@ export function isRedstoneFeedId(id: Hex): boolean {
 
 /**
  * Spot updates for several products, so that one failing provider never blocks the others. Products are grouped by
- * the providers their feeds use (Pyth, RedStone, or both); the groups are fetched at the same time, each group's
+ * the providers their feeds use (Pyth, signed price packages, or both); the groups are fetched at the same time, each group's
  * shared feeds once (e.g. USDC/USD for every Pyth product). A group that fails (a provider outage) loses only its own
  * products. Returns the blobs and the products they cover, plus the products that could not be updated and why.
  */
@@ -147,7 +150,7 @@ export async function spotUpdatesByProduct(
 ): Promise<{ updates: Hex[]; productIds: Hex[]; failed: { productId: Hex; error: string }[] }> {
   const groups = new Map<string, { productIds: Hex[]; feeds: Set<string>; feedIds: Hex[] }>();
   for (const p of products) {
-    const key = [...new Set(p.feedIds.map((f) => (isRedstoneFeedId(f) ? "redstone" : "pyth")))].sort().join("+");
+    const key = [...new Set(p.feedIds.map((f) => (isNamedFeedId(f) ? "signed" : "pyth")))].sort().join("+");
     const g = groups.get(key) ?? { productIds: [], feeds: new Set<string>(), feedIds: [] };
     g.productIds.push(p.productId);
     for (const f of p.feedIds) {

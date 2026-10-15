@@ -1,6 +1,6 @@
 /**
  * TESTNET: keeps each TestnetPushFeed (a Chainlink-compatible settlement feed, contract/src/testnet) current from
- * Pyth or RedStone (whichever serves the feed ids): price = base / quote (e.g. ETH/USD ÷ USDC/USD) at the feed's decimals, pushed once a round is
+ * Pyth or the signed-price source (Optara's price node; whichever serves the feed ids): price = base / quote (e.g. ETH/USD ÷ USDC/USD) at the feed's decimals, pushed once a round is
  * `intervalSeconds` old. Settlement reads the round in force at expiry, so the interval bounds its staleness.
  */
 import { parseAbi, type Address, type Hex } from "viem";
@@ -46,7 +46,7 @@ export class FeedPusher {
     }
     const pushed: Address[] = [];
     // Each feed's price is fetched separately and all at once, so a provider that fails or hangs for one feed (e.g. a
-    // RedStone gateway outage) never stops or delays the others. The pushes then go out one by one (one keeper nonce).
+    // price node outage) never stops or delays the others. The pushes then go out one by one (one keeper nonce).
     const fetched = await Promise.allSettled(due.map((f) => this.o.prices.prices(f.quote ? [f.base, f.quote] : [f.base])));
     for (const [i, f] of due.entries()) {
       const got = fetched[i]!;

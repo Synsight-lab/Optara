@@ -166,7 +166,7 @@ flowchart TB
     PUB["Surface publishers<br/>(quorum signatures)"]
     subgraph Ext["External"]
         KU["Kuru order books"]
-        OR["Pyth, RedStone, Chainlink"]
+        OR["Pyth, signed price packages, Chainlink"]
     end
     subgraph Core["Optara on-chain"]
         VR["VenueRouter"] --> VG["VenueRegistry"]
@@ -220,7 +220,7 @@ flowchart TB
 | `OptionClearing` | Every user entry point that moves positions or cash: deposit, withdraw, mint, wrap, unwrap, close; custody of all collateral and settlement pools | **Yes** |
 | `PortfolioRiskManager` | Equity, IM, MM, health, product close-only, open-interest caps, risk parameter sets | No |
 | `OptionPricer` | Black-76, normal CDF, surface interpolation, stale-IV penalties (library) | — |
-| `LiveSpotOracle` | Verifies and stores fresh spot prices per product (Pyth and RedStone pull feeds) | No |
+| `LiveSpotOracle` | Verifies and stores fresh spot prices per product (Pyth, and signed price packages in RedStone's format) | No |
 | `VolSurfaceOracle` | Verifies quorum-signed volatility surfaces, stores header + Merkle root, proves grid nodes | No |
 | `SettlementOracle` | Verifies the Chainlink-compatible round in force at expiry | No |
 | `SettlementWindow` | Finalization, per-account settlement, recovery ratio, claims, redemption | No (uses clearing custody) |
@@ -402,7 +402,7 @@ Optara uses three separate oracles and never mixes them.
 ```mermaid
 flowchart LR
     PY["Pyth (Hermes)"] --> LSO["LiveSpotOracle"]
-    RS["RedStone"] --> LSO
+    RS["Signed price packages<br/>(testnet: Optara price node)"] --> LSO
     PB["Publishers<br/>2-of-3 quorum"] --> VSO["VolSurfaceOracle"]
     CL["Chainlink round<br/>in force at expiry"] --> SO["SettlementOracle"]
     LSO --> RM["Margin, liquidation, fees"]
@@ -415,8 +415,10 @@ flowchart LR
 
 - **Pyth** (`PYTH_DIRECT` / `PYTH_DERIVED`): signed price updates fetched from Hermes and included in the
   transaction. Used for WETH/USDC.
-- **RedStone** (`REDSTONE_DIRECT` / `REDSTONE_DERIVED`): signed data packages from RedStone's `redstone-primary-prod`
-  service, verified on-chain as the median of at least 3 distinct authorized signers. Used for MON/USDC.
+- **Signed price packages** (on-chain kinds `REDSTONE_DIRECT` / `REDSTONE_DERIVED`, RedStone's payload format): prices
+  signed off-chain and verified on-chain as the median of at least 3 distinct authorized signers. On testnet they come
+  from **Optara's price node** (`pricenode/`, a Cloudflare Worker that takes the median of six exchanges and signs it),
+  because RedStone switched off its public gateways in October 2026. Used for MON/USDC on testnet.
 - A price must be at most **60 seconds** old for risk-increasing actions and liquidation. Every such transaction
   carries its own fresh update, so the stored price never needs to be pushed constantly.
 - Wide confidence intervals are rejected; an older update never overwrites a newer one.
@@ -638,7 +640,7 @@ The app runs at **<https://optara-2et.pages.dev>** (Monad testnet). The app sect
 3. **USDC:** testnet options settle in **Circle USDC** (`0x534b2f3A21130d7a60830c2Df862319e593943A3`). Get it from
    Circle's faucet (<https://faucet.circle.com>, choose *Monad Testnet*).
 4. **Pick a market:** the market picker in the top bar switches between **WETH/USDC** and **MON/USDC**. The live spot
-   price and its source (Pyth or RedStone) are shown next to it.
+   price and its source (Pyth, or Optara's price node for MON on testnet) are shown next to it.
 
 ### 13.2 Pages at a glance
 
@@ -994,7 +996,7 @@ work without any venue.
 |---|---|
 | App | <https://optara-2et.pages.dev> |
 | Chain ID | 10143 |
-| Products | WETH/USDC (spot: Pyth), MON/USDC (spot: RedStone); 120 series listed so far |
+| Products | WETH/USDC (spot: Pyth), MON/USDC (spot: Optara price node); 120 series listed so far |
 | Settlement asset | Circle USDC `0x534b2f3A21130d7a60830c2Df862319e593943A3` |
 | Kuru Router (classic) | `0x7EFbE105Ca7415dE98F96622173458ac1c054630` · MarginAccount `0xd029C2D98ff85D8F64799017fE00a59B1159CE02` |
 | Full list with verified sources | [deployments/testnet-contracts.md](deployments/testnet-contracts.md) · machine-readable: [deployments/monad-testnet.json](deployments/monad-testnet.json) |
@@ -1041,9 +1043,10 @@ Testnet settlement feeds (`TestnetPushFeed`): WETH/USDC `0x575AeAeF1A3E1670bc25c
 | Folder | What it is |
 |---|---|
 | [`contract/`](contract/README.md) | Foundry project: the on-chain protocol, its tests and deployment scripts |
-| `sdk/` | Shared TypeScript: chain clients, ABIs, manifests, series catalog, spot sources (Pyth, RedStone), surface reports, oracle updates, settlement proofs |
+| `sdk/` | Shared TypeScript: chain clients, ABIs, manifests, series catalog, spot sources (Pyth, signed price packages), surface reports, oracle updates, settlement proofs |
 | `publisher/` | Volatility-surface publisher service (calibration, quorum signing, `/oracle-update` API) |
 | `keepers/` | Oracle pusher, testnet feed pusher, settlement keeper, reference liquidation bot |
+| `pricenode/` | Optara's testnet price node (Cloudflare Worker): MON/USD and USDC/USD from six exchanges, signed in the on-chain format |
 | `indexer/` | Envio HyperIndex indexer (events → Postgres/GraphQL) plus the REST API, health worker and monitor |
 | `frontend/` | The web app (React, Vite, wagmi/viem, Tailwind), including landing page, docs and blog |
 | `deployments/` | Per-network configs, deployment manifests, listing proposals, series lists, exported ABIs, contract lists |

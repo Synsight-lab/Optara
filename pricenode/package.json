@@ -1,0 +1,20 @@
+{
+  "name": "@optara/pricenode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optara testnet price node: MON/USD and USDC/USD as RedStone-format signed packages (Cloudflare Worker).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@redstone-finance/protocol": "1.0.0",
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "wrangler": "4.149.0"
+  }
+}

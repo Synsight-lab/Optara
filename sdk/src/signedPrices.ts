@@ -1,27 +1,30 @@
 /**
- * RedStone pull prices (Node only: uses RedStone's own encoder, so the bytes match what its signers signed).
- * LiveSpotOracle verifies the payload on-chain: authorized signers, a minimum of distinct ones per feed, the median.
- * Feed ids on-chain are RedStone's names as bytes32 (e.g. bytes32("MON")).
+ * Signed price packages: prices signed off-chain by a set of signers and verified on-chain by LiveSpotOracle
+ * (authorized signers, a minimum of distinct ones per feed, the median). The packages use RedStone's on-chain format,
+ * so they come from any service that serves it: Optara's own price node (testnet; see pricenode/) or RedStone's
+ * gateways. Node only: uses RedStone's encoder, so the bytes match what the signers signed. Feeds are identified by
+ * name as bytes32 (e.g. bytes32("MON")).
  */
 import { RedstonePayload, SignedDataPackage } from "@redstone-finance/protocol";
 import { hexToString, stringToHex, type Hex } from "viem";
-import { isRedstoneFeedId, PROVIDER_TIMEOUT_MS, type SpotSource } from "./pyth.ts";
+import { isNamedFeedId, PROVIDER_TIMEOUT_MS, type SpotSource } from "./pyth.ts";
 
-export interface RedstoneOptions {
-  /** e.g. redstone-primary-prod */
+export interface SignedPriceOptions {
+  /** Price service URLs, tried in order: Optara's price node, or RedStone gateways. */
+  urls: readonly string[];
+  /** Data service name in the request path (RedStone's, e.g. redstone-primary-prod; the price node ignores it). */
   dataServiceId: string;
-  /** The signers the oracle accepts (LiveSpotOracle.redstoneSigners); packages from anyone else are dropped. */
+  /** The signers to use (a subset of LiveSpotOracle.redstoneSigners); packages from anyone else are dropped. */
   authorizedSigners: readonly string[];
   /** Distinct signers to include per feed (≥ the oracle's threshold). */
   signersPerFeed: number;
-  /** Gateways tried in order. Default: RedStone's public ones. */
-  gateways?: readonly string[];
   /** Limit per gateway request (default PROVIDER_TIMEOUT_MS). */
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_GATEWAYS = ["https://oracle-gateway-1.a.redstone.finance", "https://oracle-gateway-2.a.redstone.finance"];
+/** RedStone's public gateways (switched off on 2026-10-29; kept for reference and for their authenticated successors). */
+export const REDSTONE_PUBLIC_GATEWAYS = ["https://oracle-gateway-1.a.redstone.finance", "https://oracle-gateway-2.a.redstone.finance"];
 
 type GatewayPackage = {
   timestampMilliseconds: number;
@@ -31,19 +34,20 @@ type GatewayPackage = {
   dataPackageId: string;
 };
 
-export { isRedstoneFeedId };
+export { isNamedFeedId };
 
-export const redstoneFeedId = (name: string): Hex => stringToHex(name, { size: 32 });
+/** A named feed's on-chain id: its name as bytes32 (e.g. "MON"). */
+export const namedFeedId = (name: string): Hex => stringToHex(name, { size: 32 });
 const feedName = (id: Hex) => hexToString(id, { size: 32 }).replace(/\0+$/, "");
 
-export class RedstoneSource implements SpotSource {
+export class SignedPriceSource implements SpotSource {
   private readonly authorized: Set<string>;
 
-  constructor(private readonly o: RedstoneOptions) {
+  constructor(private readonly o: SignedPriceOptions) {
     this.authorized = new Set(o.authorizedSigners.map((a) => a.toLowerCase()));
   }
 
-  /** One RedStone payload covering every feed (with `signersPerFeed` distinct authorized signers each). */
+  /** One signed payload covering every feed (with `signersPerFeed` distinct authorized signers each). */
   async updates(feedIds: readonly Hex[]): Promise<Hex[]> {
     if (feedIds.length === 0) return [];
     const picked = await this.packages(feedIds);
@@ -84,7 +88,7 @@ export class RedstoneSource implements SpotSource {
         byTs.set(p.timestampMilliseconds, list);
       }
       const best = [...byTs.entries()].filter(([, l]) => l.length >= this.o.signersPerFeed).sort((a, b) => b[0] - a[0])[0];
-      if (!best) throw new Error(`RedStone: fewer than ${this.o.signersPerFeed} authorized signers for ${name}`);
+      if (!best) throw new Error(`price node: fewer than ${this.o.signersPerFeed} authorized signers for ${name}`);
       picked.push(...best[1].slice(0, this.o.signersPerFeed));
     }
     return picked;
@@ -92,50 +96,50 @@ export class RedstoneSource implements SpotSource {
 
   private async fetchLatest(): Promise<Record<string, GatewayPackage[]>> {
     let last: unknown;
-    for (const g of this.o.gateways ?? DEFAULT_GATEWAYS) {
+    for (const g of this.o.urls) {
       try {
         const res = await (this.o.fetchImpl ?? fetch)(`${g}/data-packages/latest/${this.o.dataServiceId}`, {
           signal: AbortSignal.timeout(this.o.timeoutMs ?? PROVIDER_TIMEOUT_MS),
         });
-        if (!res.ok) throw new Error(`RedStone gateway ${g}: ${res.status}`);
+        if (!res.ok) throw new Error(`price node ${g}: ${res.status}`);
         return (await res.json()) as Record<string, GatewayPackage[]>;
       } catch (e) {
         last = e;
       }
     }
-    throw last instanceof Error ? last : new Error("RedStone: no gateway answered");
+    throw last instanceof Error ? last : new Error("price node: no URL answered");
   }
 }
 
-/** Routes each feed to RedStone (RedStone names) or the other source (Pyth ids); one update list for both. */
+/** Routes each feed to signed price packages (named feeds) or Pyth (Pyth ids); one update list for both. */
 export class CompositeSpotSource implements SpotSource {
   constructor(
     private readonly pyth: SpotSource | undefined,
-    private readonly redstone: RedstoneSource | undefined,
+    private readonly signed: SignedPriceSource | undefined,
   ) {}
 
   async updates(feedIds: readonly Hex[]): Promise<Hex[]> {
-    const rs = feedIds.filter(isRedstoneFeedId);
-    const py = feedIds.filter((id) => !isRedstoneFeedId(id));
-    if (rs.length && !this.redstone) throw new Error("RedStone feeds requested but no RedStone source is configured");
+    const rs = feedIds.filter(isNamedFeedId);
+    const py = feedIds.filter((id) => !isNamedFeedId(id));
+    if (rs.length && !this.signed) throw new Error("named feeds requested but no price node is configured");
     if (py.length && !this.pyth) throw new Error("Pyth feeds requested but no Pyth source is configured");
-    const [a, b] = await Promise.all([py.length ? this.pyth!.updates(py) : [], rs.length ? this.redstone!.updates(rs) : []]);
+    const [a, b] = await Promise.all([py.length ? this.pyth!.updates(py) : [], rs.length ? this.signed!.updates(rs) : []]);
     return [...a, ...b];
   }
 
   /** Parsed prices (price × 10^expo) per feed id, from whichever provider serves it. */
   async prices(feedIds: readonly Hex[]): Promise<Map<string, { price: bigint; expo: number; publishTime: bigint }>> {
-    const rs = feedIds.filter(isRedstoneFeedId);
-    const py = feedIds.filter((id) => !isRedstoneFeedId(id));
+    const rs = feedIds.filter(isNamedFeedId);
+    const py = feedIds.filter((id) => !isNamedFeedId(id));
     const out = new Map<string, { price: bigint; expo: number; publishTime: bigint }>();
-    const pyth = this.pyth as SpotSource & { prices?: RedstoneSource["prices"] };
+    const pyth = this.pyth as SpotSource & { prices?: SignedPriceSource["prices"] };
     if (py.length) {
       if (!pyth?.prices) throw new Error("the Pyth source cannot report parsed prices");
       for (const [k, v] of await pyth.prices(py)) out.set(k, v);
     }
     if (rs.length) {
-      if (!this.redstone) throw new Error("RedStone feeds requested but no RedStone source is configured");
-      for (const [k, v] of await this.redstone.prices(rs)) out.set(k, v);
+      if (!this.signed) throw new Error("named feeds requested but no price node is configured");
+      for (const [k, v] of await this.signed.prices(rs)) out.set(k, v);
     }
     return out;
   }

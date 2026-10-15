@@ -88,7 +88,7 @@ export class OraclePusher {
       const src = await client.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [p] });
       wanted.push({ productId: p, feedIds: BigInt(src.quoteFeedId) !== 0n ? [src.baseFeedId, src.quoteFeedId] : [src.baseFeedId] });
     }
-    // Per product: a provider outage for one product (e.g. RedStone for MON) must not stop the others' pushes.
+    // Per product: a provider outage for one product (e.g. the price node for MON) must not stop the others' pushes.
     const fetched = await spotUpdatesByProduct(this.o.spot, wanted);
     for (const f of fetched.failed) this.ctx.log(`oracle: no spot update for ${f.productId}: ${f.error}`);
     spotProducts.splice(0, spotProducts.length, ...fetched.productIds);

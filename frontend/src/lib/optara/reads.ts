@@ -23,7 +23,7 @@ import {
 } from "@optara/sdk";
 import { legOf, payoutPerOption } from "./payoff.ts";
 import { averageCost, type Fill, type HistoryEntry, type SeriesPnl } from "./pnl.ts";
-import { INDEXER_URL, IS_LOCAL, PUBLISHER_URL } from "../../config/network.ts";
+import { INDEXER_URL, IS_LOCAL, PUBLISHER_URL, SIGNED_PRICE_PROVIDER } from "../../config/network.ts";
 import { fetchOracleUpdate, readAfterUpdate, type ContractRead } from "./oracle.ts";
 import { ADDR, DEPLOYED_AT_BLOCK, KURU_VENUE, publicClient as c } from "./client.ts";
 import { WAD } from "./format.ts";
@@ -118,8 +118,8 @@ export interface ProductMarket {
   surface: SurfaceStatus;
   surfaceStaleSeconds: bigint;
   closeOnly: boolean;
-  /** Who signs the live spot price: Pyth or RedStone (the product's spot source). */
-  spotProvider: "Pyth" | "RedStone";
+  /** Who signs the live spot price: Pyth, or the signed-price provider for named feeds (testnet: Optara's price node). */
+  spotProvider: string;
   /** True when spot and surface are the publisher's current data (simulated, see liveProduct); false: on-chain only. */
   live: boolean;
   /** When a spot price was last written on-chain (by a trade or a keeper). */
@@ -185,7 +185,8 @@ export async function getProductMarket(productId: Hex): Promise<ProductMarket> {
     liveProduct(productId),
     c.readContract({ address: ADDR.spot, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [productId] }),
   ]);
-  const spotProvider: ProductMarket["spotProvider"] = source.kind >= 3 ? "RedStone" : "Pyth"; // REDSTONE_DIRECT = 3, REDSTONE_DERIVED = 4
+  // Source kinds 3 and 4 are signed price packages (on-chain REDSTONE_DIRECT / REDSTONE_DERIVED); 1 and 2 are Pyth.
+  const spotProvider: ProductMarket["spotProvider"] = source.kind >= 3 ? SIGNED_PRICE_PROVIDER : "Pyth";
   const chain = { spotWad, spotPublishTime: BigInt(publishTime), spotFresh, surface: SURFACE_STATUS[status] ?? "NONE", surfaceStaleSeconds: BigInt(stale) };
   const fresh =
     live?.spot && live.surface

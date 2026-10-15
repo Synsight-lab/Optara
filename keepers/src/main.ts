@@ -89,7 +89,7 @@ async function main() {
     const feeds = ((manifest.extra as { testnetFeeds?: PushFeedSpec[] }).testnetFeeds ?? []) as PushFeedSpec[];
     if (feeds.length === 0) throw new Error("feeds: the manifest lists no testnetFeeds");
     if (manifest.chainId === 143) throw new Error("feeds: testnet push feeds are refused on Monad mainnet (settlement must use Chainlink)");
-    const prices = spotSourceFor({ network: networkName(env("MANIFEST")), hermesUrl: process.env.HERMES_URL, hermesApiKey: process.env.HERMES_API_KEY, hermesApiKeyHeader: process.env.HERMES_API_KEY_HEADER }); // Pyth and RedStone, per feed
+    const prices = spotSourceFor({ network: networkName(env("MANIFEST")), hermesUrl: process.env.HERMES_URL, hermesApiKey: process.env.HERMES_API_KEY, hermesApiKeyHeader: process.env.HERMES_API_KEY_HEADER }); // Pyth and signed price packages (price node), per feed
     const intervalSeconds = Number(process.env.FEED_INTERVAL_SECONDS ?? 300);
     const pusher = new FeedPusher(ctx, { feeds, prices, intervalSeconds });
     every("feeds", 30, () => pusher.tick());

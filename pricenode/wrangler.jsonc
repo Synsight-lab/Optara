@@ -1,0 +1,9 @@
+// Optara testnet price node. Secrets: `wrangler secret put SIGNER_KEYS` (comma-separated private keys).
+{
+  "$schema": "https://unpkg.com/wrangler@4.149.0/config-schema.json",
+  "name": "optara-pricenode",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "MAX_DEVIATION_BPS": "200", "MIN_SOURCES": "3" }
+}

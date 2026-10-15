@@ -20,6 +20,12 @@ export const MANIFESTS: Record<string, Manifest> = Object.fromEntries(
 
 const env = import.meta.env;
 export const NETWORK = (env.VITE_NETWORK as string | undefined) ?? "local";
+
+/**
+ * Who signs prices for products with signed-package spot sources (named feeds such as MON): Optara's own price node on
+ * testnet (pricenode/, a Cloudflare Worker), RedStone elsewhere. Shown on the System page.
+ */
+export const SIGNED_PRICE_PROVIDER = NETWORK === "monad-testnet" ? "Optara price node" : "RedStone";
 // Any manifest file can be selected explicitly (the test suites use their own); the list above is what's offered.
 const rawSelected = Object.entries(files).find(([path]) => path.endsWith(`/${NETWORK}.json`))?.[1];
 const manifest = MANIFESTS[NETWORK] ?? (rawSelected ? parseManifest(rawSelected) : undefined);

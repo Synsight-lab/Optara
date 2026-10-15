@@ -7,8 +7,9 @@
  *   PRODUCTS                                                  JSON file: [{ symbol, underlying, settlementAsset, inputs, kNodes? }]
  *                                                             inputs: "deribit:ETH" | "synthetic:<atm iv>"
  *                                                             (default on a local manifest: ETH/USDC synthetic 0.6)
- *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs: hermes = Pyth (Hermes) and RedStone
- *                                                             per feed (RedStone signers from config/<network>.json); restamp: local MockPyth
+ *   SPOT_SOURCE = hermes | restamp                            /oracle-update spot blobs: hermes = Pyth (Hermes) and signed price
+ *                                                             packages per feed (price node from config/<network>.json `priceNode`,
+ *                                                             PRICE_NODE_URLS overrides); restamp: local MockPyth
  *   HERMES_URL, HERMES_API_KEY, HERMES_API_KEY_HEADER         for hermes
  *   INDEXER_URL                                               optional: load listed series from the indexer API at
  *                                                             start instead of scanning logs from the deployment block

@@ -4,3 +4,4 @@ packages:
   - keepers
   - indexer
   - frontend
+  - pricenode

@@ -115,28 +115,34 @@ e=d+be-qe
 print(bp*10**e//qp if e>=0 else bp//(qp*10**-e))' "$base" "$quote" "$decimals"
 }
 
-# Spot of a product (base / quote) scaled to `decimals`, from the product's own spot provider: RedStone (median of
-# the network's authorized signers, as LiveSpotOracle computes it) or Pyth.
+# Spot of a product (base / quote) scaled to `decimals`, from the product's own spot provider: signed price packages
+# (listings with spotSource "redstone", the on-chain format: median of the authorized signers, as LiveSpotOracle
+# computes it) from the network's price node (config `priceNode`, else RedStone's gateway), or Pyth.
 spot_ratio() {
   local p="$1" decimals="$2" c; c="$(cfg "$p")"
   if [ "$(jq -r '.spotSource // "pyth"' "$c")" = redstone ]; then
-    local service; service=$(jq -r .redstone.dataServiceId "$CONFIG")
-    curl -s -m 20 "https://oracle-gateway-1.a.redstone.finance/data-packages/latest/$service" | python3 -c '
+    local service url signers threshold
+    service=$(jq -r '.redstone.dataServiceId // "optara"' "$CONFIG")
+    url=$(jq -r '.priceNode.urls[0] // "https://oracle-gateway-1.a.redstone.finance"' "$CONFIG")
+    signers=$(jq -c '.priceNode.signers // .redstone.signers' "$CONFIG")
+    threshold=$(jq -r '.priceNode.threshold // .redstone.threshold' "$CONFIG")
+    curl -s -m 20 "$url/data-packages/latest/$service" | python3 -c '
 import json,sys
 from statistics import median
 gw=json.load(sys.stdin); signers={s.lower() for s in json.loads(sys.argv[1])}; need=int(sys.argv[2]); d=int(sys.argv[5])
+if "error" in gw: sys.exit("price node: " + str(gw["error"]))
 def px(name):
     if not name: return 1.0
     v=[p["dataPoints"][0]["value"] for p in gw.get(name,[]) if p["signerAddress"].lower() in signers]
-    if len(v)<need: sys.exit(f"RedStone: only {len(v)} authorized signers for {name}")
+    if len(v)<need: sys.exit(f"price node: only {len(v)} authorized signers for {name}")
     return median(v)
-print(int(px(sys.argv[3])/px(sys.argv[4])*10**d))' "$(jq -c .redstone.signers "$CONFIG")" "$(jq -r .redstone.threshold "$CONFIG")"       "$(jq -r .redstoneBaseFeed "$c")" "$(jq -r '.redstoneQuoteFeed // ""' "$c")" "$decimals"
+print(int(px(sys.argv[3])/px(sys.argv[4])*10**d))' "$signers" "$threshold" "$(jq -r .redstoneBaseFeed "$c")" "$(jq -r '.redstoneQuoteFeed // ""' "$c")" "$decimals"
   else
     pyth_ratio "$(jq -r .pythBaseFeed "$c")" "$(jq -r .pythQuoteFeed "$c")" "$decimals"
   fi
 }
 
-# The feed ids the keeper reads for a product's settlement push feed: RedStone names (bytes32) or Pyth ids.
+# The feed ids the keeper reads for a product's settlement push feed: named feeds (bytes32, signed price packages) or Pyth ids.
 feed_ids() {
   local c; c="$(cfg "$1")"
   if [ "$(jq -r '.spotSource // "pyth"' "$c")" = redstone ]; then

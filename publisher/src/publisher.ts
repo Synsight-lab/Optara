@@ -290,7 +290,7 @@ export class Publisher {
         const src = await c.readContract({ address: m.proxies.LiveSpotOracle.proxy, abi: liveSpotOracleAbi, functionName: "sourceOf", args: [p] });
         wanted.push({ productId: p, feedIds: BigInt(src.quoteFeedId) !== 0n ? [src.baseFeedId, src.quoteFeedId] : [src.baseFeedId] });
       }
-      // Per product: a provider outage for one product (e.g. RedStone for MON) must not block updates for the others.
+      // Per product: a provider outage for one product (e.g. the price node for MON) must not block updates for the others.
       // A transaction that needs the missing product then fails on-chain with a clear stale-price error.
       const fetched = await spotUpdatesByProduct(this.o.spot, wanted);
       if (fetched.productIds.length === 0 && fetched.failed.length > 0) throw new Error(fetched.failed[0]!.error);

@@ -17,14 +17,29 @@
   "maxBucketsPerAccount": 4,
   "minPositionQty": 10000000000000000,
   "redstone": {
-    "_comment": "RedStone pull prices (redstone-primary-prod): the signers LiveSpotOracle accepts and how many distinct ones a feed needs. Signer list from RedStone's SDK (getSignersForDataServiceId), checked 2026-10-12 against live payloads.",
+    "_comment": "The signer set LiveSpotOracle accepts for signed price packages (on-chain kinds REDSTONE_DIRECT / REDSTONE_DERIVED) and how many distinct ones a feed needs: RedStone's redstone-primary-prod signers (from RedStone's SDK, checked 2026-10-12) plus Optara's testnet price node signers (priceNode.signers, added 2026-10-15). Listings re-apply this set, so it must stay a superset of priceNode.signers.",
     "dataServiceId": "redstone-primary-prod",
     "signers": [
       "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
       "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
       "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
       "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
-      "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de"
+      "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de",
+      "0xA9801708bD9396e7E7e9Be82d49057e500a0817C",
+      "0x717Cf5aba49751b4AE8E129A89d613Ce1C07047d",
+      "0x2544590fd743FDde57d0D3d32AeA9B7fb8aF2a6a"
+    ],
+    "threshold": 3
+  },
+  "priceNode": {
+    "_comment": "Optara's testnet price node (pricenode/, a Cloudflare Worker): MON/USD and USDC/USD as signed price packages in the on-chain format LiveSpotOracle verifies (RedStone's). urls: where the publisher, keepers and markets.sh fetch them (PRICE_NODE_URLS overrides); signers: the node's keys, which governance adds to LiveSpotOracle's signer set (the redstone section); threshold: distinct signers per feed. Replaces RedStone's public gateways, switched off in October 2026. TESTNET ONLY: whoever holds these keys sets MON's price.",
+    "urls": [
+      "https://optara-pricenode.olamide-adetula-1744.workers.dev"
+    ],
+    "signers": [
+      "0xA9801708bD9396e7E7e9Be82d49057e500a0817C",
+      "0x717Cf5aba49751b4AE8E129A89d613Ce1C07047d",
+      "0x2544590fd743FDde57d0D3d32AeA9B7fb8aF2a6a"
     ],
     "threshold": 3
   }
