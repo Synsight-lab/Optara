@@ -1,4 +1,5 @@
-import { ArrowRight, CheckCircle2, HelpCircle, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, Droplet, ExternalLink, HelpCircle, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
+import { MANIFEST } from "../config/network.ts";
 import { useQuickGuide } from "../state.tsx";
 import { cx } from "./ui.tsx";
 
@@ -36,6 +37,19 @@ export function OnboardingModal() {
             </p>
           </div>
         </div>
+
+        {MANIFEST.chainId === 10143 && (
+          <a
+            href="https://faucet.circle.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 flex items-center gap-2 rounded-2xl border border-primary/30 bg-primary-soft px-4 py-3 text-sm font-bold text-primary transition hover:border-primary"
+          >
+            <Droplet className="h-4 w-4 shrink-0" />
+            Get free test USDC (Monad testnet) from Circle's faucet
+            <ExternalLink className="ml-auto h-4 w-4 shrink-0" />
+          </a>
+        )}
 
         <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <section className="rounded-3xl border border-good/30 bg-good/8 p-4">
