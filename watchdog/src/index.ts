@@ -109,13 +109,14 @@ async function checks(env: Env): Promise<Check[]> {
       return `${lag} blocks behind`;
     }),
 
-    run("Price node (MON)", async () => {
+    run("Price node (MON, ETH)", async () => {
       const url = `${env.PRICE_NODE_URL}/health`;
       const r = env.PRICENODE ? await env.PRICENODE.fetch(url) : await get(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}${r.status === 503 ? `: ${((await r.json()) as { error?: string }).error}` : ""}`);
-      const h = (await r.json()) as any;
-      if (!h.ok) throw new Error(h.error ?? "not ok");
-      return `MON $${Number(h.MON.price).toPrecision(4)} from ${h.MON.sources.length} exchanges`;
+      const h = (await r.json().catch(() => ({}))) as any;
+      const errors = Object.entries((h.errors ?? {}) as Record<string, string>).map(([k, e]) => `${k}: ${e}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}${errors.length ? `: ${errors.join("; ")}` : h.error ? `: ${h.error}` : ""}`);
+      if (!h.ok) throw new Error(errors.join("; ") || h.error || "not ok");
+      return ["MON", "ETH"].map((k) => `${k} $${Number(h[k].price).toPrecision(4)} (${h[k].sources.length} exchanges)`).join(", ");
     }),
 
     // End to end: the publisher can build fresh prices for one live option of each product (what every trade needs).

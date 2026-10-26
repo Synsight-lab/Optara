@@ -1,13 +1,15 @@
 /**
  * Optara testnet price node (Cloudflare Worker). A stand-in for RedStone's public gateways, which RedStone switched
- * off in October 2026: it serves MON/USD and USDC/USD as RedStone-format signed data packages, so LiveSpotOracle
+ * off in October 2026, and for Pyth on testnet, whose API now needs a paid key: it serves MON/USD, ETH/USD and USDC/USD
+ * as RedStone-format signed data packages, so LiveSpotOracle
  * accepts them unchanged once governance authorizes this node's signers (`setRedstoneSigners`).
  *
- *   GET /data-packages/latest/<dataServiceId>   RedStone gateway shape: { MON: [pkg × signers], USDC: [...] }
+ *   GET /data-packages/latest/<dataServiceId>   RedStone gateway shape: { MON: [pkg × signers], ETH: [...], USDC: [...] }
  *   GET /health                                  the prices, the exchanges behind them and the signer addresses
  *
  * Every request fetches fresh prices (cached for a couple of seconds) from several exchanges, takes the median,
- * drops outliers, and refuses to sign when too few sources agree. All signers sign the same median at one
+ * drops outliers, and refuses to sign a feed when too few sources agree. Feeds are independent: one that cannot be
+ * priced is left out (and named in `errors`) without stopping the others; USDC is needed by every product. All signers sign the same median at one
  * timestamp: the contract needs `threshold` distinct authorized signers on one timestamp and checks their spread.
  *
  * TESTNET ONLY: whoever holds these keys sets MON's price inside Optara. Mainnet uses Pyth and RedStone.
@@ -20,7 +22,7 @@ export interface Env {
   SIGNER_KEYS: string;
   /** Drop a source further than this from the median (default 200 = 2%). */
   MAX_DEVIATION_BPS?: string;
-  /** Fewest agreeing sources needed to sign MON (default 3). */
+  /** Fewest agreeing sources needed to sign MON or ETH (default 3). */
   MIN_SOURCES?: string;
 }
 
@@ -44,29 +46,36 @@ async function usdtUsd(): Promise<number> {
   return mid(t.b[0], t.a[0]);
 }
 
-const MON_SOURCES: Record<string, (usdt: number) => Promise<number>> = {
-  kraken: async () => {
-    const t = (await getJson("https://api.kraken.com/0/public/Ticker?pair=MONUSD")).result.MONUSD;
-    return mid(t.b[0], t.a[0]);
-  },
-  coinbase: async () => Number((await getJson("https://api.coinbase.com/v2/prices/MON-USD/spot")).data.amount),
-  okx: async (u) => {
-    const t = (await getJson("https://www.okx.com/api/v5/market/ticker?instId=MON-USDT")).data[0];
-    return mid(t.bidPx, t.askPx) * u;
-  },
-  bybit: async (u) => {
-    const t = (await getJson("https://api.bybit.com/v5/market/tickers?category=spot&symbol=MONUSDT")).result.list[0];
-    return mid(t.bid1Price, t.ask1Price) * u;
-  },
-  gate: async (u) => {
-    const t = (await getJson("https://api.gateio.ws/api/v4/spot/tickers?currency_pair=MON_USDT"))[0];
-    return mid(t.highest_bid, t.lowest_ask) * u;
-  },
-  kucoin: async (u) => {
-    const t = (await getJson("https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=MON-USDT")).data;
-    return mid(t.bestBid, t.bestAsk) * u;
-  },
-};
+/** One asset's USD price from six exchanges; USDT-quoted markets are converted with `usdt`. */
+function exchangeSources(base: string): Record<string, (usdt: number) => Promise<number>> {
+  return {
+    kraken: async () => {
+      const r = (await getJson(`https://api.kraken.com/0/public/Ticker?pair=${base}USD`)).result;
+      const t = r[`${base}USD`] ?? Object.values(r)[0]; // Kraken names ETH/USD "XETHZUSD"
+      return mid(t.b[0], t.a[0]);
+    },
+    coinbase: async () => Number((await getJson(`https://api.coinbase.com/v2/prices/${base}-USD/spot`)).data.amount),
+    okx: async (u) => {
+      const t = (await getJson(`https://www.okx.com/api/v5/market/ticker?instId=${base}-USDT`)).data[0];
+      return mid(t.bidPx, t.askPx) * u;
+    },
+    bybit: async (u) => {
+      const t = (await getJson(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${base}USDT`)).result.list[0];
+      return mid(t.bid1Price, t.ask1Price) * u;
+    },
+    gate: async (u) => {
+      const t = (await getJson(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${base}_USDT`))[0];
+      return mid(t.highest_bid, t.lowest_ask) * u;
+    },
+    kucoin: async (u) => {
+      const t = (await getJson(`https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=${base}-USDT`)).data;
+      return mid(t.bestBid, t.bestAsk) * u;
+    },
+  };
+}
+
+/** Feeds priced from exchanges, besides USDC. */
+const ASSETS = ["MON", "ETH"] as const;
 
 const USDC_SOURCES: Record<string, () => Promise<number>> = {
   kraken: async () => {
@@ -97,19 +106,30 @@ async function settle<T>(entries: [string, () => Promise<number>][]): Promise<Qu
   return r.flatMap((x, i) => (x.status === "fulfilled" ? [{ source: entries[i]![0], price: x.value }] : []));
 }
 
+type Priced = ReturnType<typeof aggregate>;
+
+/** USDC must price (every product is quoted in it); each asset is priced on its own and may fail alone. */
 async function prices(env: Env) {
   const maxDev = Number(env.MAX_DEVIATION_BPS ?? 200);
-  const minMon = Number(env.MIN_SOURCES ?? 3);
+  const minSources = Number(env.MIN_SOURCES ?? 3);
   const usdt = await usdtUsd().catch(() => 1);
   if (!(usdt > 0.97 && usdt < 1.03)) throw new Error(`USDT/USD ${usdt} is off peg`);
-  const [mon, usdc] = await Promise.all([
-    settle(Object.entries(MON_SOURCES).map(([k, f]) => [k, () => f(usdt)])),
+  const [usdc, ...assets] = await Promise.all([
     settle(Object.entries(USDC_SOURCES)),
+    ...ASSETS.map((a) => settle(Object.entries(exchangeSources(a)).map(([k, f]) => [k, () => f(usdt)]))),
   ]);
-  const MON = aggregate("MON", mon, maxDev, minMon);
-  const USDC = aggregate("USDC", usdc, maxDev, 1);
+  const USDC = aggregate("USDC", usdc!, maxDev, 1);
   if (!(USDC.price > 0.97 && USDC.price < 1.03)) throw new Error(`USDC/USD ${USDC.price} is off peg`);
-  return { MON, USDC, usdt };
+  const feeds: Record<string, Priced> = { USDC };
+  const errors: Record<string, string> = {};
+  ASSETS.forEach((a, i) => {
+    try {
+      feeds[a] = aggregate(a, assets[i]!, maxDev, minSources);
+    } catch (e) {
+      errors[a] = (e as Error).message;
+    }
+  });
+  return { feeds, errors, usdt };
 }
 
 function signers(env: Env) {
@@ -141,20 +161,25 @@ export default {
     try {
       if (url.pathname === "/health") {
         const p = await prices(env);
-        return json({
-          ok: true,
-          MON: { price: p.MON.price, sources: p.MON.used, dropped: p.MON.dropped },
-          USDC: { price: p.USDC.price, sources: p.USDC.used },
-          usdtUsd: p.usdt,
-          signers: signers(env).map((s) => s.address),
-        });
+        const view = (f: Priced) => ({ price: f.price, sources: f.used, dropped: f.dropped });
+        return json(
+          {
+            ok: Object.keys(p.errors).length === 0,
+            ...Object.fromEntries(Object.entries(p.feeds).map(([k, f]) => [k, view(f)])),
+            errors: p.errors,
+            usdtUsd: p.usdt,
+            signers: signers(env).map((s) => s.address),
+          },
+          Object.keys(p.errors).length === ASSETS.length ? 503 : 200,
+        );
       }
       if (/^\/data-packages\/latest\/[\w-]+\/?$/.test(url.pathname)) {
         if (cache && Date.now() - cache.at < CACHE_MS) return json(cache.body);
         const p = await prices(env);
+        if (Object.keys(p.errors).length === ASSETS.length) throw new Error(Object.values(p.errors).join("; "));
         const keys = signers(env);
         const ts = Math.floor(Date.now() / 1000) * 1000; // whole seconds, shared by every signer
-        const body = JSON.stringify({ MON: packagesFor("MON", p.MON.price, ts, keys), USDC: packagesFor("USDC", p.USDC.price, ts, keys) });
+        const body = JSON.stringify(Object.fromEntries(Object.entries(p.feeds).map(([k, f]) => [k, packagesFor(k, f.price, ts, keys)])));
         cache = { at: Date.now(), body };
         return json(body);
       }
